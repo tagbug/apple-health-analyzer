@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from src.config import Config, get_config
-from src.core.data_models import AnyRecord, create_record_from_xml_element
+from src.core.data_models import AnyRecord, create_record_from_xml_element, WorkoutRecord, ActivitySummaryRecord
 from src.utils.logger import ProgressLogger, get_logger, performance_logger
 
 logger = get_logger(__name__)
@@ -121,11 +121,11 @@ class StreamingXMLParser:
         self.logger.info(f"Completed parsing {self.stats['processed_records']} records")
         self._log_parsing_summary()
 
-    def parse_workouts(self) -> Generator[dict[str, Any], None, None]:
+    def parse_workouts(self) -> Generator[WorkoutRecord, None, None]:
         """Parse Workout elements from the XML file.
 
         Yields:
-            Dictionary containing workout data
+            WorkoutRecord instances
         """
         self.logger.info("Starting to parse workouts")
 
@@ -138,9 +138,9 @@ class StreamingXMLParser:
             with ProgressLogger("XML workout parsing") as progress:
                 for event, elem in context:
                     if event == 'end' and elem.tag == 'Workout':
-                        workout_data = self._parse_workout_element(elem)
-                        if workout_data:
-                            yield workout_data
+                        workout = self._parse_workout_element(elem)
+                        if workout:
+                            yield workout
                             workout_count += 1
                             progress.update()
 
@@ -154,11 +154,11 @@ class StreamingXMLParser:
             self.logger.error(f"Error parsing workouts: {e}")
             raise
 
-    def parse_activity_summaries(self) -> Generator[dict[str, Any], None, None]:
+    def parse_activity_summaries(self) -> Generator[ActivitySummaryRecord, None, None]:
         """Parse ActivitySummary elements from the XML file.
 
         Yields:
-            Dictionary containing activity summary data
+            ActivitySummaryRecord instances
         """
         self.logger.info("Starting to parse activity summaries")
 
@@ -171,9 +171,9 @@ class StreamingXMLParser:
             with ProgressLogger("XML activity summary parsing") as progress:
                 for event, elem in context:
                     if event == 'end' and elem.tag == 'ActivitySummary':
-                        summary_data = self._parse_activity_summary_element(elem)
-                        if summary_data:
-                            yield summary_data
+                        summary = self._parse_activity_summary_element(elem)
+                        if summary:
+                            yield summary
                             summary_count += 1
                             progress.update()
 
@@ -234,28 +234,30 @@ class StreamingXMLParser:
             self.logger.debug(f"Failed to parse record element: {e}")
             return None
 
-    def _parse_workout_element(self, elem: ET.Element) -> dict[str, Any] | None:
+    def _parse_workout_element(self, elem: ET.Element) -> WorkoutRecord | None:
         """Parse a single Workout XML element.
 
         Args:
             elem: Workout XML element
 
         Returns:
-            Dictionary with workout data or None if parsing fails
+            WorkoutRecord instance or None if parsing fails
         """
         try:
             from datetime import datetime
 
-            workout_data: dict[str, Any] = {
-                'activity_type': elem.get('workoutActivityType', '').replace('HKWorkoutActivityType', ''),
-                'duration_seconds': float(elem.get('duration', 0)),
-                'source_name': elem.get('sourceName', ''),
-                'start_date': datetime.strptime(elem.get('startDate', ''), '%Y-%m-%d %H:%M:%S %z'),
-                'end_date': datetime.strptime(elem.get('endDate', ''), '%Y-%m-%d %H:%M:%S %z'),
-                'metadata': {},
-            }
+            # Parse basic workout data
+            activity_type = elem.get('workoutActivityType', '').replace('HKWorkoutActivityType', '')
+            workout_duration_seconds = float(elem.get('duration', 0))
+            source_name = elem.get('sourceName', '')
+            start_date = datetime.strptime(elem.get('startDate', ''), '%Y-%m-%d %H:%M:%S %z')
+            end_date = datetime.strptime(elem.get('endDate', ''), '%Y-%m-%d %H:%M:%S %z')
 
             # Parse workout statistics
+            calories = None
+            distance_km = None
+            average_heart_rate = None
+
             for stat in elem.findall('.//WorkoutStatistics'):
                 stat_type = stat.get('type', '')
                 value = stat.get('sum')
@@ -263,54 +265,68 @@ class StreamingXMLParser:
 
                 if value:
                     if 'ActiveEnergyBurned' in stat_type:
-                        workout_data['calories'] = float(value)
+                        calories = float(value)
                     elif 'DistanceWalkingRunning' in stat_type:
                         if unit == 'km':
-                            workout_data['distance_km'] = float(value)
+                            distance_km = float(value)
                         elif unit == 'm':
-                            workout_data['distance_km'] = float(value) / 1000
+                            distance_km = float(value) / 1000
+                    elif 'HeartRate' in stat_type and 'Average' in stat_type:
+                        average_heart_rate = float(value)
 
             # Parse metadata
-            metadata = workout_data['metadata']
-            if isinstance(metadata, dict):
-                for meta in elem.findall('.//MetadataEntry'):
-                    key = meta.get('key')
-                    value = meta.get('value')
-                    if key and value:
-                        metadata[key] = value
+            metadata = {}
+            for meta in elem.findall('.//MetadataEntry'):
+                key = meta.get('key')
+                value = meta.get('value')
+                if key and value:
+                    metadata[key] = value
 
-            return workout_data
+            # Create WorkoutRecord instance
+            return WorkoutRecord(
+                source_name=source_name,
+                start_date=start_date,
+                end_date=end_date,
+                activity_type=activity_type,
+                workout_duration_seconds=workout_duration_seconds,
+                calories=calories,
+                distance_km=distance_km,
+                average_heart_rate=average_heart_rate,
+                metadata=metadata if metadata else None
+            )
 
         except Exception as e:
             self.logger.debug(f"Failed to parse workout element: {e}")
             return None
 
-    def _parse_activity_summary_element(self, elem: ET.Element) -> dict[str, Any] | None:
+    def _parse_activity_summary_element(self, elem: ET.Element) -> ActivitySummaryRecord | None:
         """Parse a single ActivitySummary XML element.
 
         Args:
             elem: ActivitySummary XML element
 
         Returns:
-            Dictionary with activity summary data or None if parsing fails
+            ActivitySummaryRecord instance or None if parsing fails
         """
         try:
             from datetime import datetime
 
-            summary_data: dict[str, Any] = {
-                'date': datetime.strptime(elem.get('dateComponents', ''), '%Y-%m-%d'),
-                'move_calories': float(elem.get('activeEnergyBurned', 0)) if elem.get('activeEnergyBurned') else None,
-                'exercise_minutes': float(elem.get('appleExerciseTime', 0)) if elem.get('appleExerciseTime') else None,
-                'stand_hours': float(elem.get('appleStandHours', 0)) if elem.get('appleStandHours') else None,
-                'move_goal': float(elem.get('activeEnergyBurnedGoal', 0)) if elem.get('activeEnergyBurnedGoal') else None,
-                'exercise_goal': float(elem.get('appleExerciseTimeGoal', 0)) if elem.get('appleExerciseTimeGoal') else None,
-                'stand_goal': float(elem.get('appleStandHoursGoal', 0)) if elem.get('appleStandHoursGoal') else None,
-            }
+            # Parse basic data
+            date = datetime.strptime(elem.get('dateComponents', ''), '%Y-%m-%d')
+            source_name = elem.get('sourceName', 'Apple Health')  # Activity summaries typically from Apple Health
+
+            # Parse activity rings
+            move_calories = float(elem.get('activeEnergyBurned', 0)) if elem.get('activeEnergyBurned') else None
+            exercise_minutes = float(elem.get('appleExerciseTime', 0)) if elem.get('appleExerciseTime') else None
+            stand_hours = float(elem.get('appleStandHours', 0)) if elem.get('appleStandHours') else None
+
+            # Parse goals
+            move_goal = float(elem.get('activeEnergyBurnedGoal', 0)) if elem.get('activeEnergyBurnedGoal') else None
+            exercise_goal = float(elem.get('appleExerciseTimeGoal', 0)) if elem.get('appleExerciseTimeGoal') else None
+            stand_goal = float(elem.get('appleStandHoursGoal', 0)) if elem.get('appleStandHoursGoal') else None
 
             # Determine achievements
-            move_calories = summary_data['move_calories']
-            move_goal = summary_data['move_goal']
-            summary_data['move_achieved'] = (
+            move_achieved = (
                 move_calories is not None and
                 move_goal is not None and
                 isinstance(move_calories, (int, float)) and
@@ -318,9 +334,7 @@ class StreamingXMLParser:
                 move_calories >= move_goal
             )
 
-            exercise_minutes = summary_data['exercise_minutes']
-            exercise_goal = summary_data['exercise_goal']
-            summary_data['exercise_achieved'] = (
+            exercise_achieved = (
                 exercise_minutes is not None and
                 exercise_goal is not None and
                 isinstance(exercise_minutes, (int, float)) and
@@ -328,9 +342,7 @@ class StreamingXMLParser:
                 exercise_minutes >= exercise_goal
             )
 
-            stand_hours = summary_data['stand_hours']
-            stand_goal = summary_data['stand_goal']
-            summary_data['stand_achieved'] = (
+            stand_achieved = (
                 stand_hours is not None and
                 stand_goal is not None and
                 isinstance(stand_hours, (int, float)) and
@@ -338,7 +350,20 @@ class StreamingXMLParser:
                 stand_hours >= stand_goal
             )
 
-            return summary_data
+            # Create ActivitySummaryRecord instance
+            return ActivitySummaryRecord(
+                source_name=source_name,
+                date=date,
+                move_calories=move_calories,
+                exercise_minutes=exercise_minutes,
+                stand_hours=stand_hours,
+                move_goal=move_goal,
+                exercise_goal=exercise_goal,
+                stand_goal=stand_goal,
+                move_achieved=move_achieved,
+                exercise_achieved=exercise_achieved,
+                stand_achieved=stand_achieved
+            )
 
         except Exception as e:
             self.logger.debug(f"Failed to parse activity summary element: {e}")
@@ -350,10 +375,9 @@ class StreamingXMLParser:
         Args:
             record: Parsed record to include in statistics
         """
-        # Update type counts
-        if hasattr(record, 'type') and isinstance(getattr(record, 'type', None), str):
-            record_type = getattr(record, 'type')
-            self.stats['record_types'][record_type] += 1
+        # Update type counts using unified record_type property
+        record_type = record.record_type
+        self.stats['record_types'][record_type] += 1
 
         # Update source counts
         if hasattr(record, 'source_name') and isinstance(getattr(record, 'source_name', None), str):

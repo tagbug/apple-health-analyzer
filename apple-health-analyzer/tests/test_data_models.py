@@ -5,11 +5,13 @@ from datetime import UTC, datetime
 import pytest
 
 from src.core.data_models import (
+    ActivitySummaryRecord,
     DataSourcePriority,
     HealthRecord,
     HeartRateRecord,
     QuantityRecord,
     SleepRecord,
+    WorkoutRecord,
 )
 
 
@@ -342,3 +344,139 @@ class TestRecordCreation:
 
         record = create_record_from_xml_element(invalid_element)
         assert record is None  # Should return None for invalid elements
+
+class TestWorkoutRecord:
+    """Test WorkoutRecord class."""
+
+    def test_valid_workout_record(self):
+        """Test creating a valid workout record."""
+        start_date = datetime(2023, 1, 1, 10, 0, 0, tzinfo=UTC)
+        end_date = datetime(2023, 1, 1, 11, 0, 0, tzinfo=UTC)  # 1 hour
+
+        record = WorkoutRecord(
+            source_name="Apple Watch",
+            start_date=start_date,
+            end_date=end_date,
+            activity_type="Running",
+            workout_duration_seconds=3600.0,  # 1 hour
+            calories=500.0,
+            distance_km=8.0,
+            average_heart_rate=150.0,
+        )
+
+        assert record.source_name == "Apple Watch"
+        assert record.activity_type == "Running"
+        assert record.workout_duration_seconds == 3600.0
+        assert record.calories == 500.0
+        assert record.distance_km == 8.0
+        assert record.average_heart_rate == 150.0
+        assert record.record_type == "Workout:Running"
+        assert record.duration_seconds == 3600.0
+
+    def test_workout_record_type_variations(self):
+        """Test different workout activity types."""
+        start_date = datetime(2023, 1, 1, 10, 0, 0, tzinfo=UTC)
+        end_date = datetime(2023, 1, 1, 10, 30, 0, tzinfo=UTC)
+
+        # Swimming
+        swim_record = WorkoutRecord(
+            source_name="Apple Watch",
+            start_date=start_date,
+            end_date=end_date,
+            activity_type="Swimming",
+            workout_duration_seconds=1800.0,
+            calories=None,
+            distance_km=None,
+            average_heart_rate=None,
+        )
+        assert swim_record.record_type == "Workout:Swimming"
+
+        # Cycling
+        cycle_record = WorkoutRecord(
+            source_name="Apple Watch",
+            start_date=start_date,
+            end_date=end_date,
+            activity_type="Cycling",
+            workout_duration_seconds=1800.0,
+            calories=None,
+            distance_km=None,
+            average_heart_rate=None,
+        )
+        assert cycle_record.record_type == "Workout:Cycling"
+
+class TestActivitySummaryRecord:
+    """Test ActivitySummaryRecord class."""
+
+    def test_valid_activity_summary_record(self):
+        """Test creating a valid activity summary record."""
+        date = datetime(2023, 1, 1, tzinfo=UTC)
+
+        record = ActivitySummaryRecord(
+            source_name="Apple Health",
+            date=date,
+            move_calories=800.0,
+            exercise_minutes=45.0,
+            stand_hours=12.0,
+            move_goal=600.0,
+            exercise_goal=30.0,
+            stand_goal=12.0,
+        )
+
+        assert record.source_name == "Apple Health"
+        assert record.date == date
+        assert record.start_date == date  # Should be set automatically
+        assert record.end_date == date    # Should be set automatically
+        assert record.move_calories == 800.0
+        assert record.exercise_minutes == 45.0
+        assert record.stand_hours == 12.0
+        assert record.record_type == "ActivitySummary"
+        assert record.duration_seconds == 0  # Same start/end date
+
+    def test_activity_summary_auto_date_setting(self):
+        """Test that start_date and end_date are automatically set from date."""
+        date = datetime(2023, 1, 1, 12, 0, 0, tzinfo=UTC)
+
+        record = ActivitySummaryRecord(
+            source_name="Apple Health",
+            date=date,
+            move_calories=500.0,
+        )
+
+        assert record.start_date == date
+        assert record.end_date == date
+
+    def test_activity_summary_achievement_calculation(self):
+        """Test achievement calculation in activity summary."""
+        date = datetime(2023, 1, 1, tzinfo=UTC)
+
+        # All goals achieved
+        achieved_record = ActivitySummaryRecord(
+            source_name="Apple Health",
+            date=date,
+            move_calories=800.0,
+            exercise_minutes=45.0,
+            stand_hours=12.0,
+            move_goal=600.0,
+            exercise_goal=30.0,
+            stand_goal=12.0,
+        )
+
+        assert achieved_record.move_achieved is True
+        assert achieved_record.exercise_achieved is True
+        assert achieved_record.stand_achieved is True
+
+        # Goals not achieved
+        not_achieved_record = ActivitySummaryRecord(
+            source_name="Apple Health",
+            date=date,
+            move_calories=400.0,
+            exercise_minutes=20.0,
+            stand_hours=8.0,
+            move_goal=600.0,
+            exercise_goal=30.0,
+            stand_goal=12.0,
+        )
+
+        assert not_achieved_record.move_achieved is False
+        assert not_achieved_record.exercise_achieved is False
+        assert not_achieved_record.stand_achieved is False

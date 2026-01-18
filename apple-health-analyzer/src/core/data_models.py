@@ -3,6 +3,7 @@
 Provides type-safe data structures for health records with validation and serialization.
 """
 
+from abc import ABC, abstractmethod
 from datetime import datetime
 from enum import Enum
 from typing import Literal
@@ -27,24 +28,19 @@ class DataSourcePriority(Enum):
     XIAOMI_HEALTH = 2
     APPLE_WATCH = 3
 
-class HealthRecord(BaseModel):
-    """Base class for all health records from Apple Health export."""
+class BaseRecord(BaseModel, ABC):
+    """Abstract base class for all health record types.
 
-    # Core attributes
-    type: str = Field(..., description="Health data type identifier")
+    Ensures consistent interface across all record types.
+    """
+
+    # Common attributes for all records
     source_name: str = Field(..., description="Data source device/app name")
-    source_version: str | None = Field(None, description="Source version")
-    device: str | None = Field(None, description="Device identifier")
-    unit: str | None = Field(None, description="Measurement unit")
-
-    # Timestamps
-    creation_date: datetime = Field(..., description="Record creation timestamp")
-    start_date: datetime = Field(..., description="Measurement start time")
-    end_date: datetime = Field(..., description="Measurement end time")
-
-    # Metadata
+    start_date: datetime = Field(..., description="Start time")
+    end_date: datetime = Field(..., description="End time")
     metadata: dict[str, str | float | int] | None = Field(
-        default_factory=dict, description="Additional metadata key-value pairs"
+        default_factory=dict,
+        description="Additional metadata key-value pairs"
     )
 
     model_config = ConfigDict(
@@ -54,13 +50,11 @@ class HealthRecord(BaseModel):
         }
     )
 
-    @field_validator('end_date')
-    @classmethod
-    def validate_end_date(cls, v, info):
-        """Ensure end_date is not before start_date."""
-        if info.data and 'start_date' in info.data and v < info.data['start_date']:
-            raise ValueError('end_date cannot be before start_date')
-        return v
+    @property
+    @abstractmethod
+    def record_type(self) -> str:
+        """Return the record type identifier (must be implemented by subclasses)."""
+        pass
 
     @property
     def duration_seconds(self) -> float:
@@ -90,6 +84,36 @@ class HealthRecord(BaseModel):
             return DataSourcePriority.IPHONE.value
 
         return 0
+
+class HealthRecord(BaseRecord):
+    """Base class for all health records from Apple Health export."""
+
+    # Health-specific attributes
+    type: str = Field(..., description="Health data type identifier")
+    source_version: str | None = Field(None, description="Source version")
+    device: str | None = Field(None, description="Device identifier")
+    unit: str | None = Field(None, description="Measurement unit")
+    creation_date: datetime = Field(..., description="Record creation timestamp")
+
+    model_config = ConfigDict(
+        validate_assignment=True,
+        json_encoders={
+            datetime: lambda v: v.isoformat(),
+        }
+    )
+
+    @field_validator('end_date')
+    @classmethod
+    def validate_end_date(cls, v, info):
+        """Ensure end_date is not before start_date."""
+        if info.data and 'start_date' in info.data and v < info.data['start_date']:
+            raise ValueError('end_date cannot be before start_date')
+        return v
+
+    @property
+    def record_type(self) -> str:
+        """Return the health record type identifier."""
+        return self.type
 
 class QuantityRecord(HealthRecord):
     """Quantity-based health record (e.g., heart rate, steps)."""
@@ -241,46 +265,24 @@ class SleepRecord(CategoryRecord):
         """Check if this record represents awake time."""
         return self.sleep_stage == SleepStage.AWAKE
 
-class WorkoutRecord(BaseModel):
+class WorkoutRecord(BaseRecord):
     """Workout record from Apple Health export."""
 
-    # Basic info
+    # Workout-specific attributes
     activity_type: str = Field(..., description="Workout activity type")
-    duration_seconds: float = Field(..., description="Workout duration in seconds")
-    source_name: str = Field(..., description="Data source name")
-
-    # Timestamps
-    start_date: datetime = Field(..., description="Workout start time")
-    end_date: datetime = Field(..., description="Workout end time")
+    workout_duration_seconds: float = Field(..., description="Workout duration in seconds")
 
     # Metrics
     calories: float | None = Field(None, description="Calories burned")
     distance_km: float | None = Field(None, description="Distance in kilometers")
     average_heart_rate: float | None = Field(None, description="Average heart rate")
 
-    # Metadata
-    metadata: dict[str, str | float | int] | None = Field(
-        default_factory=dict, description="Additional workout metadata"
-    )
-
-    model_config = ConfigDict(
-        validate_assignment=True,
-        json_encoders={
-            datetime: lambda v: v.isoformat(),
-        }
-    )
-
     @property
-    def duration_minutes(self) -> float:
-        """Get duration in minutes."""
-        return self.duration_seconds / 60
+    def record_type(self) -> str:
+        """Return workout record type identifier."""
+        return f"Workout:{self.activity_type}"
 
-    @property
-    def duration_hours(self) -> float:
-        """Get duration in hours."""
-        return self.duration_seconds / 3600
-
-class ActivitySummaryRecord(BaseModel):
+class ActivitySummaryRecord(BaseRecord):
     """Daily activity summary record."""
 
     date: datetime = Field(..., description="Summary date")
@@ -300,12 +302,49 @@ class ActivitySummaryRecord(BaseModel):
     exercise_achieved: bool = Field(default=False, description="Exercise goal achieved")
     stand_achieved: bool = Field(default=False, description="Stand goal achieved")
 
-    model_config = ConfigDict(
-        validate_assignment=True,
-        json_encoders={
-            datetime: lambda v: v.isoformat(),
-        }
-    )
+    def __init__(self, **data):
+        # For activity summaries, start_date and end_date are the same day
+        if 'date' in data and 'start_date' not in data:
+            data['start_date'] = data['date']
+            data['end_date'] = data['date']
+
+        # Calculate achievements automatically
+        move_calories = data.get('move_calories')
+        move_goal = data.get('move_goal')
+        data['move_achieved'] = (
+            move_calories is not None and
+            move_goal is not None and
+            isinstance(move_calories, (int, float)) and
+            isinstance(move_goal, (int, float)) and
+            move_calories >= move_goal
+        )
+
+        exercise_minutes = data.get('exercise_minutes')
+        exercise_goal = data.get('exercise_goal')
+        data['exercise_achieved'] = (
+            exercise_minutes is not None and
+            exercise_goal is not None and
+            isinstance(exercise_minutes, (int, float)) and
+            isinstance(exercise_goal, (int, float)) and
+            exercise_minutes >= exercise_goal
+        )
+
+        stand_hours = data.get('stand_hours')
+        stand_goal = data.get('stand_goal')
+        data['stand_achieved'] = (
+            stand_hours is not None and
+            stand_goal is not None and
+            isinstance(stand_hours, (int, float)) and
+            isinstance(stand_goal, (int, float)) and
+            stand_hours >= stand_goal
+        )
+
+        super().__init__(**data)
+
+    @property
+    def record_type(self) -> str:
+        """Return activity summary record type identifier."""
+        return "ActivitySummary"
 
 # Type unions for easier handling
 AnyRecord = (
