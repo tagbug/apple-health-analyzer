@@ -194,23 +194,108 @@ def info(xml_path: str):
 @cli.command()
 @click.argument('xml_path', type=click.Path(exists=True))
 @click.option('--output', '-o', type=click.Path(), help='Output directory')
-@click.option('--format', '-f', type=click.Choice(['csv', 'json', 'parquet']),
-              default='csv', help='Output format')
-def export(xml_path: str, output: str | None, format: str):
-    """Export parsed data to various formats.
+@click.option('--format', '-f', type=click.Choice(['csv', 'json', 'both']),
+              default='both', help='Output format (csv, json, or both)')
+@click.option('--types', '-t', multiple=True, help='Record types to export (can specify multiple)')
+def export(xml_path: str, output: str | None, format: str, types: list[str]):
+    """Export parsed data to CSV and/or JSON formats.
 
     XML_PATH: Path to the export.xml file
+
+    Examples:
+        # Export all data to both CSV and JSON
+        uv run python main.py export export.xml
+
+        # Export only heart rate data to CSV
+        uv run python main.py export export.xml --format csv --types HeartRate
+
+        # Export specific record types to custom output directory
+        uv run python main.py export export.xml --output ./my_exports --types HeartRate --types Sleep
     """
     try:
+        from src.processors.exporter import DataExporter
+
         xml_file = Path(xml_path)
         output_dir = Path(output) if output else get_config().output_dir
 
         console.print(f"[bold blue]Exporting data from:[/bold blue] {xml_file}")
-        console.print(f"[bold blue]Output format:[/bold blue] {format}")
         console.print(f"[bold blue]Output directory:[/bold blue] {output_dir}")
+        console.print(f"[bold blue]Export format:[/bold blue] {format}")
 
-        # TODO: Implement export functionality
-        console.print("[yellow]Export functionality coming soon![/yellow]")
+        if types:
+            console.print(f"[bold blue]Record types:[/bold blue] {', '.join(types)}")
+
+        # Determine export formats
+        if format == 'both':
+            formats = ['csv', 'json']
+        else:
+            formats = [format]
+
+        # Create exporter
+        exporter = DataExporter(output_dir)
+
+        # Perform export
+        with console.status("[bold green]Exporting data..."):
+            export_stats = exporter.export_by_category(
+                xml_file,
+                formats=formats,
+                record_types=list(types) if types else None
+            )
+
+        # Display results
+        console.print("\n[bold green]✓ Export completed successfully![/bold green]")
+
+        # Show export summary
+        table = Table(title="Export Summary")
+        table.add_column("Record Type", style="cyan")
+        table.add_column("CSV Records", style="green", justify="right")
+        table.add_column("JSON Records", style="blue", justify="right")
+        table.add_column("Total", style="magenta", justify="right")
+
+        total_csv = 0
+        total_json = 0
+        total_records = 0
+
+        for record_type, stats in export_stats.items():
+            csv_count = stats.get('csv', 0)
+            json_count = stats.get('json', 0)
+            type_total = csv_count + json_count
+
+            table.add_row(
+                record_type,
+                f"{csv_count:,}" if csv_count > 0 else "-",
+                f"{json_count:,}" if json_count > 0 else "-",
+                f"{type_total:,}"
+            )
+
+            total_csv += csv_count
+            total_json += json_count
+            total_records += type_total
+
+        # Add totals row
+        table.add_row(
+            "[bold]TOTAL[/bold]",
+            f"[bold]{total_csv:,}[/bold]" if total_csv > 0 else "-",
+            f"[bold]{total_json:,}[/bold]" if total_json > 0 else "-",
+            f"[bold]{total_records:,}[/bold]",
+            end_section=True
+        )
+
+        console.print(table)
+
+        # Show file locations
+        console.print(f"\n[bold]Files saved to:[/bold] {output_dir}")
+        console.print(f"[bold]Manifest file:[/bold] {output_dir}/manifest.json")
+
+        # Show generated files
+        if output_dir.exists():
+            files = list(output_dir.glob("*"))
+            if files:
+                console.print("\n[bold]Generated files:[/bold]")
+                for file_path in sorted(files):
+                    if file_path.is_file():
+                        size_mb = file_path.stat().st_size / (1024 * 1024)
+                        console.print(f"  • {file_path.name} ({size_mb:.2f} MB)")
 
     except Exception as e:
         logger.error(f"Export failed: {e}")
