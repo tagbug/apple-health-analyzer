@@ -72,7 +72,7 @@ class TestExportManifest:
             assert manifest.manifest_path.exists()
 
             # Check content
-            with open(manifest.manifest_path, 'r', encoding='utf-8') as f:
+            with open(manifest.manifest_path, encoding='utf-8') as f:
                 data = json.load(f)
 
             assert data["summary"]["export_duration_seconds"] == 5.5
@@ -174,7 +174,7 @@ class TestDataExporter:
         assert output_path.exists()
 
         # Check JSON content
-        with open(output_path, 'r', encoding='utf-8') as f:
+        with open(output_path, encoding='utf-8') as f:
             data = json.load(f)
 
         assert len(data) == 3

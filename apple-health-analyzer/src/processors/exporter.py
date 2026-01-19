@@ -6,7 +6,7 @@ with support for categorized exports and manifest generation.
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional, TextIO
+from typing import Any
 
 import pandas as pd
 
@@ -23,7 +23,7 @@ class ExportManifest:
     def __init__(self, export_dir: Path):
         self.export_dir = export_dir
         self.manifest_path = export_dir / "manifest.json"
-        self.manifest_data: Dict[str, Any] = {
+        self.manifest_data: dict[str, Any] = {
             "export_timestamp": pd.Timestamp.now().isoformat(),
             "export_format": "apple_health_analyzer_v1",
             "files": {},
@@ -48,7 +48,7 @@ class ExportManifest:
             "export_duration_seconds": None  # Will be set when saving
         }
 
-    def save(self, export_duration: Optional[float] = None):
+    def save(self, export_duration: float | None = None):
         """Save the manifest to disk."""
         if export_duration is not None:
             self.manifest_data["summary"]["export_duration_seconds"] = export_duration
@@ -67,7 +67,7 @@ class DataExporter:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.manifest = ExportManifest(self.output_dir)
 
-    def export_to_csv(self, records: List[AnyRecord], output_path: Path) -> int:
+    def export_to_csv(self, records: list[AnyRecord], output_path: Path) -> int:
         """Export records to CSV format.
 
         Args:
@@ -94,12 +94,11 @@ class DataExporter:
         )
 
         record_count = len(records)
-        file_size = output_path.stat().st_size
 
         logger.info(f"Exported {record_count} records to CSV: {output_path}")
         return record_count
 
-    def export_to_json(self, records: List[AnyRecord], output_path: Path) -> int:
+    def export_to_json(self, records: list[AnyRecord], output_path: Path) -> int:
         """Export records to JSON format.
 
         Args:
@@ -121,7 +120,6 @@ class DataExporter:
             json.dump(records_data, f, indent=2, ensure_ascii=False, default=str)
 
         record_count = len(records)
-        file_size = output_path.stat().st_size
 
         logger.info(f"Exported {record_count} records to JSON: {output_path}")
         return record_count
@@ -129,9 +127,9 @@ class DataExporter:
     def export_by_category(
         self,
         xml_path: Path,
-        formats: Optional[List[str]] = None,
-        record_types: Optional[List[str]] = None
-    ) -> Dict[str, Dict[str, int]]:
+        formats: list[str] | None = None,
+        record_types: list[str] | None = None
+    ) -> dict[str, dict[str, int]]:
         """Export records by category from XML file.
 
         Args:
@@ -223,7 +221,7 @@ class DataExporter:
 
         return export_stats
 
-    def _records_to_dataframe(self, records: List[AnyRecord]) -> pd.DataFrame:
+    def _records_to_dataframe(self, records: list[AnyRecord]) -> pd.DataFrame:
         """Convert records to pandas DataFrame.
 
         Args:

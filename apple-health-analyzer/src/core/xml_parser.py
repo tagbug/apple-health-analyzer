@@ -10,7 +10,12 @@ from pathlib import Path
 from typing import Any
 
 from src.config import Config, get_config
-from src.core.data_models import AnyRecord, create_record_from_xml_element, WorkoutRecord, ActivitySummaryRecord
+from src.core.data_models import (
+    ActivitySummaryRecord,
+    AnyRecord,
+    WorkoutRecord,
+    create_record_from_xml_element,
+)
 from src.utils.logger import ProgressLogger, get_logger, performance_logger
 
 logger = get_logger(__name__)
@@ -381,7 +386,7 @@ class StreamingXMLParser:
 
         # Update source counts
         if hasattr(record, 'source_name') and isinstance(getattr(record, 'source_name', None), str):
-            source_name = getattr(record, 'source_name')
+            source_name = record.source_name
             self.stats['sources'][source_name] += 1
 
         # Update date range

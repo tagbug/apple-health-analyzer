@@ -8,7 +8,7 @@ import sys
 import time
 from collections.abc import Callable
 from types import FrameType
-from typing import Any, TypeVar, cast
+from typing import Any
 
 from loguru import logger
 
@@ -95,9 +95,7 @@ def get_logger(name: str) -> Any:
     """Get a logger instance with the specified name."""
     return logger.bind(name=name)
 
-F = TypeVar('F', bound=Callable[..., Any])
-
-def performance_logger(func: F) -> F:
+def performance_logger(func: Callable[..., Any]) -> Callable[..., Any]:
     """Decorator to log function performance metrics.
 
     Usage:
@@ -135,7 +133,7 @@ def performance_logger(func: F) -> F:
             logger.error(f"Failed {func.__name__} after {duration:.3f}s: {e}")
             raise
 
-    return cast(F, wrapper)
+    return wrapper
 
 def _get_memory_usage() -> float:
     """Get current memory usage in MB."""
