@@ -1,3 +1,24 @@
+## prompt
+
+我希望能写一个python脚本来对我从Apple Health导出的Data进行分析，具体来说要求（功能点）如下，每个要求（功能点）可以再做拆分：
+
+1. 读取并解析export.xml的数据结构
+2. 将export.xml拆分为不同的子项数据集，按数据类型进行分类，比如Activity、Heart Rate、Steps、Sleep等
+3. 将分类数据导出到csv、json格式文件
+4. 针对Heart Rate、Sleep数据进行分析
+  4.1 清洗并合并重复/叠加数据，数据来源优先级为 Apple Watch (🐙Watch) > 小米运动健康 > iPhone (🐙Phone)
+  4.1 计算并保存以Hour/Day/Week/Month/6Month/Year不同区间的数据最大值/最小值/平均值
+  4.2 对异常数据进行分析，报告分析结果
+  4.3 生成相关图表
+  4.4 生成Apple Health中的Heart Rate、Resting Heart Rate、Heart Rate Variability、Walking Heart Rate Average、Cardio Fitness、Cardio Recovery、Sleep、Heart Rate: Sleep、信息
+  4.5 针对上面的信息进行分析并汇总出Highlights
+5. 项目使用uv进行管理，项目结构及代码遵循现代软件工程最佳实践，避免不必要的注释，保留足够的调试信息，允许切换dev环境和prod环境，模块功能间高耦合低内聚，对过大的函数和模块及时进行拆分和重构
+
+注意：
+- 原始xml文件非常大（300MB+），不要尝试直接读取
+- applehealth 子文件夹是我找到的开源实现，你可以参考其中关于读取export.xml数据结构的实现，但它没有满足我的需求，applehealth/health_out 是我之前使用这个脚本对Health数据进行分析导出的结果
+- export_data 子文件夹是直接通过Apple Health导出的数据
+
 ## 项目概览
 
 你的export.xml文件包含**784,390条记录**（362MB），包含丰富的健康数据类型。现有的`applehealth`实现提供了基础的XML解析功能，但不满足你的深度分析需求。

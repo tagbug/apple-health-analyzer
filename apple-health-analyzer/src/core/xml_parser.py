@@ -11,474 +11,572 @@ from typing import Any
 
 from src.config import Config, get_config
 from src.core.data_models import (
-    ActivitySummaryRecord,
-    AnyRecord,
-    WorkoutRecord,
-    create_record_from_xml_element,
+  ActivitySummaryRecord,
+  AnyRecord,
+  WorkoutRecord,
+  create_record_from_xml_element,
 )
 from src.utils.logger import ProgressLogger, get_logger, performance_logger
 
 logger = get_logger(__name__)
 
+
 class StreamingXMLParser:
-    """Memory-efficient XML parser for Apple Health export files.
+  """Memory-efficient XML parser for Apple Health export files.
 
-    Uses iterative parsing to handle large files without loading everything into memory.
+  Uses iterative parsing to handle large files without loading everything into memory.
+  """
+
+  def __init__(self, xml_path: Path, config: Config | None = None):
+    """Initialize the parser.
+
+    Args:
+        xml_path: Path to the export.xml file
+        config: Configuration instance (uses global config if None)
     """
+    self.xml_path = xml_path
+    self.config = config or get_config()
+    self.logger = get_logger(__name__)
 
-    def __init__(self, xml_path: Path, config: Config | None = None):
-        """Initialize the parser.
+    # Statistics tracking
+    self.stats: dict[str, Any] = {
+      "total_records": 0,
+      "processed_records": 0,
+      "skipped_records": 0,
+      "invalid_records": 0,
+      "warning_records": 0,  # Records parsed with warnings/defaults
+      "warnings": [],  # Warning details
+      "record_types": defaultdict(int),
+      "sources": defaultdict(int),
+      "date_range": {"start": None, "end": None},
+    }
 
-        Args:
-            xml_path: Path to the export.xml file
-            config: Configuration instance (uses global config if None)
-        """
-        self.xml_path = xml_path
-        self.config = config or get_config()
-        self.logger = get_logger(__name__)
+  def parse_records(
+    self, record_types: list[str] | None = None, batch_size: int = 1000
+  ) -> Generator[AnyRecord, None, None]:
+    """Parse Record elements from the XML file.
 
-        # Statistics tracking
-        self.stats: dict[str, Any] = {
-            'total_records': 0,
-            'processed_records': 0,
-            'skipped_records': 0,
-            'invalid_records': 0,
-            'record_types': defaultdict(int),
-            'sources': defaultdict(int),
-            'date_range': {'start': None, 'end': None},
-        }
+    Args:
+        record_types: List of record types to parse (None for all)
+        batch_size: Number of records to process before logging progress
 
-    def parse_records(
-        self,
-        record_types: list[str] | None = None,
-        batch_size: int = 1000
-    ) -> Generator[AnyRecord, None, None]:
-        """Parse Record elements from the XML file.
+    Yields:
+        Parsed health record objects
+    """
+    self.logger.info(f"Starting to parse records from {self.xml_path}")
+    self.logger.info(f"Record types filter: {record_types or 'all'}")
 
-        Args:
-            record_types: List of record types to parse (None for all)
-            batch_size: Number of records to process before logging progress
+    # Reset statistics
+    self._reset_stats()
 
-        Yields:
-            Parsed health record objects
-        """
-        self.logger.info(f"Starting to parse records from {self.xml_path}")
-        self.logger.info(f"Record types filter: {record_types or 'all'}")
+    try:
+      # Use iterative parsing to avoid loading the entire file
+      context = ET.iterparse(self.xml_path, events=("start", "end"))
+      context = iter(context)
 
-        # Reset statistics
-        self._reset_stats()
+      # Get root element
+      event, root = next(context)
 
-        try:
-            # Use iterative parsing to avoid loading the entire file
-            context = ET.iterparse(self.xml_path, events=('start', 'end'))
-            context = iter(context)
+      processed_in_batch = 0
 
-            # Get root element
-            event, root = next(context)
+      with ProgressLogger(
+        "XML record parsing", log_interval=batch_size
+      ) as progress:
+        for event, elem in context:
+          if event == "start" and elem.tag == "Record":
+            self.stats["total_records"] += 1
 
-            processed_in_batch = 0
+            # Check if we should process this record type
+            record_type = elem.get("type")
+            if record_types and record_type not in record_types:
+              self.stats["skipped_records"] += 1
+              # For start events, we need to clear when we reach the end
+              continue
 
-            with ProgressLogger("XML record parsing", log_interval=batch_size) as progress:
-                for event, elem in context:
-                    if event == 'start' and elem.tag == 'Record':
-                        self.stats['total_records'] += 1
+            # Parse the record
+            record = self._parse_record_element(elem)
+            if record:
+              # Update statistics
+              self._update_record_stats(record)
 
-                        # Check if we should process this record type
-                        record_type = elem.get('type')
-                        if record_types and record_type not in record_types:
-                            self.stats['skipped_records'] += 1
-                            # For start events, we need to clear when we reach the end
-                            continue
+              # Yield the record
+              yield record
+              self.stats["processed_records"] += 1
+              processed_in_batch += 1
 
-                        # Parse the record
-                        record = self._parse_record_element(elem)
-                        if record:
-                            # Update statistics
-                            self._update_record_stats(record)
+              # Log progress
+              progress.update()
 
-                            # Yield the record
-                            yield record
-                            self.stats['processed_records'] += 1
-                            processed_in_batch += 1
-
-                            # Log progress
-                            progress.update()
-
-                            # Periodic memory cleanup
-                            if processed_in_batch >= batch_size:
-                                processed_in_batch = 0
-                                # Clear processed elements to free memory
-                                root.clear()
-                        else:
-                            self.stats['invalid_records'] += 1
-
-                    # Clear elements at end events to free memory
-                    if event == 'end':
-                        elem.clear()
-
-                # Final memory cleanup
+              # Periodic memory cleanup
+              if processed_in_batch >= batch_size:
+                processed_in_batch = 0
+                # Clear processed elements to free memory
                 root.clear()
+            else:
+              self.stats["invalid_records"] += 1
 
-        except Exception as e:
-            self.logger.error(f"Error during XML parsing: {e}")
-            raise
+          # Clear elements at end events to free memory
+          if event == "end":
+            elem.clear()
 
-        self.logger.info(f"Completed parsing {self.stats['processed_records']} records")
-        self._log_parsing_summary()
+        # Final memory cleanup
+        root.clear()
 
-    def parse_workouts(self) -> Generator[WorkoutRecord, None, None]:
-        """Parse Workout elements from the XML file.
+    except Exception as e:
+      self.logger.error(f"Error during XML parsing: {e}")
+      raise
 
-        Yields:
-            WorkoutRecord instances
-        """
-        self.logger.info("Starting to parse workouts")
+    self.logger.info(
+      f"Completed parsing {self.stats['processed_records']} records"
+    )
+    self._log_parsing_summary()
 
-        try:
-            context = ET.iterparse(self.xml_path, events=('start', 'end'))
-            context = iter(context)
-            event, root = next(context)
+  def parse_workouts(self) -> Generator[WorkoutRecord, None, None]:
+    """Parse Workout elements from the XML file.
 
-            workout_count = 0
-            with ProgressLogger("XML workout parsing") as progress:
-                for event, elem in context:
-                    if event == 'end' and elem.tag == 'Workout':
-                        workout = self._parse_workout_element(elem)
-                        if workout:
-                            yield workout
-                            workout_count += 1
-                            progress.update()
+    Yields:
+        WorkoutRecord instances
+    """
+    self.logger.info("Starting to parse workouts")
 
-                        elem.clear()
+    try:
+      context = ET.iterparse(self.xml_path, events=("start", "end"))
+      context = iter(context)
+      event, root = next(context)
 
-                root.clear()
+      workout_count = 0
+      with ProgressLogger("XML workout parsing") as progress:
+        for event, elem in context:
+          if event == "end" and elem.tag == "Workout":
+            workout = self._parse_workout_element(elem)
+            if workout:
+              yield workout
+              workout_count += 1
+              progress.update()
 
-            self.logger.info(f"Completed parsing {workout_count} workouts")
+            elem.clear()
 
-        except Exception as e:
-            self.logger.error(f"Error parsing workouts: {e}")
-            raise
+        root.clear()
 
-    def parse_activity_summaries(self) -> Generator[ActivitySummaryRecord, None, None]:
-        """Parse ActivitySummary elements from the XML file.
+      self.logger.info(f"Completed parsing {workout_count} workouts")
 
-        Yields:
-            ActivitySummaryRecord instances
-        """
-        self.logger.info("Starting to parse activity summaries")
+    except Exception as e:
+      self.logger.error(f"Error parsing workouts: {e}")
+      raise
 
-        try:
-            context = ET.iterparse(self.xml_path, events=('start', 'end'))
-            context = iter(context)
-            event, root = next(context)
+  def parse_activity_summaries(
+    self,
+  ) -> Generator[ActivitySummaryRecord, None, None]:
+    """Parse ActivitySummary elements from the XML file.
 
-            summary_count = 0
-            with ProgressLogger("XML activity summary parsing") as progress:
-                for event, elem in context:
-                    if event == 'end' and elem.tag == 'ActivitySummary':
-                        summary = self._parse_activity_summary_element(elem)
-                        if summary:
-                            yield summary
-                            summary_count += 1
-                            progress.update()
+    Yields:
+        ActivitySummaryRecord instances
+    """
+    self.logger.info("Starting to parse activity summaries")
 
-                        elem.clear()
+    try:
+      context = ET.iterparse(self.xml_path, events=("start", "end"))
+      context = iter(context)
+      event, root = next(context)
 
-                root.clear()
+      summary_count = 0
+      with ProgressLogger("XML activity summary parsing") as progress:
+        for event, elem in context:
+          if event == "end" and elem.tag == "ActivitySummary":
+            summary = self._parse_activity_summary_element(elem)
+            if summary:
+              yield summary
+              summary_count += 1
+              progress.update()
 
-            self.logger.info(f"Completed parsing {summary_count} activity summaries")
+            elem.clear()
 
-        except Exception as e:
-            self.logger.error(f"Error parsing activity summaries: {e}")
-            raise
+        root.clear()
 
-    def get_statistics(self) -> dict[str, Any]:
-        """Get parsing statistics.
+      self.logger.info(f"Completed parsing {summary_count} activity summaries")
 
-        Returns:
-            Dictionary containing parsing statistics
-        """
-        return {
-            'total_records': self.stats['total_records'],
-            'processed_records': self.stats['processed_records'],
-            'skipped_records': self.stats['skipped_records'],
-            'invalid_records': self.stats['invalid_records'],
-            'record_types': dict(self.stats['record_types']),
-            'sources': dict(self.stats['sources']),
-            'date_range': self.stats['date_range'],
-            'success_rate': (
-                self.stats['processed_records'] / self.stats['total_records']
-                if self.stats['total_records'] > 0 else 0
-            ),
-        }
+    except Exception as e:
+      self.logger.error(f"Error parsing activity summaries: {e}")
+      raise
 
-    def _reset_stats(self) -> None:
-        """Reset parsing statistics."""
-        self.stats = {
-            'total_records': 0,
-            'processed_records': 0,
-            'skipped_records': 0,
-            'invalid_records': 0,
-            'record_types': defaultdict(int),
-            'sources': defaultdict(int),
-            'date_range': {'start': None, 'end': None},
-        }
+  def get_statistics(self) -> dict[str, Any]:
+    """Get parsing statistics.
 
-    def _parse_record_element(self, elem: ET.Element) -> AnyRecord | None:
-        """Parse a single Record XML element.
+    Returns:
+        Dictionary containing parsing statistics
+    """
+    return {
+      "total_records": self.stats["total_records"],
+      "processed_records": self.stats["processed_records"],
+      "skipped_records": self.stats["skipped_records"],
+      "invalid_records": self.stats["invalid_records"],
+      "warning_records": self.stats["warning_records"],
+      "warnings": self.stats["warnings"],
+      "record_types": dict(self.stats["record_types"]),
+      "sources": dict(self.stats["sources"]),
+      "date_range": self.stats["date_range"],
+      "success_rate": (
+        self.stats["processed_records"] / self.stats["total_records"]
+        if self.stats["total_records"] > 0
+        else 0
+      ),
+    }
 
-        Args:
-            elem: XML element to parse
+  def _reset_stats(self) -> None:
+    """Reset parsing statistics."""
+    self.stats = {
+      "total_records": 0,
+      "processed_records": 0,
+      "skipped_records": 0,
+      "invalid_records": 0,
+      "warning_records": 0,  # Records parsed with warnings/defaults
+      "warnings": [],  # Warning details
+      "record_types": defaultdict(int),
+      "sources": defaultdict(int),
+      "date_range": {"start": None, "end": None},
+    }
 
-        Returns:
-            Parsed record object or None if parsing fails
-        """
-        try:
-            return create_record_from_xml_element(elem)
-        except Exception as e:
-            self.logger.debug(f"Failed to parse record element: {e}")
-            return None
+  def _parse_record_element(self, elem: ET.Element) -> AnyRecord | None:
+    """Parse a single Record XML element.
 
-    def _parse_workout_element(self, elem: ET.Element) -> WorkoutRecord | None:
-        """Parse a single Workout XML element.
+    Args:
+        elem: XML element to parse
 
-        Args:
-            elem: Workout XML element
+    Returns:
+        Parsed record object or None if parsing fails
+    """
+    try:
+      record, warnings = create_record_from_xml_element(elem)
 
-        Returns:
-            WorkoutRecord instance or None if parsing fails
-        """
-        try:
-            from datetime import datetime
+      # Handle warnings
+      if warnings:
+        self.stats["warning_records"] += 1
+        # Record warning details
+        self.stats["warnings"].append(
+          {
+            "record_type": elem.get("type", "Unknown"),
+            "warnings": warnings,
+            "source": elem.get("sourceName", "Unknown"),
+          }
+        )
+        # Log warnings
+        self.logger.warning(
+          f"Record parsed with warnings: {elem.get('type', 'Unknown')} - {', '.join(warnings)}"
+        )
 
-            # Parse basic workout data
-            activity_type = elem.get('workoutActivityType', '').replace('HKWorkoutActivityType', '')
-            workout_duration_seconds = float(elem.get('duration', 0))
-            source_name = elem.get('sourceName', '')
-            start_date = datetime.strptime(elem.get('startDate', ''), '%Y-%m-%d %H:%M:%S %z')
-            end_date = datetime.strptime(elem.get('endDate', ''), '%Y-%m-%d %H:%M:%S %z')
+      return record
+    except Exception as e:
+      self.logger.debug(f"Failed to parse record element: {e}")
+      return None
 
-            # Parse workout statistics
-            calories = None
-            distance_km = None
-            average_heart_rate = None
+  def _parse_workout_element(self, elem: ET.Element) -> WorkoutRecord | None:
+    """Parse a single Workout XML element.
 
-            for stat in elem.findall('.//WorkoutStatistics'):
-                stat_type = stat.get('type', '')
-                value = stat.get('sum')
-                unit = stat.get('unit', '')
+    Args:
+        elem: Workout XML element
 
-                if value:
-                    if 'ActiveEnergyBurned' in stat_type:
-                        calories = float(value)
-                    elif 'DistanceWalkingRunning' in stat_type:
-                        if unit == 'km':
-                            distance_km = float(value)
-                        elif unit == 'm':
-                            distance_km = float(value) / 1000
-                    elif 'HeartRate' in stat_type and 'Average' in stat_type:
-                        average_heart_rate = float(value)
+    Returns:
+        WorkoutRecord instance or None if parsing fails
+    """
+    try:
+      from datetime import datetime
 
-            # Parse metadata
-            metadata = {}
-            for meta in elem.findall('.//MetadataEntry'):
-                key = meta.get('key')
-                value = meta.get('value')
-                if key and value:
-                    metadata[key] = value
+      # Parse basic workout data
+      activity_type = elem.get("workoutActivityType", "").replace(
+        "HKWorkoutActivityType", ""
+      )
+      workout_duration_seconds = float(elem.get("duration", 0))
+      source_name = elem.get("sourceName", "")
+      start_date = datetime.strptime(
+        elem.get("startDate", ""), "%Y-%m-%d %H:%M:%S %z"
+      )
+      end_date = datetime.strptime(
+        elem.get("endDate", ""), "%Y-%m-%d %H:%M:%S %z"
+      )
 
-            # Create WorkoutRecord instance
-            return WorkoutRecord(
-                source_name=source_name,
-                start_date=start_date,
-                end_date=end_date,
-                activity_type=activity_type,
-                workout_duration_seconds=workout_duration_seconds,
-                calories=calories,
-                distance_km=distance_km,
-                average_heart_rate=average_heart_rate,
-                metadata=metadata if metadata else None
-            )
+      # Parse workout statistics
+      calories = None
+      distance_km = None
+      average_heart_rate = None
 
-        except Exception as e:
-            self.logger.debug(f"Failed to parse workout element: {e}")
-            return None
+      for stat in elem.findall(".//WorkoutStatistics"):
+        stat_type = stat.get("type", "")
+        value = stat.get("sum")
+        unit = stat.get("unit", "")
 
-    def _parse_activity_summary_element(self, elem: ET.Element) -> ActivitySummaryRecord | None:
-        """Parse a single ActivitySummary XML element.
+        if value:
+          if "ActiveEnergyBurned" in stat_type:
+            calories = float(value)
+          elif "DistanceWalkingRunning" in stat_type:
+            if unit == "km":
+              distance_km = float(value)
+            elif unit == "m":
+              distance_km = float(value) / 1000
+          elif "HeartRate" in stat_type and "Average" in stat_type:
+            average_heart_rate = float(value)
 
-        Args:
-            elem: ActivitySummary XML element
+      # Parse metadata
+      metadata = {}
+      for meta in elem.findall(".//MetadataEntry"):
+        key = meta.get("key")
+        value = meta.get("value")
+        if key and value:
+          metadata[key] = value
 
-        Returns:
-            ActivitySummaryRecord instance or None if parsing fails
-        """
-        try:
-            from datetime import datetime
+      # Create WorkoutRecord instance
+      return WorkoutRecord(
+        source_name=source_name,
+        start_date=start_date,
+        end_date=end_date,
+        activity_type=activity_type,
+        workout_duration_seconds=workout_duration_seconds,
+        calories=calories,
+        distance_km=distance_km,
+        average_heart_rate=average_heart_rate,
+        metadata=metadata if metadata else None,
+      )
 
-            # Parse basic data
-            date = datetime.strptime(elem.get('dateComponents', ''), '%Y-%m-%d')
-            source_name = elem.get('sourceName', 'Apple Health')  # Activity summaries typically from Apple Health
+    except Exception as e:
+      self.logger.debug(f"Failed to parse workout element: {e}")
+      return None
 
-            # Parse activity rings
-            move_calories = float(elem.get('activeEnergyBurned', 0)) if elem.get('activeEnergyBurned') else None
-            exercise_minutes = float(elem.get('appleExerciseTime', 0)) if elem.get('appleExerciseTime') else None
-            stand_hours = float(elem.get('appleStandHours', 0)) if elem.get('appleStandHours') else None
+  def _parse_activity_summary_element(
+    self, elem: ET.Element
+  ) -> ActivitySummaryRecord | None:
+    """Parse a single ActivitySummary XML element.
 
-            # Parse goals
-            move_goal = float(elem.get('activeEnergyBurnedGoal', 0)) if elem.get('activeEnergyBurnedGoal') else None
-            exercise_goal = float(elem.get('appleExerciseTimeGoal', 0)) if elem.get('appleExerciseTimeGoal') else None
-            stand_goal = float(elem.get('appleStandHoursGoal', 0)) if elem.get('appleStandHoursGoal') else None
+    Args:
+        elem: ActivitySummary XML element
 
-            # Determine achievements
-            move_achieved = (
-                move_calories is not None and
-                move_goal is not None and
-                isinstance(move_calories, (int, float)) and
-                isinstance(move_goal, (int, float)) and
-                move_calories >= move_goal
-            )
+    Returns:
+        ActivitySummaryRecord instance or None if parsing fails
+    """
+    try:
+      from datetime import datetime
 
-            exercise_achieved = (
-                exercise_minutes is not None and
-                exercise_goal is not None and
-                isinstance(exercise_minutes, (int, float)) and
-                isinstance(exercise_goal, (int, float)) and
-                exercise_minutes >= exercise_goal
-            )
+      # Parse basic data
+      date = datetime.strptime(elem.get("dateComponents", ""), "%Y-%m-%d")
+      source_name = elem.get(
+        "sourceName", "Apple Health"
+      )  # Activity summaries typically from Apple Health
 
-            stand_achieved = (
-                stand_hours is not None and
-                stand_goal is not None and
-                isinstance(stand_hours, (int, float)) and
-                isinstance(stand_goal, (int, float)) and
-                stand_hours >= stand_goal
-            )
+      # Parse activity rings
+      move_calories = (
+        float(elem.get("activeEnergyBurned", 0))
+        if elem.get("activeEnergyBurned")
+        else None
+      )
+      exercise_minutes = (
+        float(elem.get("appleExerciseTime", 0))
+        if elem.get("appleExerciseTime")
+        else None
+      )
+      stand_hours = (
+        float(elem.get("appleStandHours", 0))
+        if elem.get("appleStandHours")
+        else None
+      )
 
-            # Create ActivitySummaryRecord instance
-            return ActivitySummaryRecord(
-                source_name=source_name,
-                date=date,
-                move_calories=move_calories,
-                exercise_minutes=exercise_minutes,
-                stand_hours=stand_hours,
-                move_goal=move_goal,
-                exercise_goal=exercise_goal,
-                stand_goal=stand_goal,
-                move_achieved=move_achieved,
-                exercise_achieved=exercise_achieved,
-                stand_achieved=stand_achieved
-            )
+      # Parse goals
+      move_goal = (
+        float(elem.get("activeEnergyBurnedGoal", 0))
+        if elem.get("activeEnergyBurnedGoal")
+        else None
+      )
+      exercise_goal = (
+        float(elem.get("appleExerciseTimeGoal", 0))
+        if elem.get("appleExerciseTimeGoal")
+        else None
+      )
+      stand_goal = (
+        float(elem.get("appleStandHoursGoal", 0))
+        if elem.get("appleStandHoursGoal")
+        else None
+      )
 
-        except Exception as e:
-            self.logger.debug(f"Failed to parse activity summary element: {e}")
-            return None
+      # Determine achievements
+      move_achieved = (
+        move_calories is not None
+        and move_goal is not None
+        and isinstance(move_calories, (int, float))
+        and isinstance(move_goal, (int, float))
+        and move_calories >= move_goal
+      )
 
-    def _update_record_stats(self, record: AnyRecord) -> None:
-        """Update parsing statistics with a new record.
+      exercise_achieved = (
+        exercise_minutes is not None
+        and exercise_goal is not None
+        and isinstance(exercise_minutes, (int, float))
+        and isinstance(exercise_goal, (int, float))
+        and exercise_minutes >= exercise_goal
+      )
 
-        Args:
-            record: Parsed record to include in statistics
-        """
-        # Update type counts using unified record_type property
-        record_type = record.record_type
-        self.stats['record_types'][record_type] += 1
+      stand_achieved = (
+        stand_hours is not None
+        and stand_goal is not None
+        and isinstance(stand_hours, (int, float))
+        and isinstance(stand_goal, (int, float))
+        and stand_hours >= stand_goal
+      )
 
-        # Update source counts
-        if hasattr(record, 'source_name') and isinstance(getattr(record, 'source_name', None), str):
-            source_name = record.source_name
-            self.stats['sources'][source_name] += 1
+      # Create ActivitySummaryRecord instance
+      return ActivitySummaryRecord(
+        source_name=source_name,
+        date=date,
+        move_calories=move_calories,
+        exercise_minutes=exercise_minutes,
+        stand_hours=stand_hours,
+        move_goal=move_goal,
+        exercise_goal=exercise_goal,
+        stand_goal=stand_goal,
+        move_achieved=move_achieved,
+        exercise_achieved=exercise_achieved,
+        stand_achieved=stand_achieved,
+      )
 
-        # Update date range
-        if hasattr(record, 'start_date'):
-            start_date = getattr(record, 'start_date', None)
-            if start_date is not None and hasattr(start_date, 'date'):
-                record_date = start_date.date()
-                if self.stats['date_range']['start'] is None or record_date < self.stats['date_range']['start']:
-                    self.stats['date_range']['start'] = record_date
-                if self.stats['date_range']['end'] is None or record_date > self.stats['date_range']['end']:
-                    self.stats['date_range']['end'] = record_date
+    except Exception as e:
+      self.logger.debug(f"Failed to parse activity summary element: {e}")
+      return None
 
-    def _log_parsing_summary(self) -> None:
-        """Log a summary of the parsing results."""
-        stats = self.get_statistics()
+  def _update_record_stats(self, record: AnyRecord) -> None:
+    """Update parsing statistics with a new record.
 
-        self.logger.info("=== XML Parsing Summary ===")
-        self.logger.info(f"Total records in file: {stats['total_records']:,}")
-        self.logger.info(f"Successfully processed: {stats['processed_records']:,}")
-        self.logger.info(f"Skipped (filtered): {stats['skipped_records']:,}")
-        self.logger.info(f"Invalid/malformed: {stats['invalid_records']:,}")
-        self.logger.info(f"Success rate: {stats['success_rate']:.1%}")
+    Args:
+        record: Parsed record to include in statistics
+    """
+    # Update type counts using unified record_type property
+    record_type = record.record_type
+    self.stats["record_types"][record_type] += 1
 
-        if stats['date_range']['start'] and stats['date_range']['end']:
-            self.logger.info(f"Date range: {stats['date_range']['start']} to {stats['date_range']['end']}")
+    # Update source counts
+    if hasattr(record, "source_name") and isinstance(
+      getattr(record, "source_name", None), str
+    ):
+      source_name = record.source_name
+      self.stats["sources"][source_name] += 1
 
-        # Log top record types
-        if stats['record_types']:
-            self.logger.info("Top record types:")
-            sorted_types = sorted(stats['record_types'].items(), key=lambda x: x[1], reverse=True)
-            for record_type, count in sorted_types[:5]:
-                self.logger.info(f"  {record_type}: {count:,}")
+    # Update date range
+    if hasattr(record, "start_date"):
+      start_date = getattr(record, "start_date", None)
+      if start_date is not None and hasattr(start_date, "date"):
+        record_date = start_date.date()
+        if (
+          self.stats["date_range"]["start"] is None
+          or record_date < self.stats["date_range"]["start"]
+        ):
+          self.stats["date_range"]["start"] = record_date
+        if (
+          self.stats["date_range"]["end"] is None
+          or record_date > self.stats["date_range"]["end"]
+        ):
+          self.stats["date_range"]["end"] = record_date
 
-        # Log top sources
-        if stats['sources']:
-            self.logger.info("Top data sources:")
-            sorted_sources = sorted(stats['sources'].items(), key=lambda x: x[1], reverse=True)
-            for source, count in sorted_sources[:5]:
-                self.logger.info(f"  {source}: {count:,}")
+  def _log_parsing_summary(self) -> None:
+    """Log a summary of the parsing results."""
+    stats = self.get_statistics()
+
+    self.logger.info("=== XML Parsing Summary ===")
+    self.logger.info(f"Total records in file: {stats['total_records']:,}")
+    self.logger.info(f"Successfully processed: {stats['processed_records']:,}")
+    self.logger.info(f"Skipped (filtered): {stats['skipped_records']:,}")
+    self.logger.info(f"Invalid/malformed: {stats['invalid_records']:,}")
+    self.logger.info(f"Success rate: {stats['success_rate']:.1%}")
+
+    # Log warnings if any
+    if self.stats["warning_records"] > 0:
+      self.logger.warning(
+        f"⚠️  {self.stats['warning_records']:,} records parsed with warnings"
+      )
+      self.logger.warning("   (Records used default values for missing fields)")
+
+      # Show first few warnings
+      for i, warning_info in enumerate(self.stats["warnings"][:3]):
+        self.logger.warning(
+          f"   - {warning_info['record_type']}: {', '.join(warning_info['warnings'])}"
+        )
+
+      if len(self.stats["warnings"]) > 3:
+        self.logger.warning(
+          f"   ... and {len(self.stats['warnings']) - 3} more warnings"
+        )
+
+    if stats["date_range"]["start"] and stats["date_range"]["end"]:
+      self.logger.info(
+        f"Date range: {stats['date_range']['start']} to {stats['date_range']['end']}"
+      )
+
+    # Log top record types
+    if stats["record_types"]:
+      self.logger.info("Top record types:")
+      sorted_types = sorted(
+        stats["record_types"].items(), key=lambda x: x[1], reverse=True
+      )
+      for record_type, count in sorted_types[:5]:
+        self.logger.info(f"  {record_type}: {count:,}")
+
+    # Log top sources
+    if stats["sources"]:
+      self.logger.info("Top data sources:")
+      sorted_sources = sorted(
+        stats["sources"].items(), key=lambda x: x[1], reverse=True
+      )
+      for source, count in sorted_sources[:5]:
+        self.logger.info(f"  {source}: {count:,}")
+
 
 @performance_logger
 def parse_export_file(
-    xml_path: Path,
-    record_types: list[str] | None = None,
-    config: Config | None = None
+  xml_path: Path,
+  record_types: list[str] | None = None,
+  config: Config | None = None,
 ) -> tuple[list[AnyRecord], dict[str, Any]]:
-    """Convenience function to parse an entire export file.
+  """Convenience function to parse an entire export file.
 
-    Args:
-        xml_path: Path to the export.xml file
-        record_types: List of record types to parse (None for all)
-        config: Configuration instance
+  Args:
+      xml_path: Path to the export.xml file
+      record_types: List of record types to parse (None for all)
+      config: Configuration instance
 
-    Returns:
-        Tuple of (records_list, statistics_dict)
-    """
-    config = config or get_config()
-    parser = StreamingXMLParser(xml_path, config)
+  Returns:
+      Tuple of (records_list, statistics_dict)
+  """
+  config = config or get_config()
+  parser = StreamingXMLParser(xml_path, config)
 
-    records = list(parser.parse_records(record_types, config.batch_size))
-    stats = parser.get_statistics()
+  records = list(parser.parse_records(record_types, config.batch_size))
+  stats = parser.get_statistics()
 
-    return records, stats
+  return records, stats
+
 
 def get_export_file_info(xml_path: Path) -> dict[str, Any]:
-    """Get basic information about an export file without full parsing.
+  """Get basic information about an export file without full parsing.
 
-    Args:
-        xml_path: Path to the export.xml file
+  Args:
+      xml_path: Path to the export.xml file
 
-    Returns:
-        Dictionary with file information
-    """
-    try:
-        file_size = xml_path.stat().st_size
-        file_size_mb = file_size / (1024 * 1024)
+  Returns:
+      Dictionary with file information
+  """
+  try:
+    file_size = xml_path.stat().st_size
+    file_size_mb = file_size / (1024 * 1024)
 
-        # Quick scan for record count (approximate)
-        record_count = 0
-        with open(xml_path, encoding='utf-8') as f:
-            for line in f:
-                if '<Record ' in line:
-                    record_count += 1
+    # Quick scan for record count (approximate)
+    record_count = 0
+    with open(xml_path, encoding="utf-8") as f:
+      for line in f:
+        if "<Record " in line:
+          record_count += 1
 
-        return {
-            'file_path': str(xml_path),
-            'file_size_bytes': file_size,
-            'file_size_mb': round(file_size_mb, 2),
-            'estimated_record_count': record_count,
-            'last_modified': xml_path.stat().st_mtime,
-        }
+    return {
+      "file_path": str(xml_path),
+      "file_size_bytes": file_size,
+      "file_size_mb": round(file_size_mb, 2),
+      "estimated_record_count": record_count,
+      "last_modified": xml_path.stat().st_mtime,
+    }
 
-    except Exception as e:
-        logger.error(f"Error getting file info: {e}")
-        return {}
+  except Exception as e:
+    logger.error(f"Error getting file info: {e}")
+    return {}
