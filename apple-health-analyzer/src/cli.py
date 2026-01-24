@@ -5,6 +5,7 @@ Provides CLI commands for parsing, analyzing, and exporting health data.
 
 import sys
 import xml.etree.ElementTree as ET
+from datetime import datetime
 from pathlib import Path
 
 import click
@@ -365,22 +366,272 @@ def export(
 @cli.command()
 @click.argument("xml_path", type=click.Path(exists=True))
 @click.option(
-  "--output", "-o", type=click.Path(), help="Output directory for charts"
+  "--output",
+  "-o",
+  type=click.Path(),
+  help="Output directory for analysis results",
 )
-def analyze(xml_path: str, output: str | None):
-  """Analyze heart rate and sleep data.
+@click.option(
+  "--age", type=int, help="User age (required for cardio fitness analysis)"
+)
+@click.option(
+  "--gender",
+  type=click.Choice(["male", "female"]),
+  help="User gender (required for cardio fitness analysis)",
+)
+@click.option(
+  "--date-range",
+  help="Date range for analysis (format: YYYY-MM-DD:YYYY-MM-DD)",
+)
+@click.option(
+  "--types",
+  "-t",
+  multiple=True,
+  type=click.Choice(
+    ["heart_rate", "sleep", "hrv", "resting_hr", "cardio_fitness", "all"]
+  ),
+  default=["all"],
+  help="Analysis types to perform (can specify multiple)",
+)
+@click.option(
+  "--format",
+  "-f",
+  type=click.Choice(["json", "text", "both"]),
+  default="both",
+  help="Output format for analysis results",
+)
+@click.option(
+  "--generate-charts/--no-charts",
+  default=True,
+  help="Generate analysis charts (default: enabled)",
+)
+def analyze(
+  xml_path: str,
+  output: str | None,
+  age: int | None,
+  gender: str | None,
+  date_range: str | None,
+  types: list[str],
+  format: str,
+  generate_charts: bool,
+):
+  """Analyze heart rate and sleep data with comprehensive insights.
 
   XML_PATH: Path to the export.xml file
+
+  Examples:
+      # Basic analysis with age and gender for cardio fitness
+      uv run python main.py analyze export.xml --age 30 --gender male
+
+      # Analyze specific data types
+      uv run python main.py analyze export.xml --types heart_rate --types sleep
+
+      # Analyze specific date range
+      uv run python main.py analyze export.xml --date-range 2024-01-01:2024-12-31
+
+      # Analysis with custom output directory
+      uv run python main.py analyze export.xml --output ./analysis_results
   """
   try:
+    from src.analyzers.highlights import HighlightsGenerator
+    from src.processors.heart_rate import HeartRateAnalyzer
+    from src.processors.sleep import SleepAnalyzer
+
     xml_file = Path(xml_path)
     output_dir = Path(output) if output else get_config().output_dir
 
     console.print(f"[bold blue]Analyzing data from:[/bold blue] {xml_file}")
     console.print(f"[bold blue]Output directory:[/bold blue] {output_dir}")
 
-    # TODO: Implement analysis functionality
-    console.print("[yellow]Analysis functionality coming soon![/yellow]")
+    # Validate parameters
+    if "cardio_fitness" in types or "all" in types:
+      if not age or not gender:
+        console.print(
+          "[bold red]Error:[/bold red] Age and gender are required for cardio fitness analysis"
+        )
+        console.print("Use --age and --gender options")
+        sys.exit(1)
+
+    # Parse date range
+    start_date = None
+    end_date = None
+    if date_range:
+      try:
+        start_str, end_str = date_range.split(":")
+        start_date = datetime.fromisoformat(start_str)
+        end_date = datetime.fromisoformat(end_str)
+        console.print(
+          f"[bold blue]Date range:[/bold blue] {start_date.date()} to {end_date.date()}"
+        )
+      except ValueError:
+        console.print(
+          "[bold red]Error:[/bold red] Invalid date range format. Use YYYY-MM-DD:YYYY-MM-DD"
+        )
+        sys.exit(1)
+
+    # Determine analysis types
+    if "all" in types:
+      analysis_types = [
+        "heart_rate",
+        "sleep",
+        "hrv",
+        "resting_hr",
+        "cardio_fitness",
+      ]
+    else:
+      analysis_types = types
+
+    console.print(
+      f"[bold blue]Analysis types:[/bold blue] {', '.join(analysis_types)}"
+    )
+
+    # Initialize analyzers
+    heart_rate_analyzer = HeartRateAnalyzer(age=age, gender=gender)  # type: ignore
+    sleep_analyzer = SleepAnalyzer()
+    highlights_generator = HighlightsGenerator()
+
+    # Parse data with progress
+    console.print("\n[bold]Step 1: Parsing health data...[/bold]")
+    with console.status("[bold green]Parsing records..."):
+      # Parse heart rate related records
+      hr_records = []
+      resting_hr_records = []
+      hrv_records = []
+      vo2_max_records = []
+
+      if any(
+        t in analysis_types
+        for t in ["heart_rate", "resting_hr", "hrv", "cardio_fitness"]
+      ):
+        from src.core.xml_parser import StreamingXMLParser
+
+        parser = StreamingXMLParser(xml_file)
+
+        # Parse heart rate data
+        hr_types = ["HKQuantityTypeIdentifierHeartRate"]
+        if "resting_hr" in analysis_types:
+          hr_types.append("HKQuantityTypeIdentifierRestingHeartRate")
+        if "hrv" in analysis_types:
+          hr_types.append("HKQuantityTypeIdentifierHeartRateVariabilitySDNN")
+        if "cardio_fitness" in analysis_types:
+          hr_types.append("HKQuantityTypeIdentifierVO2Max")
+
+        records_generator = parser.parse_records(record_types=hr_types)
+        all_hr_records = list(records_generator)
+
+        # Categorize records
+        for record in all_hr_records:
+          record_type = getattr(record, "type", "")
+          if record_type == "HKQuantityTypeIdentifierHeartRate":
+            hr_records.append(record)
+          elif record_type == "HKQuantityTypeIdentifierRestingHeartRate":
+            resting_hr_records.append(record)
+          elif (
+            record_type == "HKQuantityTypeIdentifierHeartRateVariabilitySDNN"
+          ):
+            hrv_records.append(record)
+          elif record_type == "HKQuantityTypeIdentifierVO2Max":
+            vo2_max_records.append(record)
+
+    # Parse sleep data
+    sleep_records = []
+    if "sleep" in analysis_types:
+      from src.core.xml_parser import StreamingXMLParser
+
+      parser = StreamingXMLParser(xml_file)
+      sleep_records = list(
+        parser.parse_records(
+          record_types=["HKCategoryTypeIdentifierSleepAnalysis"]
+        )
+      )
+
+    # Filter by date range if specified
+    if start_date and end_date:
+
+      def filter_by_date(records):
+        return [r for r in records if start_date <= r.start_date <= end_date]
+
+      hr_records = filter_by_date(hr_records)
+      resting_hr_records = filter_by_date(resting_hr_records)
+      hrv_records = filter_by_date(hrv_records)
+      vo2_max_records = filter_by_date(vo2_max_records)
+      sleep_records = filter_by_date(sleep_records)
+
+    console.print(
+      f"[green]✓ Parsed {len(hr_records)} heart rate, {len(sleep_records)} sleep records[/green]"
+    )
+
+    # Perform analyses
+    heart_rate_report = None
+    sleep_report = None
+
+    # Heart rate analysis
+    if any(
+      t in analysis_types
+      for t in ["heart_rate", "resting_hr", "hrv", "cardio_fitness"]
+    ):
+      console.print("\n[bold]Step 2: Analyzing heart rate data...[/bold]")
+      with console.status("[bold green]Analyzing heart rate patterns..."):
+        heart_rate_report = heart_rate_analyzer.analyze_comprehensive(
+          heart_rate_records=hr_records,
+          resting_hr_records=resting_hr_records
+          if "resting_hr" in analysis_types
+          else None,
+          hrv_records=hrv_records if "hrv" in analysis_types else None,
+          vo2_max_records=vo2_max_records
+          if "cardio_fitness" in analysis_types
+          else None,
+        )
+      console.print("[green]✓ Heart rate analysis completed[/green]")
+
+    # Sleep analysis
+    if "sleep" in analysis_types and sleep_records:
+      console.print("\n[bold]Step 3: Analyzing sleep data...[/bold]")
+      with console.status("[bold green]Analyzing sleep patterns..."):
+        sleep_report = sleep_analyzer.analyze_comprehensive(sleep_records)  # type: ignore
+      console.print("[green]✓ Sleep analysis completed[/green]")
+
+    # Generate highlights
+    console.print("\n[bold]Step 4: Generating health insights...[/bold]")
+    with console.status(
+      "[bold green]Generating insights and recommendations..."
+    ):
+      highlights = highlights_generator.generate_comprehensive_highlights(
+        heart_rate_report=heart_rate_report,
+        sleep_report=sleep_report,
+      )
+    console.print(
+      f"[green]✓ Generated {len(highlights.insights)} insights and {len(highlights.recommendations)} recommendations[/green]"
+    )
+
+    # Display results
+    console.print("\n[bold green]🎯 Analysis Results[/bold green]")
+
+    # Display heart rate results
+    if heart_rate_report:
+      _display_heart_rate_results(heart_rate_report)
+
+    # Display sleep results
+    if sleep_report:
+      _display_sleep_results(sleep_report)
+
+    # Display highlights
+    _display_highlights(highlights)
+
+    # Save results
+    if format in ["json", "both"]:
+      _save_analysis_results_json(
+        output_dir, heart_rate_report, sleep_report, highlights
+      )
+
+    if format in ["text", "both"]:
+      _save_analysis_results_text(
+        output_dir, heart_rate_report, sleep_report, highlights
+      )
+
+    console.print(
+      f"\n[bold green]✓ Analysis completed! Results saved to: {output_dir}[/bold green]"
+    )
 
   except Exception as e:
     logger.error(f"Analysis failed: {e}")
@@ -464,6 +715,194 @@ def _save_parsed_data(records: list, stats: dict, output_dir: Path):
 
   # TODO: Implement data saving
   console.print(f"[green]Data would be saved to: {output_dir}[/green]")
+
+
+def _display_heart_rate_results(report):
+  """Display heart rate analysis results."""
+  console.print("\n[bold blue]❤️ Heart Rate Analysis[/bold blue]")
+
+  if report.resting_hr_analysis:
+    resting = report.resting_hr_analysis
+    console.print(f"  [cyan]Resting HR:[/cyan] {resting.current_value:.1f} bpm")
+    console.print(f"  [cyan]Trend:[/cyan] {resting.trend_direction}")
+    console.print(f"  [cyan]Health Rating:[/cyan] {resting.health_rating}")
+
+  if report.hrv_analysis:
+    hrv = report.hrv_analysis
+    console.print(f"  [cyan]HRV (SDNN):[/cyan] {hrv.current_sdnn:.1f} ms")
+    console.print(f"  [cyan]Stress Level:[/cyan] {hrv.stress_level}")
+    console.print(f"  [cyan]Recovery Status:[/cyan] {hrv.recovery_status}")
+
+  if report.cardio_fitness:
+    cardio = report.cardio_fitness
+    console.print(
+      f"  [cyan]VO2 Max:[/cyan] {cardio.current_vo2_max:.1f} ml/min·kg"
+    )
+    console.print(
+      f"  [cyan]Fitness Rating:[/cyan] {cardio.age_adjusted_rating}"
+    )
+
+  console.print(f"  [cyan]Data Quality:[/cyan] {report.data_quality_score:.1%}")
+  console.print(f"  [cyan]Total Records:[/cyan] {report.record_count:,}")
+
+
+def _display_sleep_results(report):
+  """Display sleep analysis results."""
+  console.print("\n[bold blue]😴 Sleep Analysis[/bold blue]")
+
+  if report.quality_metrics:
+    quality = report.quality_metrics
+    console.print(
+      f"  [cyan]Average Duration:[/cyan] {quality.average_duration:.1f} hours"
+    )
+    console.print(
+      f"  [cyan]Average Efficiency:[/cyan] {quality.average_efficiency:.1%}"
+    )
+    console.print(
+      f"  [cyan]Consistency Score:[/cyan] {quality.consistency_score:.1%}"
+    )
+
+  console.print(f"  [cyan]Data Quality:[/cyan] {report.data_quality_score:.1%}")
+  console.print(f"  [cyan]Total Records:[/cyan] {report.record_count:,}")
+
+
+def _display_highlights(highlights):
+  """Display health highlights and recommendations."""
+  console.print("\n[bold blue]💡 Health Insights[/bold blue]")
+
+  # Display insights
+  if highlights.insights:
+    console.print("\n[bold]Key Insights:[/bold]")
+    for i, insight in enumerate(highlights.insights[:5], 1):  # Show top 5
+      priority_colors = {"high": "red", "medium": "yellow", "low": "green"}
+      color = priority_colors.get(insight.priority, "white")
+      console.print(f"  {i}. [{color}]{insight.title}[/{color}]")
+      console.print(f"     {insight.message}")
+
+  # Display recommendations
+  if highlights.recommendations:
+    console.print("\n[bold]Recommendations:[/bold]")
+    for i, rec in enumerate(highlights.recommendations[:3], 1):  # Show top 3
+      console.print(f"  {i}. {rec}")
+
+
+def _save_analysis_results_json(
+  output_dir: Path, heart_rate_report, sleep_report, highlights
+):
+  """Save analysis results to JSON format."""
+  import json
+
+  output_dir.mkdir(parents=True, exist_ok=True)
+
+  results = {
+    "analysis_date": datetime.now().isoformat(),
+    "heart_rate": _report_to_dict(heart_rate_report)
+    if heart_rate_report
+    else None,
+    "sleep": _report_to_dict(sleep_report) if sleep_report else None,
+    "highlights": {
+      "insights": [
+        {
+          "category": i.category,
+          "priority": i.priority,
+          "title": i.title,
+          "message": i.message,
+          "confidence": i.confidence,
+        }
+        for i in highlights.insights
+      ],
+      "recommendations": highlights.recommendations,
+      "summary": highlights.summary,
+    },
+  }
+
+  output_file = output_dir / "analysis_results.json"
+  with open(output_file, "w", encoding="utf-8") as f:
+    json.dump(results, f, indent=2, ensure_ascii=False, default=str)
+
+  console.print(f"[green]✓ JSON results saved to: {output_file}[/green]")
+
+
+def _save_analysis_results_text(
+  output_dir: Path, heart_rate_report, sleep_report, highlights
+):
+  """Save analysis results to text format."""
+  output_dir.mkdir(parents=True, exist_ok=True)
+
+  output_file = output_dir / "analysis_results.txt"
+
+  with open(output_file, "w", encoding="utf-8") as f:
+    f.write("Apple Health Analysis Report\n")
+    f.write("=" * 50 + "\n\n")
+    f.write(
+      f"Analysis Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+    )
+
+    if heart_rate_report:
+      f.write("HEART RATE ANALYSIS\n")
+      f.write("-" * 20 + "\n")
+      if heart_rate_report.resting_hr_analysis:
+        resting = heart_rate_report.resting_hr_analysis
+        f.write(f"Resting HR: {resting.current_value:.1f} bpm\n")
+        f.write(f"Trend: {resting.trend_direction}\n")
+        f.write(f"Health Rating: {resting.health_rating}\n")
+      if heart_rate_report.hrv_analysis:
+        hrv = heart_rate_report.hrv_analysis
+        f.write(f"HRV (SDNN): {hrv.current_sdnn:.1f} ms\n")
+        f.write(f"Stress Level: {hrv.stress_level}\n")
+      if heart_rate_report.cardio_fitness:
+        cardio = heart_rate_report.cardio_fitness
+        f.write(f"VO2 Max: {cardio.current_vo2_max:.1f} ml/min·kg\n")
+        f.write(f"Fitness Rating: {cardio.age_adjusted_rating}\n")
+      f.write(f"Data Quality: {heart_rate_report.data_quality_score:.1%}\n")
+      f.write(f"Total Records: {heart_rate_report.record_count:,}\n\n")
+
+    if sleep_report:
+      f.write("SLEEP ANALYSIS\n")
+      f.write("-" * 15 + "\n")
+      if sleep_report.quality_metrics:
+        quality = sleep_report.quality_metrics
+        f.write(f"Average Duration: {quality.average_duration:.1f} hours\n")
+        f.write(f"Average Efficiency: {quality.average_efficiency:.1%}\n")
+        f.write(f"Consistency Score: {quality.consistency_score:.1%}\n")
+      f.write(f"Data Quality: {sleep_report.data_quality_score:.1%}\n")
+      f.write(f"Total Records: {sleep_report.record_count:,}\n\n")
+
+    if highlights.insights:
+      f.write("KEY INSIGHTS\n")
+      f.write("-" * 12 + "\n")
+      for i, insight in enumerate(highlights.insights[:5], 1):
+        f.write(f"{i}. {insight.title}\n")
+        f.write(f"   {insight.message}\n\n")
+
+    if highlights.recommendations:
+      f.write("RECOMMENDATIONS\n")
+      f.write("-" * 15 + "\n")
+      for i, rec in enumerate(highlights.recommendations, 1):
+        f.write(f"{i}. {rec}\n")
+
+  console.print(f"[green]✓ Text results saved to: {output_file}[/green]")
+
+
+def _report_to_dict(report):
+  """Convert report object to dictionary for JSON serialization."""
+  if report is None:
+    return None
+
+  # Simple conversion - in production, you'd want more sophisticated serialization
+  return {
+    "analysis_date": report.analysis_date.isoformat()
+    if hasattr(report, "analysis_date")
+    else None,
+    "data_range": [
+      report.data_range[0].isoformat(),
+      report.data_range[1].isoformat(),
+    ]
+    if hasattr(report, "data_range")
+    else None,
+    "record_count": getattr(report, "record_count", 0),
+    "data_quality_score": getattr(report, "data_quality_score", 0.0),
+  }
 
 
 def main():
