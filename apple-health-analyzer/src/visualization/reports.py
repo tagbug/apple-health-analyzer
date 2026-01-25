@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from ..analyzers.highlights import HealthHighlights
 from ..processors.heart_rate import HeartRateAnalysisReport
@@ -88,9 +89,11 @@ class ReportGenerator:
     html_content += self._close_html_structure()
 
     # 保存报告
+    import time
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S') + f"_{int(time.time() * 1000000) % 1000000:06d}"
     report_path = (
       self.output_dir
-      / f"health_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
+      / f"health_report_{timestamp}.html"
     )
     report_path.write_text(html_content, encoding="utf-8")
 
@@ -198,6 +201,524 @@ class ReportGenerator:
 
     logger.info(f"Markdown report saved to {report_path}")
     return report_path
+
+  def generate_comprehensive_report(
+    self,
+    report: Any,  # ComprehensiveHealthReport
+    title: str = "综合健康分析报告",
+    include_charts: bool = True,
+  ) -> Path:
+    """生成综合健康分析报告
+
+    Args:
+        report: 综合健康分析报告
+        title: 报告标题
+        include_charts: 是否包含图表
+
+    Returns:
+        报告文件路径
+    """
+    logger.info("Generating comprehensive health report")
+
+    # 生成图表
+    charts = {}
+    if include_charts:
+      try:
+        charts = self.chart_generator.generate_comprehensive_report_charts(
+          report, self.output_dir / "charts"
+        )
+      except Exception as e:
+        logger.warning(f"图表生成失败，将继续生成文本报告: {e}")
+        charts = {}
+
+    # 创建HTML内容
+    html_content = self._create_comprehensive_html_structure(
+      title, report, charts
+    )
+
+    # 保存报告
+    report_path = (
+      self.output_dir
+      / f"comprehensive_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
+    )
+    report_path.write_text(html_content, encoding="utf-8")
+
+    logger.info(f"Comprehensive report saved to {report_path}")
+    return report_path
+
+  def _create_comprehensive_html_structure(
+    self,
+    title: str,
+    report: Any,
+    charts: dict[str, Path],
+  ) -> str:
+    """创建综合报告HTML结构"""
+    html_content = f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{title}</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        :root {{
+            --primary-color: #4CAF50;
+            --secondary-color: #2196F3;
+            --success-color: #8BC34A;
+            --warning-color: #FF9800;
+            --danger-color: #F44336;
+            --info-color: #03A9F4;
+            --light-bg: #f8f9fa;
+            --card-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            --border-radius: 12px;
+        }}
+
+        * {{
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }}
+
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #2c3e50;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }}
+
+        .container {{
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }}
+
+        .header {{
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 40px;
+            text-align: center;
+            border-radius: var(--border-radius);
+            margin-bottom: 30px;
+            box-shadow: var(--card-shadow);
+        }}
+
+        .header h1 {{
+            font-size: 3em;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+        }}
+
+        .header .subtitle {{
+            color: #7f8c8d;
+            font-size: 1.2em;
+        }}
+
+        .dashboard-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }}
+
+        .metric-card {{
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 25px;
+            border-radius: var(--border-radius);
+            box-shadow: var(--card-shadow);
+            transition: transform 0.3s ease;
+        }}
+
+        .metric-card:hover {{
+            transform: translateY(-5px);
+        }}
+
+        .metric-card.success {{ border-left: 4px solid var(--success-color); }}
+        .metric-card.warning {{ border-left: 4px solid var(--warning-color); }}
+        .metric-card.danger {{ border-left: 4px solid var(--danger-color); }}
+        .metric-card.info {{ border-left: 4px solid var(--info-color); }}
+
+        .metric-title {{
+            font-size: 0.9em;
+            color: #7f8c8d;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }}
+
+        .metric-value {{
+            font-size: 2.5em;
+            font-weight: bold;
+            color: var(--primary-color);
+        }}
+
+        .metric-unit {{
+            font-size: 0.8em;
+            color: #95a5a6;
+        }}
+
+        .section {{
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 40px;
+            margin-bottom: 30px;
+            border-radius: var(--border-radius);
+            box-shadow: var(--card-shadow);
+        }}
+
+        .section h2 {{
+            color: var(--primary-color);
+            font-size: 2.2em;
+            margin-bottom: 30px;
+            padding-bottom: 15px;
+            border-bottom: 3px solid var(--primary-color);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }}
+
+        .section h3 {{
+            color: var(--secondary-color);
+            font-size: 1.6em;
+            margin: 30px 0 20px 0;
+        }}
+
+        .chart-container {{
+            margin: 30px 0;
+            padding: 20px;
+            background: var(--light-bg);
+            border-radius: var(--border-radius);
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
+        }}
+
+        .insights-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }}
+
+        .insight-card {{
+            background: linear-gradient(135deg, #fff 0%, #f8f9fa 100%);
+            padding: 25px;
+            border-radius: var(--border-radius);
+            box-shadow: var(--card-shadow);
+            border-left: 4px solid var(--secondary-color);
+        }}
+
+        .insight-card.high {{ border-left-color: var(--danger-color); }}
+        .insight-card.medium {{ border-left-color: var(--warning-color); }}
+        .insight-card.low {{ border-left-color: var(--success-color); }}
+
+        .insight-title {{
+            font-weight: bold;
+            font-size: 1.2em;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }}
+
+        .insight-message {{
+            color: #34495e;
+            line-height: 1.6;
+        }}
+
+        .recommendations {{
+            background: linear-gradient(135deg, #e8f5e9 0%, #d4edda 100%);
+            padding: 30px;
+            border-radius: var(--border-radius);
+            border-left: 4px solid var(--success-color);
+            margin: 30px 0;
+        }}
+
+        .recommendations ol {{
+            margin-left: 20px;
+        }}
+
+        .recommendations li {{
+            margin-bottom: 15px;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.7);
+            border-radius: 8px;
+        }}
+
+        .footer {{
+            text-align: center;
+            padding: 30px;
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 0.9em;
+        }}
+
+        @media (max-width: 768px) {{
+            .dashboard-grid {{
+                grid-template-columns: 1fr;
+            }}
+
+            .insights-grid {{
+                grid-template-columns: 1fr;
+            }}
+
+            .header h1 {{
+                font-size: 2em;
+            }}
+
+            .section {{
+                padding: 20px;
+            }}
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>{title}</h1>
+            <p class="subtitle">生成时间: {datetime.now().strftime("%Y年%m月%d日 %H:%M:%S")}</p>
+        </div>
+"""
+
+    # 执行摘要
+    html_content += self._create_comprehensive_summary(report)
+
+    # 健康仪表盘
+    if "dashboard" in charts:
+      html_content += f"""
+        <div class="section">
+            <h2>📊 健康仪表盘</h2>
+            <div class="chart-container">
+                <iframe src="{charts["dashboard"].relative_to(self.output_dir)}"
+                        width="100%" height="600" frameborder="0"></iframe>
+            </div>
+        </div>
+      """
+
+    # 详细分析章节
+    html_content += self._create_detailed_analysis_sections(report, charts)
+
+    # 建议部分
+    html_content += self._create_recommendations_section(report)
+
+    # 页脚
+    html_content += """
+        <div class="footer">
+            <p>本报告由 Apple Health Analyzer 自动生成 | 数据来源: Apple Health 导出数据</p>
+        </div>
+    </div>
+</body>
+</html>
+"""
+
+    return html_content
+
+  def _create_comprehensive_summary(self, report: Any) -> str:
+    """创建综合摘要"""
+    content = '<div class="section">\n'
+    content += "<h2>📈 执行摘要</h2>\n"
+    content += '<div class="dashboard-grid">\n'
+
+    # 整体健康评分
+    if hasattr(report, "overall_wellness_score"):
+      score_class = (
+        "success"
+        if report.overall_wellness_score > 0.7
+        else "warning"
+        if report.overall_wellness_score > 0.4
+        else "danger"
+      )
+      content += f'<div class="metric-card {score_class}">\n'
+      content += '<div class="metric-title">整体健康评分</div>\n'
+      content += (
+        f'<div class="metric-value">{report.overall_wellness_score:.1%}</div>\n'
+      )
+      content += "</div>\n"
+
+    # 数据范围
+    if hasattr(report, "data_range"):
+      content += '<div class="metric-card info">\n'
+      content += '<div class="metric-title">数据时间范围</div>\n'
+      content += f'<div class="metric-value" style="font-size:1.2em">{report.data_range[0].strftime("%Y-%m-%d")}<br>至<br>{report.data_range[1].strftime("%Y-%m-%d")}</div>\n'
+      content += "</div>\n"
+
+    # 数据完整性
+    if hasattr(report, "data_completeness_score"):
+      completeness_class = (
+        "success"
+        if report.data_completeness_score > 0.8
+        else "warning"
+        if report.data_completeness_score > 0.5
+        else "danger"
+      )
+      content += f'<div class="metric-card {completeness_class}">\n'
+      content += '<div class="metric-title">数据完整性</div>\n'
+      content += f'<div class="metric-value">{report.data_completeness_score:.1%}</div>\n'
+      content += "</div>\n"
+
+    # 分析置信度
+    if hasattr(report, "analysis_confidence"):
+      confidence_class = (
+        "success"
+        if report.analysis_confidence > 0.8
+        else "warning"
+        if report.analysis_confidence > 0.6
+        else "danger"
+      )
+      content += f'<div class="metric-card {confidence_class}">\n'
+      content += '<div class="metric-title">分析置信度</div>\n'
+      content += (
+        f'<div class="metric-value">{report.analysis_confidence:.1%}</div>\n'
+      )
+      content += "</div>\n"
+
+    content += "</div>\n"
+    content += "</div>\n"
+
+    return content
+
+  def _create_detailed_analysis_sections(
+    self, report: Any, charts: dict[str, Path]
+  ) -> str:
+    """创建详细分析章节"""
+    content = ""
+
+    # 睡眠分析
+    if hasattr(report, "sleep_quality") and getattr(report, "sleep_quality", None) is not None:
+      content += '<div class="section">\n'
+      content += "<h2>😴 睡眠质量分析</h2>\n"
+      content += '<div class="dashboard-grid">\n'
+
+      sleep = report.sleep_quality
+      content += '<div class="metric-card success">\n'
+      content += '<div class="metric-title">平均睡眠时长</div>\n'
+      content += f'<div class="metric-value">{sleep.average_duration_hours:.1f}<span class="metric-unit"> 小时</span></div>\n'
+      content += "</div>\n"
+
+      content += '<div class="metric-card info">\n'
+      content += '<div class="metric-title">睡眠效率</div>\n'
+      content += f'<div class="metric-value">{sleep.average_efficiency_percent:.1f}<span class="metric-unit">%</span></div>\n'
+      content += "</div>\n"
+
+      content += '<div class="metric-card warning">\n'
+      content += '<div class="metric-title">睡眠债</div>\n'
+      content += f'<div class="metric-value">{sleep.sleep_debt_hours:.1f}<span class="metric-unit"> 小时</span></div>\n'
+      content += "</div>\n"
+
+      content += '<div class="metric-card secondary">\n'
+      content += '<div class="metric-title">规律性评分</div>\n'
+      content += (
+        f'<div class="metric-value">{sleep.consistency_score:.1%}</div>\n'
+      )
+      content += "</div>\n"
+
+      content += "</div>\n"
+      content += "</div>\n"
+
+    # 活动模式分析
+    if getattr(report, "activity_patterns", None) is not None:
+      content += '<div class="section">\n'
+      content += "<h2>🏃 活动模式分析</h2>\n"
+      content += '<div class="dashboard-grid">\n'
+
+      activity = report.activity_patterns
+      content += '<div class="metric-card success">\n'
+      content += '<div class="metric-title">每日平均步数</div>\n'
+      content += f'<div class="metric-value">{activity.daily_step_average:,}<span class="metric-unit"> 步</span></div>\n'
+      content += "</div>\n"
+
+      content += '<div class="metric-card info">\n'
+      content += '<div class="metric-title">每周运动频率</div>\n'
+      content += f'<div class="metric-value">{activity.weekly_exercise_frequency:.1f}<span class="metric-unit"> 次</span></div>\n'
+      content += "</div>\n"
+
+      content += '<div class="metric-card warning">\n'
+      content += '<div class="metric-title">每日久坐时间</div>\n'
+      content += f'<div class="metric-value">{activity.sedentary_hours_daily:.1f}<span class="metric-unit"> 小时</span></div>\n'
+      content += "</div>\n"
+
+      content += '<div class="metric-card secondary">\n'
+      content += '<div class="metric-title">活动一致性</div>\n'
+      content += f'<div class="metric-value">{activity.activity_consistency_score:.1%}</div>\n'
+      content += "</div>\n"
+
+      content += "</div>\n"
+      content += "</div>\n"
+
+    # 相关性分析
+    if "correlation" in charts:
+      content += f"""
+        <div class="section">
+            <h2>🔗 健康指标相关性</h2>
+            <div class="chart-container">
+                <iframe src="{charts["correlation"].relative_to(self.output_dir)}"
+                        width="100%" height="600" frameborder="0"></iframe>
+            </div>
+        </div>
+      """
+
+    # 风险评估
+    if "risk_assessment" in charts:
+      content += f"""
+        <div class="section">
+            <h2>⚠️ 健康风险评估</h2>
+            <div class="chart-container">
+                <iframe src="{charts["risk_assessment"].relative_to(self.output_dir)}"
+                        width="100%" height="500" frameborder="0"></iframe>
+            </div>
+        </div>
+      """
+
+    return content
+
+  def _create_recommendations_section(self, report: Any) -> str:
+    """创建建议部分"""
+    content = '<div class="section">\n'
+    content += "<h2>💡 个性化建议</h2>\n"
+
+    # 优先行动
+    if hasattr(report, "priority_actions") and report.priority_actions:
+      content += "<h3>优先行动项目</h3>\n"
+      content += '<div class="recommendations">\n'
+      content += "<ol>\n"
+      for action in report.priority_actions:
+        content += f"<li>{action}</li>\n"
+      content += "</ol>\n"
+      content += "</div>\n"
+
+    # 生活方式优化
+    if (
+      hasattr(report, "lifestyle_optimization")
+      and report.lifestyle_optimization
+    ):
+      content += "<h3>生活方式优化建议</h3>\n"
+      content += '<div class="recommendations">\n'
+      content += "<ol>\n"
+      for optimization in report.lifestyle_optimization:
+        content += f"<li>{optimization}</li>\n"
+      content += "</ol>\n"
+      content += "</div>\n"
+
+    # 预测洞察
+    if hasattr(report, "predictive_insights") and report.predictive_insights:
+      content += "<h3>预测性洞察</h3>\n"
+      content += '<div class="insights-grid">\n'
+
+      for insight in report.predictive_insights:
+        priority_class = "low"  # 默认低优先级
+        if "⚠️" in insight or "风险" in insight:
+          priority_class = "high"
+        elif "📊" in insight or "建议" in insight:
+          priority_class = "medium"
+
+        content += f'<div class="insight-card {priority_class}">\n'
+        content += f'<div class="insight-message">{insight}</div>\n'
+        content += "</div>\n"
+
+      content += "</div>\n"
+
+    content += "</div>\n"
+    return content
 
   def _create_html_structure(self, title: str) -> str:
     """创建HTML基础结构"""

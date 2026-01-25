@@ -137,6 +137,16 @@ class QuantityRecord(HealthRecord):
       raise ValueError("Quantity value must be positive")
     return v
 
+  @property
+  def measurable_value(self) -> float:
+    """Return the quantity value for analysis."""
+    return self.value
+
+  @property
+  def measurement_unit(self) -> str:
+    """Return the measurement unit."""
+    return self.unit if self.unit else "unknown"
+
 
 class CategoryRecord(HealthRecord):
   """Category-based health record (e.g., sleep stages, menstrual flow)."""
@@ -297,6 +307,23 @@ class WorkoutRecord(BaseRecord):
     """Return workout record type identifier."""
     return f"Workout:{self.activity_type}"
 
+  @property
+  def measurable_value(self) -> float:
+    """Return calories as the primary measurable value.
+
+    Falls back to duration if calories not available.
+    """
+    if self.calories is not None and self.calories > 0:
+      return self.calories
+    return self.workout_duration_seconds / 60  # Convert to minutes
+
+  @property
+  def measurement_unit(self) -> str:
+    """Return the measurement unit."""
+    if self.calories is not None and self.calories > 0:
+      return "kcal"
+    return "minutes"
+
 
 class ActivitySummaryRecord(BaseRecord):
   """Daily activity summary record."""
@@ -365,6 +392,16 @@ class ActivitySummaryRecord(BaseRecord):
   def record_type(self) -> str:
     """Return activity summary record type identifier."""
     return "ActivitySummary"
+
+  @property
+  def measurable_value(self) -> float:
+    """Return move calories as the primary measurable value."""
+    return self.move_calories if self.move_calories is not None else 0.0
+
+  @property
+  def measurement_unit(self) -> str:
+    """Return the measurement unit."""
+    return "kcal"
 
 
 # Type unions for easier handling

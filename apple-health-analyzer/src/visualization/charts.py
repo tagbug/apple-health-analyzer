@@ -1,6 +1,7 @@
-"""Chart generation module - provides various health data visualization charts"""
+"""Enhanced chart generation module - provides advanced health data visualization charts"""
 
 from pathlib import Path
+from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -1116,5 +1117,683 @@ class ChartGenerator:
 
     # 这里暂时返回空字典，具体实现将在后续补充
     # 需要根据 SleepAnalysisReport 的具体数据结构来实现
+
+    return charts
+
+  def plot_health_dashboard(
+    self,
+    wellness_score: float,
+    metrics: dict[str, float],
+    title: str = "健康仪表盘",
+    output_path: Path | None = None,
+  ) -> go.Figure | None:
+    """绘制健康仪表盘
+
+    Args:
+        wellness_score: 整体健康评分 (0-1)
+        metrics: 各项健康指标字典
+        title: 图表标题
+        output_path: 输出路径
+
+    Returns:
+        Plotly Figure 对象或 None
+    """
+    logger.info("Generating health dashboard chart")
+
+    try:
+      # 创建子图布局
+      fig = make_subplots(
+        rows=2,
+        cols=2,
+        subplot_titles=(
+          "整体健康评分",
+          "关键指标雷达图",
+          "指标趋势",
+          "健康分布",
+        ),
+        specs=[
+          [{"type": "indicator"}, {"type": "scatterpolar"}],
+          [{"type": "bar"}, {"type": "pie"}],
+        ],
+        vertical_spacing=0.15,
+        horizontal_spacing=0.1,
+      )
+
+      # 1. 整体健康评分仪表盘
+      fig.add_trace(
+        go.Indicator(
+          mode="gauge+number",
+          value=wellness_score * 100,
+          title={"text": "健康评分"},
+          gauge={
+            "axis": {"range": [0, 100]},
+            "bar": {"color": HEALTH_COLORS["primary"]},
+            "steps": [
+              {"range": [0, 40], "color": HEALTH_COLORS["danger"]},
+              {"range": [40, 70], "color": HEALTH_COLORS["warning"]},
+              {"range": [70, 100], "color": HEALTH_COLORS["success"]},
+            ],
+            "threshold": {
+              "line": {"color": "black", "width": 4},
+              "thickness": 0.75,
+              "value": wellness_score * 100,
+            },
+          },
+        ),
+        row=1,
+        col=1,
+      )
+
+      # 2. 关键指标雷达图
+      if metrics:
+        categories = list(metrics.keys())
+        values = [metrics[cat] for cat in categories]
+
+        fig.add_trace(
+          go.Scatterpolar(
+            r=values,
+            theta=categories,
+            fill="toself",
+            name="健康指标",
+            line_color=HEALTH_COLORS["secondary"],
+            fillcolor=HEALTH_COLORS["secondary"],
+            opacity=0.3,
+          ),
+          row=1,
+          col=2,
+        )
+
+        fig.update_polars(
+          radialaxis=dict(range=[0, 1], showticklabels=False),
+          row=1,
+          col=2,
+        )
+
+      # 3. 指标趋势条形图
+      if metrics:
+        fig.add_trace(
+          go.Bar(
+            x=list(metrics.keys()),
+            y=list(metrics.values()),
+            marker_color=HEALTH_COLORS["info"],
+            name="指标值",
+          ),
+          row=2,
+          col=1,
+        )
+
+      # 4. 健康分布饼图
+      health_categories = {
+        "优秀": max(0, wellness_score - 0.8) * 5,
+        "良好": max(0, min(0.8, wellness_score) - 0.6) * 5,
+        "一般": max(0, min(0.6, wellness_score) - 0.4) * 5,
+        "需关注": max(0, 0.4 - wellness_score) * 5,
+      }
+
+      fig.add_trace(
+        go.Pie(
+          labels=list(health_categories.keys()),
+          values=list(health_categories.values()),
+          marker_colors=[
+            HEALTH_COLORS["success"],
+            HEALTH_COLORS["primary"],
+            HEALTH_COLORS["warning"],
+            HEALTH_COLORS["danger"],
+          ],
+          name="健康分布",
+        ),
+        row=2,
+        col=2,
+      )
+
+      fig.update_layout(
+        title=title,
+        width=self.width,
+        height=self.height,
+        template=PLOTLY_TEMPLATE,
+        showlegend=False,
+      )
+
+      if output_path:
+        self._save_plotly_figure(fig, output_path)
+
+      return fig
+
+    except Exception as e:
+      logger.error(f"Error generating health dashboard: {e}")
+      return None
+
+  def plot_correlation_heatmap(
+    self,
+    correlation_data: dict[str, Any],
+    title: str = "健康指标相关性分析",
+    output_path: Path | None = None,
+  ) -> go.Figure | None:
+    """绘制健康指标相关性热力图
+
+    Args:
+        correlation_data: 相关性数据字典
+        title: 图表标题
+        output_path: 输出路径
+
+    Returns:
+        Plotly Figure 对象或 None
+    """
+    logger.info("Generating correlation heatmap chart")
+
+    try:
+      # 提取相关性矩阵
+      correlations = {}
+      for key, data in correlation_data.items():
+        if isinstance(data, dict) and "correlation" in data:
+          correlations[key] = data["correlation"]
+
+      if not correlations:
+        logger.warning("No correlation data available")
+        return None
+
+      # 创建相关性矩阵
+      metrics = list(correlations.keys())
+      matrix = np.eye(len(metrics))  # 对角线为1
+
+      # 填充相关性值
+      for i, metric1 in enumerate(metrics):
+        for j, metric2 in enumerate(metrics):
+          if i != j:
+            key = f"{metric1}_{metric2}"
+            rev_key = f"{metric2}_{metric1}"
+            if key in correlations:
+              matrix[i, j] = correlations[key]
+            elif rev_key in correlations:
+              matrix[i, j] = correlations[rev_key]
+
+      fig = go.Figure(
+        data=go.Heatmap(
+          z=matrix,
+          x=metrics,
+          y=metrics,
+          colorscale="RdBu",
+          zmid=0,
+          colorbar=dict(title="相关系数"),
+          hovertemplate="<b>%{x} vs %{y}</b><br>"
+          + "相关系数: %{z:.2f}<br>"
+          + "<extra></extra>",
+        )
+      )
+
+      fig.update_layout(
+        title=title,
+        width=self.width,
+        height=self.height,
+        template=PLOTLY_TEMPLATE,
+      )
+
+      if output_path:
+        self._save_plotly_figure(fig, output_path)
+
+      return fig
+
+    except Exception as e:
+      logger.error(f"Error generating correlation heatmap: {e}")
+      return None
+
+  def plot_trend_analysis(
+    self,
+    trend_data: dict[str, list[float]],
+    dates: list[str],
+    title: str = "健康趋势分析",
+    output_path: Path | None = None,
+  ) -> go.Figure | None:
+    """绘制健康趋势分析图
+
+    Args:
+        trend_data: 趋势数据字典
+        dates: 日期列表
+        title: 图表标题
+        output_path: 输出路径
+
+    Returns:
+        Plotly Figure 对象或 None
+    """
+    logger.info("Generating trend analysis chart")
+
+    try:
+      fig = go.Figure()
+
+      colors = [
+        HEALTH_COLORS["primary"],
+        HEALTH_COLORS["secondary"],
+        HEALTH_COLORS["success"],
+        HEALTH_COLORS["info"],
+        HEALTH_COLORS["warning"],
+      ]
+
+      for i, (metric_name, values) in enumerate(trend_data.items()):
+        color = colors[i % len(colors)]
+
+        fig.add_trace(
+          go.Scatter(
+            x=dates,
+            y=values,
+            mode="lines+markers",
+            name=metric_name,
+            line=dict(color=color, width=2),
+            marker=dict(size=6, color=color),
+          )
+        )
+
+      fig.update_layout(
+        title=title,
+        xaxis_title="日期",
+        yaxis_title="指标值",
+        width=self.width,
+        height=self.height,
+        template=PLOTLY_TEMPLATE,
+        hovermode="x unified",
+      )
+
+      if output_path:
+        self._save_plotly_figure(fig, output_path)
+
+      return fig
+
+    except Exception as e:
+      logger.error(f"Error generating trend analysis: {e}")
+      return None
+
+  def plot_activity_heatmap(
+    self,
+    activity_data: pd.DataFrame,
+    title: str = "活动热力图",
+    output_path: Path | None = None,
+  ) -> go.Figure | None:
+    """绘制活动模式热力图
+
+    Args:
+        activity_data: 活动数据 (columns: date, hour, activity_level)
+        title: 图表标题
+        output_path: 输出路径
+
+    Returns:
+        Plotly Figure 对象或 None
+    """
+    if activity_data.empty:
+      logger.warning("No activity data for heatmap")
+      return None
+
+    logger.info("Generating activity heatmap chart")
+
+    try:
+      # 准备热力图数据
+      activity_data = activity_data.copy()
+      activity_data["date"] = pd.to_datetime(activity_data["date"])
+      activity_data["weekday"] = activity_data["date"].dt.dayofweek
+      activity_data["week"] = activity_data["date"].dt.isocalendar().week
+
+      # 创建透视表: 星期几 x 小时
+      pivot = activity_data.pivot_table(
+        values="activity_level",
+        index="weekday",
+        columns="hour",
+        aggfunc="mean",
+      )
+
+      weekdays = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+      hours = [f"{h:02d}:00" for h in range(24)]
+
+      fig = go.Figure(
+        data=go.Heatmap(
+          z=pivot.values,
+          x=hours,
+          y=weekdays,
+          colorscale="Viridis",
+          colorbar=dict(title="活动水平"),
+          hovertemplate="<b>%{y} %{x}</b><br>"
+          + "活动水平: %{z:.2f}<br>"
+          + "<extra></extra>",
+        )
+      )
+
+      fig.update_layout(
+        title=title,
+        xaxis_title="小时",
+        yaxis_title="星期",
+        width=self.width,
+        height=self.height,
+        template=PLOTLY_TEMPLATE,
+      )
+
+      if output_path:
+        self._save_plotly_figure(fig, output_path)
+
+      return fig
+
+    except Exception as e:
+      logger.error(f"Error generating activity heatmap: {e}")
+      return None
+
+  def plot_circular_health_metrics(
+    self,
+    metrics: dict[str, float],
+    title: str = "健康指标环形图",
+    output_path: Path | None = None,
+  ) -> go.Figure | None:
+    """绘制环形健康指标图
+
+    Args:
+        metrics: 健康指标字典
+        title: 图表标题
+        output_path: 输出路径
+
+    Returns:
+        Plotly Figure 对象或 None
+    """
+    logger.info("Generating circular health metrics chart")
+
+    try:
+      if not metrics:
+        return None
+
+      # 创建环形条形图
+      categories = list(metrics.keys())
+      values = list(metrics.values())
+
+      fig = go.Figure()
+
+      # 背景圆环
+      fig.add_trace(
+        go.Barpolar(
+          r=[1] * len(categories),
+          theta=categories,
+          marker_color="lightgray",
+          opacity=0.3,
+          showlegend=False,
+        )
+      )
+
+      # 数据环形条
+      colors = [
+        HEALTH_COLORS["primary"],
+        HEALTH_COLORS["secondary"],
+        HEALTH_COLORS["success"],
+        HEALTH_COLORS["info"],
+        HEALTH_COLORS["warning"],
+        HEALTH_COLORS["danger"],
+      ]
+
+      fig.add_trace(
+        go.Barpolar(
+          r=values,
+          theta=categories,
+          marker_color=[
+            colors[i % len(colors)] for i in range(len(categories))
+          ],
+          name="健康指标",
+          hovertemplate="<b>%{theta}</b><br>"
+          + "值: %{r:.2f}<br>"
+          + "<extra></extra>",
+        )
+      )
+
+      fig.update_layout(
+        title=title,
+        polar=dict(
+          radialaxis=dict(range=[0, 1], showticklabels=False),
+          angularaxis=dict(showticklabels=True),
+        ),
+        width=self.width,
+        height=self.height,
+        template=PLOTLY_TEMPLATE,
+      )
+
+      if output_path:
+        self._save_plotly_figure(fig, output_path)
+
+      return fig
+
+    except Exception as e:
+      logger.error(f"Error generating circular health metrics: {e}")
+      return None
+
+  def plot_health_timeline(
+    self,
+    timeline_data: pd.DataFrame,
+    title: str = "健康时间线",
+    output_path: Path | None = None,
+  ) -> go.Figure | None:
+    """绘制健康时间线图
+
+    Args:
+        timeline_data: 时间线数据 (columns: date, metric, value, category)
+        title: 图表标题
+        output_path: 输出路径
+
+    Returns:
+        Plotly Figure 对象或 None
+    """
+    if timeline_data.empty:
+      logger.warning("No timeline data for health timeline")
+      return None
+
+    logger.info("Generating health timeline chart")
+
+    try:
+      fig = go.Figure()
+
+      # 按类别分组绘制
+      categories = timeline_data["category"].unique()
+      colors = [
+        HEALTH_COLORS["primary"],
+        HEALTH_COLORS["secondary"],
+        HEALTH_COLORS["success"],
+        HEALTH_COLORS["info"],
+        HEALTH_COLORS["warning"],
+      ]
+
+      for i, category in enumerate(categories):
+        cat_data = timeline_data[timeline_data["category"] == category]
+        color = colors[i % len(colors)]
+
+        fig.add_trace(
+          go.Scatter(
+            x=cat_data["date"],
+            y=cat_data["value"],
+            mode="lines+markers",
+            name=category,
+            line=dict(color=color, width=2),
+            marker=dict(size=6, color=color),
+            hovertemplate="<b>%{fullData.name}</b><br>"
+            + "日期: %{x}<br>"
+            + "值: %{y:.2f}<br>"
+            + "<extra></extra>",
+          )
+        )
+
+      fig.update_layout(
+        title=title,
+        xaxis_title="日期",
+        yaxis_title="指标值",
+        width=self.width,
+        height=self.height,
+        template=PLOTLY_TEMPLATE,
+        hovermode="x unified",
+      )
+
+      if output_path:
+        self._save_plotly_figure(fig, output_path)
+
+      return fig
+
+    except Exception as e:
+      logger.error(f"Error generating health timeline: {e}")
+      return None
+
+  def plot_risk_assessment(
+    self,
+    risk_factors: dict[str, float],
+    title: str = "健康风险评估",
+    output_path: Path | None = None,
+  ) -> go.Figure | None:
+    """绘制健康风险评估图
+
+    Args:
+        risk_factors: 风险因素字典
+        title: 图表标题
+        output_path: 输出路径
+
+    Returns:
+        Plotly Figure 对象或 None
+    """
+    logger.info("Generating risk assessment chart")
+
+    try:
+      if not risk_factors:
+        return None
+
+      # 创建瀑布图显示风险因素
+      factors = list(risk_factors.keys())
+      values = list(risk_factors.values())
+
+      fig = go.Figure()
+
+      # 绘制每个风险因素的条形
+      colors = []
+      for value in values:
+        if value > 0.7:
+          colors.append(HEALTH_COLORS["danger"])
+        elif value > 0.4:
+          colors.append(HEALTH_COLORS["warning"])
+        else:
+          colors.append(HEALTH_COLORS["success"])
+
+      fig.add_trace(
+        go.Bar(
+          x=factors,
+          y=values,
+          marker_color=colors,
+          name="风险水平",
+          hovertemplate="<b>%{x}</b><br>"
+          + "风险值: %{y:.2f}<br>"
+          + "<extra></extra>",
+        )
+      )
+
+      # 添加风险等级线
+      fig.add_hline(
+        y=0.7,
+        line_dash="dash",
+        line_color=HEALTH_COLORS["danger"],
+        annotation_text="高风险",
+        annotation_position="right",
+      )
+
+      fig.add_hline(
+        y=0.4,
+        line_dash="dash",
+        line_color=HEALTH_COLORS["warning"],
+        annotation_text="中等风险",
+        annotation_position="right",
+      )
+
+      fig.update_layout(
+        title=title,
+        xaxis_title="风险因素",
+        yaxis_title="风险水平 (0-1)",
+        width=self.width,
+        height=self.height,
+        template=PLOTLY_TEMPLATE,
+      )
+
+      if output_path:
+        self._save_plotly_figure(fig, output_path)
+
+      return fig
+
+    except Exception as e:
+      logger.error(f"Error generating risk assessment: {e}")
+      return None
+
+  def generate_comprehensive_report_charts(
+    self,
+    report: Any,  # ComprehensiveHealthReport
+    output_dir: Path,
+  ) -> dict[str, Path]:
+    """生成综合健康报告的所有图表
+
+    Args:
+        report: 综合健康分析报告
+        output_dir: 输出目录
+
+    Returns:
+        图表文件路径字典
+    """
+    logger.info("Generating comprehensive health report charts")
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    charts = {}
+
+    try:
+      # 健康仪表盘
+      if hasattr(report, "overall_wellness_score"):
+        dashboard_path = output_dir / "health_dashboard.html"
+        metrics = {}
+
+        # 收集各项指标
+        if hasattr(report, "sleep_quality") and report.sleep_quality:
+          metrics["睡眠质量"] = min(
+            1.0, report.sleep_quality.average_duration_hours / 8.0
+          )
+        if hasattr(report, "activity_patterns") and report.activity_patterns:
+          metrics["活动水平"] = min(
+            1.0, report.activity_patterns.daily_step_average / 10000
+          )
+        if hasattr(report, "metabolic_health") and report.metabolic_health:
+          metrics["代谢健康"] = report.metabolic_health.metabolic_health_score
+        if hasattr(report, "stress_resilience") and report.stress_resilience:
+          metrics["压力韧性"] = (
+            1.0 - report.stress_resilience.stress_accumulation_score
+          )
+
+        dashboard_fig = self.plot_health_dashboard(
+          report.overall_wellness_score,
+          metrics,
+          output_path=dashboard_path,
+        )
+        if dashboard_fig:
+          charts["dashboard"] = dashboard_path
+
+      # 相关性热力图
+      if hasattr(report, "health_correlations") and report.health_correlations:
+        correlation_path = output_dir / "correlation_heatmap.html"
+        correlation_fig = self.plot_correlation_heatmap(
+          report.health_correlations,
+          output_path=correlation_path,
+        )
+        if correlation_fig:
+          charts["correlation"] = correlation_path
+
+      # 健康时间线
+      # 这里需要准备时间线数据，暂时跳过
+
+      # 风险评估
+      if hasattr(report, "stress_resilience") and report.stress_resilience:
+        risk_path = output_dir / "risk_assessment.html"
+        risk_factors = {
+          "压力累积": report.stress_resilience.stress_accumulation_score,
+          "恢复能力": 1.0 - report.stress_resilience.recovery_capacity_score,
+        }
+
+        risk_fig = self.plot_risk_assessment(
+          risk_factors,
+          output_path=risk_path,
+        )
+        if risk_fig:
+          charts["risk_assessment"] = risk_path
+
+      logger.info(f"Generated {len(charts)} comprehensive report charts")
+
+    except Exception as e:
+      logger.error(f"Error generating comprehensive report charts: {e}")
 
     return charts
