@@ -65,9 +65,30 @@ def parse(xml_path: str, output: str | None, types: list[str], preview: bool):
   """Parse Apple Health export XML file.
 
   XML_PATH: Path to the export.xml file
+
+  Examples:
+      # Parse all records and save to default output directory
+      uv run python main.py parse export.xml --output ./parsed_data
+
+      # Parse only heart rate data with preview
+      uv run python main.py parse export.xml --types HeartRate --preview
+
+      # Parse specific record types
+      uv run python main.py parse export.xml --types HeartRate --types Sleep
   """
   try:
     xml_file = Path(xml_path)
+
+    # Validate input file
+    if not xml_file.exists():
+      console.print(f"[bold red]Error:[/bold red] File not found: {xml_file}")
+      console.print("[yellow]Tip:[/yellow] Check the file path and try again")
+      sys.exit(1)
+
+    if xml_file.stat().st_size == 0:
+      console.print(f"[bold red]Error:[/bold red] File is empty: {xml_file}")
+      sys.exit(1)
+
     output_dir = Path(output) if output else get_config().output_dir
 
     console.print(
@@ -75,28 +96,91 @@ def parse(xml_path: str, output: str | None, types: list[str], preview: bool):
     )
     console.print(f"[bold blue]Output directory:[/bold blue] {output_dir}")
 
-    # Get file info
-    file_info = get_export_file_info(xml_file)
-    if file_info:
-      console.print(
-        f"[green]File size:[/green] {file_info['file_size_mb']:.1f} MB"
-      )
-      console.print(
-        f"[green]Estimated records:[/green] {file_info['estimated_record_count']:,}"
-      )
+    # Get file info with better error handling
+    try:
+      file_info = get_export_file_info(xml_file)
+      if file_info:
+        console.print(
+          f"[green]File size:[/green] {file_info['file_size_mb']:.1f} MB"
+        )
+        console.print(
+          f"[green]Estimated records:[/green] {file_info['estimated_record_count']:,}"
+        )
+      else:
+        console.print(
+          "[yellow]Warning:[/yellow] Could not read file information"
+        )
+    except Exception as e:
+      console.print(f"[yellow]Warning:[/yellow] Could not analyze file: {e}")
+      console.print("[yellow]Continuing with parsing...[/yellow]")
 
     # Initialize parser
-    parser = StreamingXMLParser(xml_file)
+    try:
+      parser = StreamingXMLParser(xml_file)
+    except Exception as e:
+      console.print(
+        f"[bold red]Error:[/bold red] Failed to initialize parser: {e}"
+      )
+      console.print(
+        "[yellow]Tip:[/yellow] Check if the file is a valid XML file"
+      )
+      sys.exit(1)
 
-    # Parse records
+    # Parse records with progress tracking
     record_types = list(types) if types else None
     records = []
     stats = {}
 
-    with console.status("[bold green]Parsing records..."):
-      records_generator = parser.parse_records(record_types)
-      records = list(records_generator)
-      stats = parser.get_statistics()
+    try:
+      with console.status("[bold green]Parsing records...") as status:
+        import time
+
+        start_time = time.time()
+
+        records_generator = parser.parse_records(record_types)
+        records = list(records_generator)
+        stats = parser.get_statistics()
+
+        parsing_time = time.time() - start_time
+        status.update(
+          f"[bold green]Parsed {len(records):,} records in {parsing_time:.1f}s"
+        )
+
+    except Exception as e:
+      logger.error(f"Parsing failed: {e}")
+      console.print(f"[bold red]Error:[/bold red] Failed to parse records: {e}")
+
+      # Provide helpful error messages based on error type
+      error_str = str(e).lower()
+      if "memory" in error_str:
+        console.print(
+          "[yellow]Tip:[/yellow] Try processing a smaller file or increase system memory"
+        )
+      elif "permission" in error_str:
+        console.print("[yellow]Tip:[/yellow] Check file permissions")
+      elif "encoding" in error_str:
+        console.print("[yellow]Tip:[/yellow] Ensure the file is UTF-8 encoded")
+      else:
+        console.print(
+          "[yellow]Tip:[/yellow] Check the XML file format and try again"
+        )
+
+      sys.exit(1)
+
+    # Validate parsing results
+    if not records:
+      console.print(
+        "[yellow]Warning:[/yellow] No records were parsed from the file"
+      )
+      if record_types:
+        console.print(
+          f"[yellow]Tip:[/yellow] Check if record types {record_types} exist in the file"
+        )
+      else:
+        console.print(
+          "[yellow]Tip:[/yellow] Verify the file contains valid Apple Health data"
+        )
+      sys.exit(1)
 
     # Display results
     _display_parsing_results(stats)
@@ -107,13 +191,44 @@ def parse(xml_path: str, output: str | None, types: list[str], preview: bool):
 
     # Save results if output specified
     if output:
-      _save_parsed_data(records, stats, output_dir)
+      try:
+        _save_parsed_data(records, stats, output_dir)
+      except Exception as e:
+        logger.error(f"Failed to save data: {e}")
+        console.print(f"[bold red]Error:[/bold red] Failed to save data: {e}")
+        console.print(
+          f"[yellow]Tip:[/yellow] Check write permissions for directory: {output_dir}"
+        )
+        sys.exit(1)
 
-    console.print("[bold green]✓ Parsing completed successfully![/bold green]")
+    # Success message with summary
+    success_rate = stats.get("success_rate", 0)
+    if success_rate >= 0.95:
+      console.print(
+        "[bold green]✓ Parsing completed successfully![/bold green]"
+      )
+    elif success_rate >= 0.80:
+      console.print(
+        "[bold yellow]⚠ Parsing completed with minor issues[/bold yellow]"
+      )
+    else:
+      console.print(
+        "[bold yellow]⚠ Parsing completed but with significant data loss[/bold yellow]"
+      )
 
+    console.print(
+      f"[green]Processed {stats.get('processed_records', 0):,} records with {success_rate:.1%} success rate[/green]"
+    )
+
+  except KeyboardInterrupt:
+    console.print("\n[yellow]Operation cancelled by user[/yellow]")
+    sys.exit(1)
   except Exception as e:
-    logger.error(f"Parsing failed: {e}")
-    console.print(f"[bold red]Error:[/bold red] {e}")
+    logger.error(f"Unexpected error during parsing: {e}")
+    console.print(f"[bold red]Unexpected error:[/bold red] {e}")
+    console.print(
+      "[yellow]Tip:[/yellow] Please report this issue with the error details"
+    )
     sys.exit(1)
 
 
@@ -704,10 +819,99 @@ def _display_records_preview(records: list):
 
 def _save_parsed_data(records: list, stats: dict, output_dir: Path):
   """Save parsed data to output directory."""
+  from src.processors.exporter import DataExporter
+
   output_dir.mkdir(parents=True, exist_ok=True)
 
-  # TODO: Implement data saving
-  console.print(f"[green]Data would be saved to: {output_dir}[/green]")
+  if not records:
+    console.print("[yellow]No records to save[/yellow]")
+    return
+
+  console.print(
+    f"[bold blue]Saving {len(records)} records to: {output_dir}[/bold blue]"
+  )
+
+  # Group records by type for organized saving
+  records_by_type = {}
+  for record in records:
+    record_type = getattr(record, "type", "Unknown")
+    if record_type not in records_by_type:
+      records_by_type[record_type] = []
+    records_by_type[record_type].append(record)
+
+  # Create exporter
+  exporter = DataExporter(output_dir)
+
+  total_saved = 0
+  total_files = 0
+
+  # Save each record type to separate files
+  for record_type, type_records in records_by_type.items():
+    if not type_records:
+      continue
+
+    # Clean record type name for filename
+    clean_type = record_type.replace("HKQuantityTypeIdentifier", "").replace(
+      "HKCategoryTypeIdentifier", ""
+    )
+
+    # Save to both CSV and JSON formats
+    csv_path = output_dir / f"{clean_type}.csv"
+    json_path = output_dir / f"{clean_type}.json"
+
+    csv_count = exporter.export_to_csv(type_records, csv_path)
+    json_count = exporter.export_to_json(type_records, json_path)
+
+    if csv_count > 0:
+      total_saved += csv_count
+      total_files += 1
+      csv_size = csv_path.stat().st_size
+      console.print(
+        f"  [green]✓ {clean_type}.csv:[/green] {csv_count:,} records ({csv_size:,} bytes)"
+      )
+
+    if json_count > 0:
+      total_files += 1
+      json_size = json_path.stat().st_size
+      console.print(
+        f"  [green]✓ {clean_type}.json:[/green] {json_count:,} records ({json_size:,} bytes)"
+      )
+
+  # Save parsing statistics
+  stats_file = output_dir / "parsing_stats.json"
+  with open(stats_file, "w", encoding="utf-8") as f:
+    import json
+
+    json.dump(stats, f, indent=2, ensure_ascii=False, default=str)
+
+  console.print("  [green]✓ parsing_stats.json:[/green] parsing statistics")
+
+  # Create a simple manifest
+  manifest_file = output_dir / "data_manifest.txt"
+  with open(manifest_file, "w", encoding="utf-8") as f:
+    f.write("Apple Health Data Export Manifest\n")
+    f.write("=" * 40 + "\n\n")
+    f.write(f"Export Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+    f.write(f"Total Records: {total_saved:,}\n")
+    f.write(f"Total Files: {total_files + 1}\n")  # +1 for stats file
+    f.write(f"Record Types: {len(records_by_type)}\n\n")
+
+    f.write("Files Generated:\n")
+    f.write("-" * 20 + "\n")
+    for record_type, type_records in records_by_type.items():
+      clean_type = record_type.replace("HKQuantityTypeIdentifier", "").replace(
+        "HKCategoryTypeIdentifier", ""
+      )
+      f.write(f"• {clean_type}.csv ({len(type_records)} records)\n")
+      f.write(f"• {clean_type}.json ({len(type_records)} records)\n")
+
+    f.write("• parsing_stats.json (statistics)\n")
+    f.write("• data_manifest.txt (this file)\n")
+
+  console.print("  [green]✓ data_manifest.txt:[/green] export manifest")
+  console.print(
+    f"[bold green]✓ Successfully saved {total_saved:,} records to {total_files + 1} files[/bold green]"
+  )
 
 
 def _display_heart_rate_results(report):
