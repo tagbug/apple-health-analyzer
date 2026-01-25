@@ -831,6 +831,49 @@ def _save_parsed_data(records: list, stats: dict, output_dir: Path):
     f"[bold blue]Saving {len(records)} records to: {output_dir}[/bold blue]"
   )
 
+  # Validate data quality before saving
+  console.print("[bold]Validating data quality...[/bold]")
+  try:
+    from src.processors.validator import validate_health_data
+
+    validation_result = validate_health_data(records)
+    validation_summary = validation_result.get_summary()
+
+    console.print("[green]✓ Data validation completed[/green]")
+    console.print(f"  Quality Score: {validation_summary['quality_score']:.1%}")
+    console.print(f"  Warnings: {validation_summary['total_warnings']}")
+    console.print(f"  Outliers: {validation_summary['outliers_count']}")
+
+    # Save validation report
+    validation_file = output_dir / "data_validation_report.json"
+    with open(validation_file, "w", encoding="utf-8") as f:
+      import json
+
+      json.dump(
+        {
+          "validation_summary": validation_summary,
+          "errors": validation_result.errors[:10],  # First 10 errors
+          "warnings": validation_result.warnings[:10],  # First 10 warnings
+          "outliers": validation_result.outliers_detected[
+            :10
+          ],  # First 10 outliers
+          "issues_by_type": validation_result.issues_by_type,
+          "consistency_checks": validation_result.consistency_checks,
+        },
+        f,
+        indent=2,
+        ensure_ascii=False,
+        default=str,
+      )
+
+    console.print(
+      f"[green]✓ Validation report saved to: {validation_file}[/green]"
+    )
+
+  except Exception as e:
+    logger.warning(f"Data validation failed: {e}")
+    console.print(f"[yellow]⚠ Data validation skipped: {e}[/yellow]")
+
   # Group records by type for organized saving
   records_by_type = {}
   for record in records:
