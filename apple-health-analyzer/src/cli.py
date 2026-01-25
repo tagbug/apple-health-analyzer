@@ -12,6 +12,9 @@ import click
 from rich.console import Console
 from rich.table import Table
 
+# 注册可视化命令
+from src.cli_visualize import report as report_command
+from src.cli_visualize import visualize as visualize_command
 from src.config import get_config, reload_config
 from src.core.exceptions import HealthAnalyzerError
 from src.core.xml_parser import StreamingXMLParser, get_export_file_info
@@ -19,6 +22,8 @@ from src.utils.logger import get_logger
 
 console = Console()
 logger = get_logger(__name__)
+
+# 导入可视化命令
 
 
 @click.group()
@@ -361,6 +366,10 @@ def export(
     logger.error(f"Export failed: {e}")
     console.print(f"[bold red]Error:[/bold red] {e}")
     sys.exit(1)
+
+
+cli.add_command(report_command, name="report")
+cli.add_command(visualize_command, name="visualize")
 
 
 @cli.command()

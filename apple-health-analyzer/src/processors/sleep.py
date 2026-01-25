@@ -306,12 +306,76 @@ class SleepAnalyzer:
     # 按时间排序
     sleep_records.sort(key=lambda r: r.start_date)
 
-    # 确定睡眠会话的时间范围
-    session_start = min(r.start_date for r in sleep_records)
-    session_end = max(r.end_date for r in sleep_records)
+    # 识别独立的睡眠会话
+    # Apple Health通常将连续的睡眠记录分组为会话
+    # 我们需要找到主要的睡眠会话（通常是最长的连续睡眠期）
+
+    # 首先，识别"InBed"记录，这些定义了睡眠会话的边界
+    in_bed_records = [
+      r
+      for r in sleep_records
+      if hasattr(r, "value")
+      and isinstance(r, CategoryRecord)
+      and str(r.value).endswith("InBed")
+    ]
+
+    if in_bed_records:
+      # 如果有InBed记录，使用它们来定义会话边界
+      # 通常一个睡眠会话对应一个InBed记录
+      main_bed_record = max(
+        in_bed_records,
+        key=lambda r: (r.end_date - r.start_date).total_seconds(),
+      )
+      session_start = main_bed_record.start_date
+      # 使用所有记录的最大结束时间作为会话结束
+      session_end = max(r.end_date for r in sleep_records)
+      session_records = [
+        r
+        for r in sleep_records
+        if r.start_date >= session_start and r.end_date <= session_end
+      ]
+    else:
+      # 如果没有明确的InBed记录，尝试通过时间间隔识别会话
+      # 将间隔超过2小时的记录分为不同会话
+      sessions = []
+      current_session = [sleep_records[0]]
+
+      for i in range(1, len(sleep_records)):
+        prev_end = sleep_records[i - 1].end_date
+        curr_start = sleep_records[i].start_date
+        gap = (curr_start - prev_end).total_seconds() / 3600  # 小时
+
+        if gap > 2:  # 超过2小时间隔，认为是不同会话
+          sessions.append(current_session)
+          current_session = [sleep_records[i]]
+        else:
+          current_session.append(sleep_records[i])
+
+      sessions.append(current_session)
+
+      # 选择最长的会话（通常是主要的夜间睡眠）
+      if sessions:
+        main_session = max(
+          sessions,
+          key=lambda s: sum(
+            (r.end_date - r.start_date).total_seconds() for r in s
+          ),
+        )
+        session_records = main_session
+        session_start = min(r.start_date for r in session_records)
+        session_end = max(r.end_date for r in session_records)
+      else:
+        session_records = sleep_records
+        session_start = min(r.start_date for r in sleep_records)
+        session_end = max(r.end_date for r in sleep_records)
 
     # 计算总时长（在床时间）
     total_duration = (session_end - session_start).total_seconds() / 60
+
+    # 调试输出
+    logger.debug(
+      f"Session time range: {session_start} to {session_end}, total_duration={total_duration:.1f}min, records={len(session_records)}"
+    )
 
     # 解析睡眠阶段
     stages = []
@@ -322,10 +386,66 @@ class SleepAnalyzer:
     rem_sleep = 0
     light_sleep = 0
 
+    # 调试：记录前几个记录的详细信息
+    logger.debug(
+      f"Debugging sleep records for {date} (total: {len(sleep_records)}):"
+    )
+    for i, record in enumerate(sleep_records[:3]):  # 只显示前3个
+      logger.debug(
+        f"  Record {i}: type={record.type}, value={getattr(record, 'value', 'N/A')}, "
+        f"start={record.start_date}, end={record.end_date}"
+      )
+
     for record in sleep_records:
       if hasattr(record, "value") and isinstance(record, CategoryRecord):
         stage_type = record.value
         duration = (record.end_date - record.start_date).total_seconds() / 60
+
+        # 调试：记录stage_type的类型和值
+        if len(sleep_records) <= 10:
+          logger.debug(
+            f"  Processing stage: raw_value={stage_type} (type: {type(stage_type)})"
+          )
+
+        # Apple Health的睡眠阶段是字符串格式，需要转换
+        # 从调试日志看，实际格式是：
+        # HKCategoryValueSleepAnalysisAsleepCore -> Core
+        # HKCategoryValueSleepAnalysisAsleepDeep -> Deep
+        # HKCategoryValueSleepAnalysisAwake -> Awake
+        # HKCategoryValueSleepAnalysisAsleepREM -> REM
+        # HKCategoryValueSleepAnalysisAsleepUnspecified -> Asleep (或其他)
+        if isinstance(stage_type, str):
+          if stage_type == "HKCategoryValueSleepAnalysisInBed":
+            stage_type = "InBed"
+          elif stage_type == "HKCategoryValueSleepAnalysisAwake":
+            stage_type = "Awake"
+          elif stage_type == "HKCategoryValueSleepAnalysisAsleepCore":
+            stage_type = "Core"
+          elif stage_type == "HKCategoryValueSleepAnalysisAsleepDeep":
+            stage_type = "Deep"
+          elif stage_type == "HKCategoryValueSleepAnalysisAsleepREM":
+            stage_type = "REM"
+          elif stage_type == "HKCategoryValueSleepAnalysisAsleepUnspecified":
+            stage_type = "Asleep"  # 归类为一般睡眠
+          # 如果是其他未知格式，尝试提取最后一部分
+          elif stage_type.startswith("HKCategoryValueSleepAnalysisAsleep"):
+            # 提取"Asleep"后的部分，如"AsleepLight" -> "Light"
+            suffix = stage_type.replace(
+              "HKCategoryValueSleepAnalysisAsleep", ""
+            )
+            if suffix:
+              stage_type = suffix
+            else:
+              stage_type = "Asleep"
+          elif stage_type.startswith("HKCategoryValueSleepAnalysis"):
+            stage_type = stage_type.replace("HKCategoryValueSleepAnalysis", "")
+          # 保持其他字符串不变
+        else:
+          # 其他类型，转换为字符串
+          stage_type = str(stage_type)
+
+        if len(sleep_records) <= 10:
+          logger.debug(f"  Mapped stage: {stage_type}")
 
         # 类型检查：确保stage_type是有效的睡眠阶段
         if stage_type in ["InBed", "Asleep", "Awake", "Core", "Deep", "REM"]:
@@ -338,7 +458,11 @@ class SleepAnalyzer:
             )
           )
 
-        if stage_type in ["Asleep", "Core", "Deep", "REM"]:
+        # 修正睡眠时长计算逻辑：
+        # - "Asleep" 是通用睡眠阶段，可能与具体阶段重叠
+        # - "Core"、"Deep"、"REM" 是具体睡眠阶段
+        # - 优先使用具体阶段，如果没有具体阶段则使用"Asleep"
+        if stage_type in ["Core", "Deep", "REM"]:
           sleep_duration += duration
           if stage_type == "Core":
             core_sleep += duration
@@ -346,10 +470,23 @@ class SleepAnalyzer:
             deep_sleep += duration
           elif stage_type == "REM":
             rem_sleep += duration
-          else:  # Asleep (通常是浅睡眠)
-            light_sleep += duration
+        elif stage_type == "Asleep":
+          # 只有当没有具体睡眠阶段时，才使用"Asleep"作为浅睡眠
+          # 这里简化处理：如果"Asleep"与其他具体阶段不重叠，则计入浅睡眠
+          light_sleep += duration
+          sleep_duration += duration
         elif stage_type == "Awake":
           awake_duration += duration
+        elif stage_type == "InBed":
+          # InBed是总的在床时间，不计入睡眠时长，但用于计算效率
+          pass
+
+    # 调试输出
+    if len(sleep_records) <= 10:
+      logger.debug(
+        f"Session summary for {date}: total_duration={total_duration:.1f}min, "
+        f"sleep_duration={sleep_duration:.1f}min, stages_count={len(stages)}"
+      )
 
     # 计算睡眠效率
     efficiency = sleep_duration / total_duration if total_duration > 0 else 0
@@ -421,15 +558,31 @@ class SleepAnalyzer:
     average_efficiency = sum(efficiencies) / len(efficiencies)
     average_latency = sum(latencies) / len(latencies)
 
-    # 规律性评分（基于标准差）
-    duration_std = pd.Series(durations).std()
-    efficiency_std = pd.Series(efficiencies).std()
-    latency_std = pd.Series(latencies).std()
+    # 规律性评分（基于变异系数CV = std/mean，越小越一致）
+    duration_series = pd.Series(durations)
+    efficiency_series = pd.Series(efficiencies)
+    latency_series = pd.Series(latencies)
 
-    # 标准化并计算一致性评分
-    duration_consistency = max(0, 1 - duration_std / 120)  # 2小时标准差
-    efficiency_consistency = max(0, 1 - efficiency_std / 0.2)  # 0.2效率标准差
-    latency_consistency = max(0, 1 - latency_std / 30)  # 30分钟标准差
+    duration_cv = (
+      duration_series.std() / duration_series.mean()
+      if duration_series.mean() > 0
+      else float("inf")
+    )
+    efficiency_cv = (
+      efficiency_series.std() / efficiency_series.mean()
+      if efficiency_series.mean() > 0
+      else float("inf")
+    )
+    latency_cv = (
+      latency_series.std() / latency_series.mean()
+      if latency_series.mean() > 0
+      else float("inf")
+    )
+
+    # CV在0-1之间认为是好的，超过1则认为变异过大
+    duration_consistency = max(0, min(1, 1 - duration_cv))
+    efficiency_consistency = max(0, min(1, 1 - efficiency_cv))
+    latency_consistency = max(0, min(1, 1 - latency_cv))
 
     consistency_score = (
       duration_consistency + efficiency_consistency + latency_consistency

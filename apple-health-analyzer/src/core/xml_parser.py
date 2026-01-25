@@ -260,9 +260,9 @@ class StreamingXMLParser:
           }
         )
         # Log warnings
-        self.logger.warning(
-          f"Record parsed with warnings: {elem.get('type', 'Unknown')} - {', '.join(warnings)}"
-        )
+        # self.logger.warning(
+        #   f"Record parsed with warnings: {elem.get('type', 'Unknown')} - {', '.join(warnings)}"
+        # )
 
       return record
     except Exception as e:
