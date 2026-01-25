@@ -1,4 +1,4 @@
-"""报告生成模块 - 生成完整的健康分析报告"""
+"""Report generation module - generates comprehensive health analysis reports"""
 
 from datetime import datetime
 from pathlib import Path
@@ -13,17 +13,17 @@ logger = get_logger(__name__)
 
 
 class ReportGenerator:
-  """健康报告生成器
+  """Health report generator
 
-  生成包含图表、统计分析和健康洞察的完整报告。
-  支持HTML、Markdown等多种格式。
+  Generates comprehensive reports including charts, statistical analysis, and health insights.
+  Supports multiple formats including HTML and Markdown.
   """
 
   def __init__(self, output_dir: Path | None = None):
-    """初始化报告生成器
+    """Initialize report generator
 
     Args:
-        output_dir: 报告输出目录
+        output_dir: Report output directory
     """
     self.output_dir = Path(output_dir) if output_dir else Path("./reports")
     self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -43,17 +43,17 @@ class ReportGenerator:
     heart_rate_data: list | None = None,
     sleep_data: list | None = None,
   ) -> Path:
-    """生成HTML格式报告
+    """Generate HTML format report
 
     Args:
-        title: 报告标题
-        heart_rate_report: 心率分析报告
-        sleep_report: 睡眠分析报告
-        highlights: 健康洞察
-        include_charts: 是否包含图表
+        title: Report title
+        heart_rate_report: Heart rate analysis report
+        sleep_report: Sleep analysis report
+        highlights: Health insights
+        include_charts: Whether to include charts
 
     Returns:
-        报告文件路径
+        Report file path
     """
     logger.info("Generating HTML report")
 

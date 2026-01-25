@@ -182,7 +182,7 @@ class TestStreamingXMLParser:
       parser = StreamingXMLParser(temp_path)
 
       # Should raise an exception for malformed XML
-      with pytest.raises(Exception):
+      with pytest.raises((Exception, ValueError, OSError)):
         list(parser.parse_records())
     finally:
       temp_path.unlink()

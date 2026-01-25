@@ -1,4 +1,4 @@
-"""可视化和报告生成CLI命令"""
+"""Visualization and report generation CLI commands."""
 
 import sys
 from datetime import datetime
@@ -22,21 +22,23 @@ logger = get_logger(__name__)
 
 @click.command()
 @click.argument("xml_path", type=click.Path(exists=True))
-@click.option("--output", "-o", type=click.Path(), help="输出目录")
+@click.option("--output", "-o", type=click.Path(), help="Output directory")
 @click.option(
   "--format",
   "-f",
   type=click.Choice(["html", "markdown", "both"]),
   default="html",
-  help="报告格式",
+  help="Report format",
 )
-@click.option("--age", type=int, help="用户年龄（用于心肺适能分析）")
+@click.option("--age", type=int, help="User age (for cardio fitness analysis)")
 @click.option(
   "--gender",
   type=click.Choice(["male", "female"]),
-  help="性别（用于心肺适能分析）",
+  help="Gender (for cardio fitness analysis)",
 )
-@click.option("--no-charts", is_flag=True, help="不包含图表（仅生成文本报告）")
+@click.option(
+  "--no-charts", is_flag=True, help="Exclude charts (text report only)"
+)
 def report(
   xml_path: str,
   output: str | None,
@@ -45,34 +47,36 @@ def report(
   gender: str | None,
   no_charts: bool,
 ):
-  """生成完整的健康分析报告（含图表和洞察）
+  """Generate comprehensive health analysis report (with charts and insights)
 
-  结合数据分析和可视化，生成包含完整分析结果、图表和健康洞察的报告。
+  Combines data analysis and visualization to generate reports with complete analysis results, charts, and health insights.
 
-  示例:
-      # 生成HTML报告
+  Examples:
+      # Generate HTML report
       health-analyzer report export.xml --age 30 --gender male
 
-      # 生成Markdown报告
+      # Generate Markdown report
       health-analyzer report export.xml --format markdown
 
-      # 生成HTML和Markdown两种格式
+      # Generate both HTML and Markdown formats
       health-analyzer report export.xml --format both --age 30 --gender male
   """
   try:
     xml_file = Path(xml_path)
     output_dir = Path(output) if output else get_config().output_dir / "reports"
 
-    console.print(f"[bold blue]生成健康报告:[/bold blue] {xml_file}")
-    console.print(f"[bold blue]输出目录:[/bold blue] {output_dir}")
-    console.print(f"[bold blue]报告格式:[/bold blue] {format}")
+    console.print(
+      f"[bold blue]Generating health report:[/bold blue] {xml_file}"
+    )
+    console.print(f"[bold blue]Output directory:[/bold blue] {output_dir}")
+    console.print(f"[bold blue]Report format:[/bold blue] {format}")
 
-    # Step 1: 解析数据
-    console.print("\n[bold]Step 1/4: 解析健康数据...[/bold]")
-    with console.status("[bold green]解析记录..."):
+    # Step 1: Parse data
+    console.print("\n[bold]Step 1/4: Parsing health data...[/bold]")
+    with console.status("[bold green]Parsing records..."):
       parser = StreamingXMLParser(xml_file)
 
-      # 解析心率数据
+      # Parse heart rate data
       hr_types = [
         "HKQuantityTypeIdentifierHeartRate",
         "HKQuantityTypeIdentifierRestingHeartRate",
@@ -81,7 +85,7 @@ def report(
       ]
       all_hr_records = list(parser.parse_records(record_types=hr_types))
 
-      # 分类心率记录
+      # Categorize heart rate records
       hr_records = []
       resting_hr_records = []
       hrv_records = []
@@ -98,7 +102,7 @@ def report(
         elif record_type == "HKQuantityTypeIdentifierVO2Max":
           vo2_max_records.append(record)
 
-      # 解析睡眠数据
+      # Parse sleep data
       parser2 = StreamingXMLParser(xml_file)
       sleep_records = list(
         parser2.parse_records(
@@ -107,88 +111,90 @@ def report(
       )
 
     console.print(
-      f"[green]✓ 解析完成: {len(hr_records)} 心率记录, {len(sleep_records)} 睡眠记录[/green]"
+      f"[green]✓ Parsing completed: {len(hr_records)} heart rate records, {len(sleep_records)} sleep records[/green]"
     )
 
-    # Step 2: 分析数据
-    console.print("\n[bold]Step 2/4: 分析健康数据...[/bold]")
+    # Step 2: Analyze data
+    console.print("\n[bold]Step 2/4: Analyzing health data...[/bold]")
 
-    # 心率分析
+    # Heart rate analysis
     heart_rate_analyzer = HeartRateAnalyzer(age=age, gender=gender)  # type: ignore
-    with console.status("[bold green]分析心率数据..."):
+    with console.status("[bold green]Analyzing heart rate data..."):
       heart_rate_report = heart_rate_analyzer.analyze_comprehensive(
         heart_rate_records=hr_records,
         resting_hr_records=resting_hr_records,
         hrv_records=hrv_records,
         vo2_max_records=vo2_max_records,
       )
-    console.print("[green]✓ 心率分析完成[/green]")
+    console.print("[green]✓ Heart rate analysis completed[/green]")
 
-    # 睡眠分析
+    # Sleep analysis
     sleep_analyzer = SleepAnalyzer()
     sleep_report = None
     if sleep_records:
-      with console.status("[bold green]分析睡眠数据..."):
+      with console.status("[bold green]Analyzing sleep data..."):
         sleep_report = sleep_analyzer.analyze_comprehensive(sleep_records)  # type: ignore
-      console.print("[green]✓ 睡眠分析完成[/green]")
+      console.print("[green]✓ Sleep analysis completed[/green]")
 
-    # Step 3: 生成Highlights
-    console.print("\n[bold]Step 3/4: 生成健康洞察...[/bold]")
+    # Step 3: Generate highlights
+    console.print("\n[bold]Step 3/4: Generating health insights...[/bold]")
     highlights_generator = HighlightsGenerator()
-    with console.status("[bold green]生成洞察和建议..."):
+    with console.status(
+      "[bold green]Generating insights and recommendations..."
+    ):
       highlights = highlights_generator.generate_comprehensive_highlights(
         heart_rate_report=heart_rate_report,
         sleep_report=sleep_report,
       )
     console.print(
-      f"[green]✓ 生成 {len(highlights.insights)} 条洞察和 {len(highlights.recommendations)} 条建议[/green]"
+      f"[green]✓ Generated {len(highlights.insights)} insights and {len(highlights.recommendations)} recommendations[/green]"
     )
 
-    # Step 4: 生成报告
-    console.print("\n[bold]Step 4/4: 生成报告文件...[/bold]")
+    # Step 4: Generate reports
+    console.print("\n[bold]Step 4/4: Generating report files...[/bold]")
     report_generator = ReportGenerator(output_dir)
 
     report_files = []
 
     if format in ["html", "both"]:
-      with console.status("[bold green]生成HTML报告..."):
+      with console.status("[bold green]Generating HTML report..."):
         html_file = report_generator.generate_html_report(
-          title="健康分析报告",
+          title="Health Analysis Report",
           heart_rate_report=heart_rate_report,
           sleep_report=sleep_report,
           highlights=highlights,
           include_charts=not no_charts,
         )
         report_files.append(html_file)
-      console.print(f"[green]✓ HTML报告: {html_file}[/green]")
+      console.print(f"[green]✓ HTML report: {html_file}[/green]")
 
     if format in ["markdown", "both"]:
-      with console.status("[bold green]生成Markdown报告..."):
+      with console.status("[bold green]Generating Markdown report..."):
         md_file = report_generator.generate_markdown_report(
-          title="健康分析报告",
+          title="Health Analysis Report",
           heart_rate_report=heart_rate_report,
           sleep_report=sleep_report,
           highlights=highlights,
         )
         report_files.append(md_file)
-      console.print(f"[green]✓ Markdown报告: {md_file}[/green]")
+      console.print(f"[green]✓ Markdown report: {md_file}[/green]")
 
-    # 总结
-    console.print("\n[bold green]✅ 报告生成成功！[/bold green]")
-    console.print("\n[bold]生成的文件:[/bold]")
+    # Summary
+    console.print("\n[bold green]✅ Report generation successful![/bold green]")
+    console.print("\n[bold]Generated files:[/bold]")
     for file_path in report_files:
       size_mb = file_path.stat().st_size / (1024 * 1024)
       console.print(f"  • {file_path.name} ({size_mb:.2f} MB)")
 
   except Exception as e:
-    logger.error(f"报告生成失败: {e}")
-    console.print(f"[bold red]错误:[/bold red] {e}")
+    logger.error(f"Report generation failed: {e}")
+    console.print(f"[bold red]Error:[/bold red] {e}")
     sys.exit(1)
 
 
 @click.command()
 @click.argument("xml_path", type=click.Path(exists=True))
-@click.option("--output", "-o", type=click.Path(), help="输出目录")
+@click.option("--output", "-o", type=click.Path(), help="Output directory")
 @click.option(
   "--charts",
   "-c",
@@ -209,14 +215,16 @@ def report(
       "all",
     ]
   ),
-  help="要生成的图表类型（可多选，默认all）",
+  help="Chart types to generate (multiple selection allowed, default: all)",
 )
 @click.option(
   "--interactive/--static",
   default=True,
-  help="交互式图表（HTML）或静态图表（PNG）",
+  help="Interactive charts (HTML) or static charts (PNG)",
 )
-@click.option("--age", type=int, help="用户年龄（用于心率区间计算）")
+@click.option(
+  "--age", type=int, help="User age (for heart rate zone calculation)"
+)
 def visualize(
   xml_path: str,
   output: str | None,
@@ -224,18 +232,18 @@ def visualize(
   interactive: bool,
   age: int | None,
 ):
-  """生成健康数据可视化图表
+  """Generate health data visualization charts
 
-  支持生成多种心率和睡眠相关的可视化图表。
+  Supports generating various heart rate and sleep-related visualization charts.
 
-  示例:
-      # 生成所有图表
+  Examples:
+      # Generate all charts
       health-analyzer visualize export.xml
 
-      # 生成特定图表
+      # Generate specific charts
       health-analyzer visualize export.xml -c heart_rate_timeseries -c sleep_quality_trend
 
-      # 生成静态PNG图表
+      # Generate static PNG charts
       health-analyzer visualize export.xml --static
   """
   try:
@@ -243,10 +251,12 @@ def visualize(
     output_dir = Path(output) if output else get_config().output_dir / "charts"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    console.print(f"[bold blue]生成可视化图表:[/bold blue] {xml_file}")
-    console.print(f"[bold blue]输出目录:[/bold blue] {output_dir}")
+    console.print(
+      f"[bold blue]Generating visualization charts:[/bold blue] {xml_file}"
+    )
+    console.print(f"[bold blue]Output directory:[/bold blue] {output_dir}")
 
-    # 确定要生成的图表
+    # Determine charts to generate
     if not charts or "all" in charts:
       selected_charts = [
         "heart_rate_timeseries",
@@ -260,14 +270,14 @@ def visualize(
       selected_charts = list(charts)
 
     console.print(
-      f"[bold blue]要生成的图表:[/bold blue] {len(selected_charts)} 个"
+      f"[bold blue]Charts to generate:[/bold blue] {len(selected_charts)} charts"
     )
 
-    # 解析数据
-    console.print("\n[bold]解析数据...[/bold]")
+    # Parse data
+    console.print("\n[bold]Parsing data...[/bold]")
     parser = StreamingXMLParser(xml_file)
 
-    # 确定需要哪些数据类型
+    # Determine required data types
     need_hr = any(
       c.startswith("heart_rate")
       or c.startswith("resting")
@@ -282,7 +292,7 @@ def visualize(
     sleep_data = {}
 
     if need_hr:
-      with console.status("[bold green]解析心率数据..."):
+      with console.status("[bold green]Parsing heart rate data..."):
         hr_types = [
           "HKQuantityTypeIdentifierHeartRate",
           "HKQuantityTypeIdentifierRestingHeartRate",
@@ -290,7 +300,7 @@ def visualize(
         ]
         records = list(parser.parse_records(record_types=hr_types))
 
-        # 分类
+        # Categorize
         for record in records:
           record_type = getattr(record, "type", "")
           if record_type == "HKQuantityTypeIdentifierHeartRate":
@@ -302,10 +312,10 @@ def visualize(
           ):
             hr_data.setdefault("hrv", []).append(record)
 
-      console.print("[green]✓ 解析心率数据完成[/green]")
+      console.print("[green]✓ Heart rate data parsing completed[/green]")
 
     if need_sleep:
-      with console.status("[bold green]解析睡眠数据..."):
+      with console.status("[bold green]Parsing sleep data..."):
         parser2 = StreamingXMLParser(xml_file)
         sleep_records = list(
           parser2.parse_records(
@@ -313,26 +323,27 @@ def visualize(
           )
         )
 
-        # 解析睡眠会话
+        # Parse sleep sessions
         sleep_analyzer = SleepAnalyzer()
         sleep_sessions = sleep_analyzer._parse_sleep_sessions(sleep_records)  # type: ignore
 
         sleep_data["sleep_records"] = sleep_records
         sleep_data["sleep_sessions"] = sleep_sessions
-      console.print("[green]✓ 解析睡眠数据完成[/green]")
+      console.print("[green]✓ Sleep data parsing completed[/green]")
 
-    # 生成图表
-    console.print("\n[bold]生成图表...[/bold]")
+    # Generate charts
+    console.print("\n[bold]Generating charts...[/bold]")
     chart_generator = ChartGenerator()
     generated_files = []
 
-    # 导入数据转换器
+    # Import data converter
     from src.visualization.data_converter import DataConverter
 
-    # 为每种图表类型生成文件
+    # Generate files for each chart type
+    # Algorithm: Iterate through chart types, dynamically dispatch to appropriate generation method
     for chart_type in selected_charts:
       try:
-        console.print(f"[dim]生成 {chart_type}...[/dim]")
+        console.print(f"[dim]Generating {chart_type}...[/dim]")
 
         if chart_type == "heart_rate_timeseries":
           if "heart_rate" in hr_data and hr_data["heart_rate"]:
@@ -703,23 +714,25 @@ def visualize(
               console.print(f"[green]✓ 生成: {chart_type}[/green]")
 
         else:
-          console.print(f"[yellow]⚠ 暂不支持图表类型: {chart_type}[/yellow]")
+          console.print(
+            f"[yellow]⚠ Chart type not supported: {chart_type}[/yellow]"
+          )
 
       except Exception as e:
-        console.print(f"[red]✗ 生成失败 {chart_type}: {e}[/red]")
+        console.print(f"[red]✗ Failed to generate {chart_type}: {e}[/red]")
         logger.error(f"Failed to generate chart {chart_type}: {e}")
 
-    # 生成摘要信息
+    # Generate summary information
     if generated_files:
-      # 创建图表索引文件
-      index_content = f"""# 健康数据可视化图表
+      # Create chart index file
+      index_content = f"""# Health Data Visualization Charts
 
-生成时间: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
-数据来源: {xml_file.name}
-图表数量: {len(generated_files)}
-输出格式: {"交互式HTML" if interactive else "静态PNG"}
+Generation time: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+Data source: {xml_file.name}
+Number of charts: {len(generated_files)}
+Output format: {"Interactive HTML" if interactive else "Static PNG"}
 
-## 生成的图表
+## Generated Charts
 
 """
 
@@ -730,21 +743,23 @@ def visualize(
       index_file = output_dir / "index.md"
       index_file.write_text(index_content, encoding="utf-8")
 
-      console.print("\n[bold green]✅ 图表生成完成！[/bold green]")
-      console.print(f"[bold]生成文件数:[/bold] {len(generated_files)}")
-      console.print(f"[bold]输出目录:[/bold] {output_dir}")
-      console.print(f"[bold]图表索引:[/bold] {index_file}")
+      console.print("\n[bold green]✅ Chart generation completed![/bold green]")
+      console.print(f"[bold]Files generated:[/bold] {len(generated_files)}")
+      console.print(f"[bold]Output directory:[/bold] {output_dir}")
+      console.print(f"[bold]Chart index:[/bold] {index_file}")
 
-      # 显示文件列表
-      console.print("\n[bold]生成的文件:[/bold]")
+      # Display file list
+      console.print("\n[bold]Generated files:[/bold]")
       for file_path in generated_files:
         size_mb = file_path.stat().st_size / (1024 * 1024)
         console.print(f"  • {file_path.name} ({size_mb:.2f} MB)")
     else:
-      console.print("[yellow]⚠ 没有生成任何图表文件[/yellow]")
-      console.print("[yellow]可能的原因：数据不足或图表类型不支持[/yellow]")
+      console.print("[yellow]⚠ No chart files were generated[/yellow]")
+      console.print(
+        "[yellow]Possible reasons: insufficient data or unsupported chart types[/yellow]"
+      )
 
   except Exception as e:
-    logger.error(f"图表生成失败: {e}")
-    console.print(f"[bold red]错误:[/bold red] {e}")
+    logger.error(f"Chart generation failed: {e}")
+    console.print(f"[bold red]Error:[/bold red] {e}")
     sys.exit(1)

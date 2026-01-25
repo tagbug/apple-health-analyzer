@@ -1,6 +1,6 @@
-"""数据转换模块 - 将健康记录转换为可视化所需的DataFrame格式"""
+"""Data conversion module - converts health records to DataFrame format for visualization"""
 
-from typing import Any, List
+from typing import Any
 
 import pandas as pd
 
@@ -17,7 +17,7 @@ class DataConverter:
   """
 
   @staticmethod
-  def heart_rate_to_df(records: List[HealthRecord]) -> pd.DataFrame:
+  def heart_rate_to_df(records: list[HealthRecord]) -> pd.DataFrame:
     """将心率记录转换为DataFrame
 
     Args:
@@ -53,7 +53,7 @@ class DataConverter:
     return df
 
   @staticmethod
-  def resting_hr_to_df(records: List[HealthRecord]) -> pd.DataFrame:
+  def resting_hr_to_df(records: list[HealthRecord]) -> pd.DataFrame:
     """将静息心率记录转换为DataFrame
 
     Args:
@@ -92,7 +92,7 @@ class DataConverter:
     return df
 
   @staticmethod
-  def hrv_to_df(records: List[HealthRecord]) -> pd.DataFrame:
+  def hrv_to_df(records: list[HealthRecord]) -> pd.DataFrame:
     """将HRV记录转换为DataFrame
 
     Args:

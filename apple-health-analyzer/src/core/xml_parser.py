@@ -490,7 +490,7 @@ class StreamingXMLParser:
       self.logger.warning("   (Records used default values for missing fields)")
 
       # Show first few warnings
-      for i, warning_info in enumerate(self.stats["warnings"][:3]):
+      for _i, warning_info in enumerate(self.stats["warnings"][:3]):
         self.logger.warning(
           f"   - {warning_info['record_type']}: {', '.join(warning_info['warnings'])}"
         )

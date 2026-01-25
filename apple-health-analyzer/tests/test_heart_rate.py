@@ -1,4 +1,4 @@
-"""心率处理器单元测试"""
+"""Unit tests for heart rate processor."""
 
 from datetime import datetime, timedelta
 from unittest.mock import Mock, patch

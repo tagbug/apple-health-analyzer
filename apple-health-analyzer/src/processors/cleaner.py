@@ -1,6 +1,6 @@
-"""数据清洗和预处理模块。
+"""Data cleaning and preprocessing module.
 
-提供数据去重、合并、质量验证等功能。
+Provides data deduplication, merging, quality validation, and other functions.
 """
 
 from collections import defaultdict

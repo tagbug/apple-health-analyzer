@@ -12,7 +12,6 @@ import click
 from rich.console import Console
 from rich.table import Table
 
-# 注册可视化命令
 from src.cli_visualize import report as report_command
 from src.cli_visualize import visualize as visualize_command
 from src.config import get_config, reload_config
@@ -22,8 +21,6 @@ from src.utils.logger import get_logger
 
 console = Console()
 logger = get_logger(__name__)
-
-# 导入可视化命令
 
 
 @click.group()
@@ -36,12 +33,11 @@ logger = get_logger(__name__)
 @click.option("--verbose", "-v", is_flag=True, help="Enable verbose logging")
 @click.version_option()
 def cli(config_path: str | None, verbose: bool):
-  """Apple Health Data Analyzer - 苹果健康数据分析工具
+  """Apple Health Data Analyzer
 
   A comprehensive tool for parsing, analyzing, and visualizing Apple Health export data.
   """
   if config_path:
-    # Load custom config file
     import os
 
     os.environ["CONFIG_FILE"] = config_path
@@ -154,44 +150,31 @@ def info(xml_path: str):
 
     console.print(table)
 
-    # Quick parsing to get more details
-    # parser = StreamingXMLParser(xml_file)
-
-    # Sample a few records to get data range
+    # Sample parsing for data range and type distribution
+    # Algorithm: Stream parse first 100 records to estimate data characteristics
     sample_records = []
     try:
-      # Parse without ProgressLogger to see actual errors
       context = ET.iterparse(xml_file, events=("start", "end"))
       context = iter(context)
-
-      # Get root element
       event, root = next(context)
 
       count = 0
       for event, elem in context:
         if event == "start" and elem.tag == "Record":
-          # Use the same parsing logic as the parser
           try:
-            from src.core.data_models import (
-              create_record_from_xml_element,
-            )
+            from src.core.data_models import create_record_from_xml_element
 
             record, warnings = create_record_from_xml_element(elem)
             if record:
               sample_records.append(record)
               count += 1
-              if count >= 100:  # Sample first 100 records
+              if count >= 100:  # Sample size limit for performance
                 break
           except Exception:
-            # Skip invalid records in info command
-            pass
+            pass  # Skip invalid records in info mode
 
-          if count >= 100:
-            break
-
-        # Clear elements at end events to free memory
         if event == "end":
-          elem.clear()
+          elem.clear()  # Memory cleanup for large files
 
       root.clear()
 
@@ -528,7 +511,8 @@ def analyze(
         records_generator = parser.parse_records(record_types=hr_types)
         all_hr_records = list(records_generator)
 
-        # Categorize records
+        # Categorize records by type
+        # Algorithm: Single-pass classification based on HK record type identifiers
         for record in all_hr_records:
           record_type = getattr(record, "type", "")
           if record_type == "HKQuantityTypeIdentifierHeartRate":

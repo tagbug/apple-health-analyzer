@@ -1,4 +1,4 @@
-"""HighlightsGenerator 单元测试"""
+"""Unit tests for HighlightsGenerator."""
 
 from datetime import datetime, timedelta
 

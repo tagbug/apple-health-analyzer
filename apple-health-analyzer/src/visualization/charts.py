@@ -1,4 +1,4 @@
-"""图表生成模块 - 提供各类健康数据可视化图表"""
+"""Chart generation module - provides various health data visualization charts"""
 
 from pathlib import Path
 
@@ -47,9 +47,9 @@ PLOTLY_TEMPLATE = {
 
 
 class ChartGenerator:
-  """图表生成核心类
+  """Chart generation core class
 
-  提供各类健康数据的可视化图表生成功能，支持交互式和静态图表。
+  Provides various health data visualization chart generation capabilities, supporting both interactive and static charts.
   """
 
   def __init__(
@@ -59,13 +59,13 @@ class ChartGenerator:
     height: int = 600,
     dpi: int = 300,
   ):
-    """初始化图表生成器
+    """Initialize chart generator
 
     Args:
-        theme: 主题名称 (health/light/dark)
-        width: 图表宽度
-        height: 图表高度
-        dpi: 图表DPI (用于静态图导出)
+        theme: Theme name (health/light/dark)
+        width: Chart width
+        height: Chart height
+        dpi: Chart DPI (for static image export)
     """
     self.theme = theme
     self.width = width
@@ -122,7 +122,7 @@ class ChartGenerator:
             y=data["value"],
             mode="lines",
             name="心率",
-            line=dict(color=HEALTH_COLORS["primary"], width=1.5),
+            line={"color": HEALTH_COLORS["primary"], "width": 1.5},
             hovertemplate="<b>时间</b>: %{x}<br>"
             + "<b>心率</b>: %{y:.0f} bpm<br>"
             + "<extra></extra>",

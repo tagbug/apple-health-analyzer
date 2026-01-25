@@ -1,4 +1,4 @@
-"""睡眠处理器单元测试"""
+"""Unit tests for sleep processor."""
 
 from datetime import datetime, timedelta
 from unittest.mock import Mock, patch

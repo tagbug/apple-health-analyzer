@@ -1,6 +1,6 @@
-"""睡眠数据专项分析模块。
+"""Sleep data specialized analysis module.
 
-提供睡眠相关数据的深度分析功能，包括睡眠阶段、睡眠质量、睡眠模式等。
+Provides in-depth analysis of sleep-related data, including sleep stages, sleep quality, sleep patterns, etc.
 """
 
 from dataclasses import dataclass
@@ -23,7 +23,7 @@ logger = get_logger(__name__)
 
 @dataclass
 class SleepStage:
-  """睡眠阶段数据"""
+  """Sleep stage data"""
 
   stage: Literal["InBed", "Asleep", "Awake", "Core", "Deep", "REM"]
   start_date: datetime
@@ -33,7 +33,7 @@ class SleepStage:
 
 @dataclass
 class SleepSession:
-  """单次睡眠会话"""
+  """Single sleep session"""
 
   session_id: str
   start_date: datetime
@@ -57,15 +57,15 @@ class SleepSession:
 
 @dataclass
 class SleepQualityMetrics:
-  """睡眠质量指标"""
+  """Sleep quality metrics"""
 
-  average_duration: float  # 平均睡眠时长（小时）
-  average_efficiency: float  # 平均睡眠效率（0-1）
-  average_latency: float  # 平均入睡时间（分钟）
-  consistency_score: float  # 规律性评分（0-1）
-  overall_quality_score: float  # 综合质量评分（0-100）
+  average_duration: float  # Average sleep duration (hours)
+  average_efficiency: float  # Average sleep efficiency (0-1)
+  average_latency: float  # Average sleep latency (minutes)
+  consistency_score: float  # Consistency score (0-1)
+  overall_quality_score: float  # Overall quality score (0-100)
 
-  # 睡眠阶段占比
+  # Sleep stage percentages
   core_sleep_percentage: float = 0
   deep_sleep_percentage: float = 0
   rem_sleep_percentage: float = 0
@@ -74,74 +74,74 @@ class SleepQualityMetrics:
 
 @dataclass
 class SleepPatternAnalysis:
-  """睡眠模式分析"""
+  """Sleep pattern analysis"""
 
-  bedtime_consistency: float  # 就寝时间规律性（0-1）
-  waketime_consistency: float  # 起床时间规律性（0-1）
-  weekday_vs_weekend: dict[str, float]  # 周末vs工作日对比
-  seasonal_patterns: dict[str, Any]  # 季节性模式
+  bedtime_consistency: float  # Bedtime consistency (0-1)
+  waketime_consistency: float  # Waketime consistency (0-1)
+  weekday_vs_weekend: dict[str, float]  # Weekday vs weekend comparison
+  seasonal_patterns: dict[str, Any]  # Seasonal patterns
 
-  # 趋势分析
+  # Trend analysis
   duration_trend: Literal["increasing", "decreasing", "stable"]
   efficiency_trend: Literal["improving", "declining", "stable"]
 
 
 @dataclass
 class SleepHeartRateCorrelation:
-  """睡眠-心率关联分析"""
+  """Sleep-heart rate correlation analysis"""
 
-  avg_sleep_hr: float  # 睡眠期间平均心率
-  hr_variability_during_sleep: float  # 睡眠期间心率变异性
-  hr_drop_efficiency: float  # 入睡时心率下降效率
-  recovery_quality: float  # 恢复质量评分（基于HRV变化）
+  avg_sleep_hr: float  # Average heart rate during sleep
+  hr_variability_during_sleep: float  # Heart rate variability during sleep
+  hr_drop_efficiency: float  # Heart rate drop efficiency when falling asleep
+  recovery_quality: float  # Recovery quality score (based on HRV changes)
 
 
 @dataclass
 class SleepAnalysisReport:
-  """睡眠分析综合报告"""
+  """Comprehensive sleep analysis report"""
 
   analysis_date: datetime
   data_range: tuple[datetime, datetime]
 
-  # 基础分析
+  # Core analysis
   quality_metrics: SleepQualityMetrics | None = None
   pattern_analysis: SleepPatternAnalysis | None = None
   hr_correlation: SleepHeartRateCorrelation | None = None
 
-  # 详细数据
+  # Detailed data
   sleep_sessions: list[SleepSession] | None = None
   daily_summary: pd.DataFrame | None = None
   weekly_summary: pd.DataFrame | None = None
 
-  # 异常检测
+  # Anomaly detection
   anomalies: list[Any] | None = None
   anomaly_report: dict[str, Any] | None = None
 
-  # 趋势分析
+  # Trend analysis
   trends: dict[str, Any] | None = None
 
-  # Highlights和建议
+  # Highlights and recommendations
   highlights: list[str] | None = None
   recommendations: list[str] | None = None
 
-  # 数据质量
+  # Data quality
   data_quality_score: float = 0.0
   record_count: int = 0
 
 
 class SleepAnalyzer:
-  """睡眠数据专项分析器
+  """Specialized sleep data analyzer
 
-  提供睡眠相关数据的深度分析，包括：
-  - 睡眠阶段解析和分析
-  - 睡眠质量评估
-  - 睡眠模式识别
-  - 睡眠-心率关联分析
-  - 异常检测和健康洞察
+  Provides in-depth analysis of sleep-related data, including:
+  - Sleep stage parsing and analysis
+  - Sleep quality assessment
+  - Sleep pattern recognition
+  - Sleep-heart rate correlation analysis
+  - Anomaly detection and health insights
   """
 
   def __init__(self):
-    """初始化睡眠分析器"""
+    """Initialize sleep analyzer"""
     # 初始化分析组件
     self.stat_analyzer = StatisticalAnalyzer()
     self.anomaly_detector = AnomalyDetector()
@@ -153,14 +153,14 @@ class SleepAnalyzer:
     sleep_records: list[HealthRecord],
     heart_rate_records: list[HealthRecord] | None = None,
   ) -> SleepAnalysisReport:
-    """执行睡眠数据的全面分析
+    """Perform comprehensive sleep data analysis
 
     Args:
-        sleep_records: 睡眠记录
-        heart_rate_records: 心率记录（用于关联分析）
+        sleep_records: Sleep records
+        heart_rate_records: Heart rate records (for correlation analysis)
 
     Returns:
-        综合分析报告
+        Comprehensive analysis report
     """
     logger.info("Starting comprehensive sleep analysis")
 
@@ -530,13 +530,13 @@ class SleepAnalyzer:
   def analyze_sleep_quality(
     self, sleep_sessions: list[SleepSession]
   ) -> SleepQualityMetrics:
-    """分析睡眠质量
+    """Analyze sleep quality
 
     Args:
-        sleep_sessions: 睡眠会话列表
+        sleep_sessions: List of sleep sessions
 
     Returns:
-        睡眠质量指标
+        Sleep quality metrics
     """
     if not sleep_sessions:
       return SleepQualityMetrics(
@@ -1251,7 +1251,7 @@ class SleepAnalyzer:
 
     # 检查时间连续性（是否有规律的记录）
     if records:
-      dates = sorted(set(r.start_date.date() for r in records))
+      dates = sorted({r.start_date.date() for r in records})
       if len(dates) > 1:
         date_diffs = [
           (dates[i + 1] - dates[i]).days for i in range(len(dates) - 1)

@@ -1,6 +1,6 @@
-"""心率数据专项分析模块。
+"""Heart rate data specialized analysis module.
 
-提供心率相关数据的深度分析功能，包括静息心率、HRV、运动心率、心肺适能等。
+Provides in-depth analysis of heart rate related data, including resting heart rate, HRV, exercise heart rate, and cardio fitness.
 """
 
 from dataclasses import dataclass
@@ -19,21 +19,19 @@ logger = get_logger(__name__)
 
 @dataclass
 class HeartRateMetrics:
-  """心率基础指标"""
+  """Basic heart rate metrics"""
 
   resting_hr: float | None = None
   hrv_sdnn: float | None = None
   walking_hr_avg: float | None = None
   hr_recovery_1min: float | None = None
   vo2_max: float | None = None
-
-  # 时间戳
   timestamp: datetime | None = None
 
 
 @dataclass
 class RestingHRAnalysis:
-  """静息心率分析结果"""
+  """Resting heart rate analysis results"""
 
   current_value: float
   baseline_value: float
@@ -45,7 +43,7 @@ class RestingHRAnalysis:
 
 @dataclass
 class HRVAnalysis:
-  """心率变异性分析结果"""
+  """Heart rate variability analysis results"""
 
   current_sdnn: float
   baseline_sdnn: float
@@ -57,7 +55,7 @@ class HRVAnalysis:
 
 @dataclass
 class CardioFitnessAnalysis:
-  """心肺适能分析结果"""
+  """Cardio fitness analysis results"""
 
   current_vo2_max: float
   age_adjusted_rating: Literal["superior", "excellent", "good", "fair", "poor"]
@@ -68,46 +66,46 @@ class CardioFitnessAnalysis:
 
 @dataclass
 class HeartRateAnalysisReport:
-  """心率分析综合报告"""
+  """Comprehensive heart rate analysis report"""
 
   analysis_date: datetime
   data_range: tuple[datetime, datetime]
 
-  # 基础指标
+  # Core metrics
   resting_hr_analysis: RestingHRAnalysis | None = None
   hrv_analysis: HRVAnalysis | None = None
   cardio_fitness: CardioFitnessAnalysis | None = None
 
-  # 统计分析
+  # Statistical analysis
   daily_stats: pd.DataFrame | None = None
   weekly_stats: pd.DataFrame | None = None
   monthly_stats: pd.DataFrame | None = None
 
-  # 异常检测
+  # Anomaly detection
   anomalies: list[Any] | None = None
   anomaly_report: AnomalyReport | None = None
 
-  # 趋势分析
+  # Trend analysis
   trends: dict[str, Any] | None = None
 
-  # Highlights
+  # Highlights and recommendations
   highlights: list[str] | None = None
   recommendations: list[str] | None = None
 
-  # 数据质量
+  # Data quality
   data_quality_score: float = 0.0
   record_count: int = 0
 
 
 class HeartRateAnalyzer:
-  """心率数据专项分析器
+  """Specialized heart rate data analyzer
 
-  提供心率相关数据的深度分析，包括：
-  - 静息心率趋势分析
-  - 心率变异性(HRV)评估
-  - 运动心率分析
-  - 心肺适能评级
-  - 异常检测和健康洞察
+  Provides in-depth analysis of heart rate related data, including:
+  - Resting heart rate trend analysis
+  - Heart rate variability (HRV) assessment
+  - Exercise heart rate analysis
+  - Cardio fitness rating
+  - Anomaly detection and health insights
   """
 
   def __init__(
@@ -115,11 +113,11 @@ class HeartRateAnalyzer:
     age: int | None = None,
     gender: Literal["male", "female"] | None = None,
   ):
-    """初始化心率分析器
+    """Initialize heart rate analyzer
 
     Args:
-        age: 年龄（用于正常范围计算）
-        gender: 性别（用于心肺适能评级）
+        age: Age (used for normal range calculations)
+        gender: Gender (used for cardio fitness rating)
     """
     self.age = age
     self.gender = gender
@@ -138,17 +136,17 @@ class HeartRateAnalyzer:
     walking_hr_records: list[HealthRecord] | None = None,
     vo2_max_records: list[HealthRecord] | None = None,
   ) -> HeartRateAnalysisReport:
-    """执行心率数据的全面分析
+    """Perform comprehensive heart rate data analysis
 
     Args:
-        heart_rate_records: 基础心率记录
-        resting_hr_records: 静息心率记录
-        hrv_records: 心率变异性记录
-        walking_hr_records: 步行心率记录
-        vo2_max_records: VO2Max记录
+        heart_rate_records: Basic heart rate records
+        resting_hr_records: Resting heart rate records
+        hrv_records: Heart rate variability records
+        walking_hr_records: Walking heart rate records
+        vo2_max_records: VO2Max records
 
     Returns:
-        综合分析报告
+        Comprehensive analysis report
     """
     logger.info("Starting comprehensive heart rate analysis")
 
@@ -251,13 +249,13 @@ class HeartRateAnalyzer:
   def analyze_resting_heart_rate(
     self, records: list[HealthRecord]
   ) -> RestingHRAnalysis | None:
-    """分析静息心率
+    """Analyze resting heart rate
 
     Args:
-        records: 静息心率记录
+        records: Resting heart rate records
 
     Returns:
-        静息心率分析结果
+        Resting heart rate analysis results
     """
     if not records:
       return None
@@ -321,13 +319,13 @@ class HeartRateAnalyzer:
     )
 
   def analyze_hrv(self, records: list[HealthRecord]) -> HRVAnalysis | None:
-    """分析心率变异性(HRV)
+    """Analyze heart rate variability (HRV)
 
     Args:
-        records: HRV记录（SDNN值）
+        records: HRV records (SDNN values)
 
     Returns:
-        HRV分析结果
+        HRV analysis results
     """
     if not records:
       return None
@@ -389,13 +387,13 @@ class HeartRateAnalyzer:
   def analyze_cardio_fitness(
     self, records: list[QuantityRecord]
   ) -> CardioFitnessAnalysis | None:
-    """分析心肺适能
+    """Analyze cardio fitness
 
     Args:
-        records: VO2Max记录
+        records: VO2Max records
 
     Returns:
-        心肺适能分析结果
+        Cardio fitness analysis results
     """
     if not records or not self.age or not self.gender:
       logger.warning("VO2Max analysis requires age and gender information")
