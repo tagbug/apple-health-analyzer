@@ -396,6 +396,14 @@ class StatisticalAnalyzer:
       # 检查是否是QuantityRecord或CategoryRecord子类，这些类有value属性
       if isinstance(record, (QuantityRecord, CategoryRecord)):
         value = record.value
+        # 确保value是数值类型，如果是字符串则跳过
+        if isinstance(value, str):
+          value = None
+        elif value is not None:
+          try:
+            value = float(value)
+          except (ValueError, TypeError):
+            value = None
 
       data.append(
         {
@@ -409,7 +417,12 @@ class StatisticalAnalyzer:
         }
       )
 
-    return pd.DataFrame(data)
+    df = pd.DataFrame(data)
+    # 确保数值列的类型正确
+    if "value" in df.columns:
+      df["value"] = pd.to_numeric(df["value"], errors="coerce")
+
+    return df
 
   def _linear_trend_analysis(
     self, X: np.ndarray, y: np.ndarray
@@ -565,11 +578,10 @@ class StatisticalAnalyzer:
     }
 
     # 获取合理范围 - 确保类型安全
-    default_min = float(np.asarray(values.min())) if not values.empty else 0.0
-    default_max = float(np.asarray(values.max())) if not values.empty else 100.0
-    min_val, max_val = reasonable_ranges.get(
-      record_type, (default_min, default_max)
-    )
+    default_min = float(values.min()) if not values.empty else 0.0
+    default_max = float(values.max()) if not values.empty else 100.0
+    range_tuple = reasonable_ranges.get(record_type, (default_min, default_max))
+    min_val, max_val = float(range_tuple[0]), float(range_tuple[1])
 
     # 计算在合理范围内的数据比例
     reasonable_mask = (values >= min_val) & (values <= max_val)
