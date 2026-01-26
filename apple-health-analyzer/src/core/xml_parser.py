@@ -5,7 +5,7 @@ Provides memory-efficient parsing of large XML files using iterative parsing.
 
 import xml.etree.ElementTree as ET
 from collections import defaultdict
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from pathlib import Path
 from typing import Any
 
@@ -16,7 +16,7 @@ from src.core.data_models import (
   WorkoutRecord,
   create_record_from_xml_element,
 )
-from src.utils.logger import ProgressLogger, get_logger, performance_logger
+from src.utils.logger import get_logger, performance_logger
 
 logger = get_logger(__name__)
 
@@ -52,7 +52,11 @@ class StreamingXMLParser:
     }
 
   def parse_records(
-    self, record_types: list[str] | None = None, batch_size: int = 1000
+    self,
+    record_types: list[str] | None = None,
+    batch_size: int = 1000,
+    progress_callback: Callable[[int], None] | None = None,
+    quiet: bool = False,
   ) -> Generator[AnyRecord, None, None]:
     """Parse Record elements from the XML file.
 
@@ -63,8 +67,9 @@ class StreamingXMLParser:
     Yields:
         Parsed health record objects
     """
-    self.logger.info(f"Starting to parse records from {self.xml_path}")
-    self.logger.info(f"Record types filter: {record_types or 'all'}")
+    if not quiet:
+      self.logger.info(f"Starting to parse records from {self.xml_path}")
+      self.logger.info(f"Record types filter: {record_types or 'all'}")
 
     # Reset statistics
     self._reset_stats()
@@ -79,48 +84,46 @@ class StreamingXMLParser:
 
       processed_in_batch = 0
 
-      with ProgressLogger(
-        "XML record parsing", log_interval=batch_size
-      ) as progress:
-        for event, elem in context:
-          if event == "start" and elem.tag == "Record":
-            self.stats["total_records"] += 1
+      for event, elem in context:
+        if event == "start" and elem.tag == "Record":
+          self.stats["total_records"] += 1
 
-            # Check if we should process this record type
-            record_type = elem.get("type")
-            if record_types and record_type not in record_types:
-              self.stats["skipped_records"] += 1
-              # For start events, we need to clear when we reach the end
-              continue
+          # Check if we should process this record type
+          record_type = elem.get("type")
+          if record_types and record_type not in record_types:
+            self.stats["skipped_records"] += 1
+            # For start events, we need to clear when we reach the end
+            continue
 
-            # Parse the record
-            record = self._parse_record_element(elem)
-            if record:
-              # Update statistics
-              self._update_record_stats(record)
+          # Parse the record
+          record = self._parse_record_element(elem)
+          if record:
+            # Update statistics
+            self._update_record_stats(record)
 
-              # Yield the record
-              yield record
-              self.stats["processed_records"] += 1
-              processed_in_batch += 1
+            # Yield the record
+            yield record
+            self.stats["processed_records"] += 1
+            processed_in_batch += 1
 
-              # Log progress
-              progress.update()
+            # Call progress callback if provided
+            if progress_callback:
+              progress_callback(self.stats["processed_records"])
 
-              # Periodic memory cleanup
-              if processed_in_batch >= batch_size:
-                processed_in_batch = 0
-                # Clear processed elements to free memory
-                root.clear()
-            else:
-              self.stats["invalid_records"] += 1
+            # Periodic memory cleanup
+            if processed_in_batch >= batch_size:
+              processed_in_batch = 0
+              # Clear processed elements to free memory
+              root.clear()
+          else:
+            self.stats["invalid_records"] += 1
 
-          # Clear elements at end events to free memory
-          if event == "end":
-            elem.clear()
+        # Clear elements at end events to free memory
+        if event == "end":
+          elem.clear()
 
-        # Final memory cleanup
-        root.clear()
+      # Final memory cleanup
+      root.clear()
 
     except Exception as e:
       self.logger.error(f"Error during XML parsing: {e}")
@@ -131,7 +134,9 @@ class StreamingXMLParser:
     )
     self._log_parsing_summary()
 
-  def parse_workouts(self) -> Generator[WorkoutRecord, None, None]:
+  def parse_workouts(
+    self, progress_callback: Callable[[int], None] | None = None
+  ) -> Generator[WorkoutRecord, None, None]:
     """Parse Workout elements from the XML file.
 
     Yields:
@@ -145,18 +150,18 @@ class StreamingXMLParser:
       event, root = next(context)
 
       workout_count = 0
-      with ProgressLogger("XML workout parsing") as progress:
-        for event, elem in context:
-          if event == "end" and elem.tag == "Workout":
-            workout = self._parse_workout_element(elem)
-            if workout:
-              yield workout
-              workout_count += 1
-              progress.update()
+      for event, elem in context:
+        if event == "end" and elem.tag == "Workout":
+          workout = self._parse_workout_element(elem)
+          if workout:
+            yield workout
+            workout_count += 1
+            if progress_callback:
+              progress_callback(workout_count)
 
-            elem.clear()
+          elem.clear()
 
-        root.clear()
+      root.clear()
 
       self.logger.info(f"Completed parsing {workout_count} workouts")
 
@@ -165,7 +170,7 @@ class StreamingXMLParser:
       raise
 
   def parse_activity_summaries(
-    self,
+    self, progress_callback: Callable[[int], None] | None = None
   ) -> Generator[ActivitySummaryRecord, None, None]:
     """Parse ActivitySummary elements from the XML file.
 
@@ -180,18 +185,18 @@ class StreamingXMLParser:
       event, root = next(context)
 
       summary_count = 0
-      with ProgressLogger("XML activity summary parsing") as progress:
-        for event, elem in context:
-          if event == "end" and elem.tag == "ActivitySummary":
-            summary = self._parse_activity_summary_element(elem)
-            if summary:
-              yield summary
-              summary_count += 1
-              progress.update()
+      for event, elem in context:
+        if event == "end" and elem.tag == "ActivitySummary":
+          summary = self._parse_activity_summary_element(elem)
+          if summary:
+            yield summary
+            summary_count += 1
+            if progress_callback:
+              progress_callback(summary_count)
 
-            elem.clear()
+          elem.clear()
 
-        root.clear()
+      root.clear()
 
       self.logger.info(f"Completed parsing {summary_count} activity summaries")
 

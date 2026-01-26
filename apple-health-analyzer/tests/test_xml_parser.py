@@ -2,7 +2,6 @@
 
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -200,15 +199,22 @@ class TestStreamingXMLParser:
     stats = parser.get_statistics()
     assert stats["processed_records"] == 3
 
-  @patch("src.core.xml_parser.ProgressLogger")
-  def test_progress_logging(self, mock_progress_logger, temp_xml_file):
-    """Test that progress logging is called."""
+  def test_progress_callback(self, temp_xml_file):
+    """Test that progress callback is called."""
     parser = StreamingXMLParser(temp_xml_file)
 
-    records = list(parser.parse_records(batch_size=1))
+    callback_count = 0
 
-    # ProgressLogger should have been called
-    assert mock_progress_logger.called
+    def progress_callback(count: int) -> None:
+      nonlocal callback_count
+      callback_count = count
+
+    records = list(
+      parser.parse_records(batch_size=1, progress_callback=progress_callback)
+    )
+
+    # Progress callback should have been called
+    assert callback_count == 3  # Should be called 3 times for 3 records
     assert len(records) == 3
 
 

@@ -17,7 +17,7 @@ from src.cli_visualize import visualize as visualize_command
 from src.config import get_config, reload_config
 from src.core.exceptions import HealthAnalyzerError
 from src.core.xml_parser import StreamingXMLParser, get_export_file_info
-from src.utils.logger import get_logger
+from src.utils.logger import UnifiedProgress, get_logger
 
 console = Console()
 logger = get_logger(__name__)
@@ -132,35 +132,52 @@ def parse(xml_path: str, output: str | None, types: list[str], preview: bool):
     stats = {}
 
     try:
-      with console.status("[bold green]Parsing records...") as status:
-        import time
+      # Create progress bar for parsing
+      # Note: We don't use estimated count as total since it may be inaccurate
+      # Instead, we use indeterminate progress for better UX
 
-        start_time = time.time()
+      with UnifiedProgress(
+        "Parsing records",
+        total=None,  # Always use indeterminate progress for parsing
+        quiet=True,  # Disable logging for cleaner CLI output
+      ) as progress:
+        # Progress callback function
+        def update_progress(count: int) -> None:
+          progress.update(count, f"Parsed {count:,} records")
 
-        records_generator = parser.parse_records(record_types)
+        records_generator = parser.parse_records(
+          record_types=record_types,
+          progress_callback=update_progress,
+          quiet=True,
+        )
         records = list(records_generator)
         stats = parser.get_statistics()
 
-        parsing_time = time.time() - start_time
-        status.update(
-          f"[bold green]Parsed {len(records):,} records in {parsing_time:.1f}s"
-        )
+        # Final update
+        progress.update(len(records), f"Parsed {len(records):,} records")
 
     except Exception as e:
       logger.error(f"Parsing failed: {e}")
-      console.print(f"[bold red]Error:[/bold red] Failed to parse records: {e}")
 
       # Provide helpful error messages based on error type
       error_str = str(e).lower()
       if "memory" in error_str:
         console.print(
+          "[bold red]Error:[/bold red] Insufficient memory for parsing"
+        )
+        console.print(
           "[yellow]Tip:[/yellow] Try processing a smaller file or increase system memory"
         )
       elif "permission" in error_str:
+        console.print("[bold red]Error:[/bold red] File permission denied")
         console.print("[yellow]Tip:[/yellow] Check file permissions")
       elif "encoding" in error_str:
+        console.print("[bold red]Error:[/bold red] File encoding issue")
         console.print("[yellow]Tip:[/yellow] Ensure the file is UTF-8 encoded")
       else:
+        console.print(
+          f"[bold red]Error:[/bold red] Failed to parse records: {e}"
+        )
         console.print(
           "[yellow]Tip:[/yellow] Check the XML file format and try again"
         )
@@ -397,13 +414,41 @@ def export(
     exporter = DataExporter(output_dir)
 
     # Perform export
-    with console.status("[bold green]Exporting data..."):
+    with UnifiedProgress(
+      "Exporting data", total=None
+    ) as progress:  # Total unknown for export
       export_stats = exporter.export_by_category(
         xml_file,
         formats=formats,
         record_types=list(types) if types else None,
         enable_cleaning=clean,
       )
+      progress.update(1, "Export completed")
+
+    # Validate export results
+    total_exported = sum(
+      sum(stats.get(fmt, 0) for fmt in ["csv", "json"])
+      for stats in export_stats.values()
+    )
+
+    if total_exported == 0:
+      console.print("[yellow]⚠ No records were exported![/yellow]")
+      console.print("\nPossible reasons:")
+      if types:
+        console.print("• The specified record types may not exist in the data")
+        console.print(
+          "• Use full type names like 'HKQuantityTypeIdentifierHeartRate'"
+        )
+        console.print(
+          "• Run 'health-analyzer info <file>' to see available types"
+        )
+      else:
+        console.print("• The file may not contain valid Apple Health data")
+        console.print("• Check if the XML file is corrupted")
+      console.print(
+        "\n[yellow]Export completed but no data was saved.[/yellow]"
+      )
+      sys.exit(1)
 
     # Display results
     console.print("\n[bold green]✓ Export completed successfully![/bold green]")
@@ -599,7 +644,7 @@ def analyze(
 
     # Parse data with progress
     console.print("\n[bold]Step 1: Parsing health data...[/bold]")
-    with console.status("[bold green]Parsing records..."):
+    with UnifiedProgress("Parsing health data", total=None) as progress:
       # Parse heart rate related records
       hr_records = []
       resting_hr_records = []
@@ -641,29 +686,34 @@ def analyze(
           elif record_type == "HKQuantityTypeIdentifierVO2Max":
             vo2_max_records.append(record)
 
-    # Parse sleep data
-    sleep_records = []
-    if "sleep" in analysis_types:
-      from src.core.xml_parser import StreamingXMLParser
+      # Parse sleep data
+      sleep_records = []
+      if "sleep" in analysis_types:
+        from src.core.xml_parser import StreamingXMLParser
 
-      parser = StreamingXMLParser(xml_file)
-      sleep_records = list(
-        parser.parse_records(
-          record_types=["HKCategoryTypeIdentifierSleepAnalysis"]
+        parser = StreamingXMLParser(xml_file)
+        sleep_records = list(
+          parser.parse_records(
+            record_types=["HKCategoryTypeIdentifierSleepAnalysis"]
+          )
         )
+
+      # Filter by date range if specified
+      if start_date and end_date:
+
+        def filter_by_date(records):
+          return [r for r in records if start_date <= r.start_date <= end_date]
+
+        hr_records = filter_by_date(hr_records)
+        resting_hr_records = filter_by_date(resting_hr_records)
+        hrv_records = filter_by_date(hrv_records)
+        vo2_max_records = filter_by_date(vo2_max_records)
+        sleep_records = filter_by_date(sleep_records)
+
+      progress.update(
+        1,
+        f"Parsed {len(hr_records)} heart rate, {len(sleep_records)} sleep records",
       )
-
-    # Filter by date range if specified
-    if start_date and end_date:
-
-      def filter_by_date(records):
-        return [r for r in records if start_date <= r.start_date <= end_date]
-
-      hr_records = filter_by_date(hr_records)
-      resting_hr_records = filter_by_date(resting_hr_records)
-      hrv_records = filter_by_date(hrv_records)
-      vo2_max_records = filter_by_date(vo2_max_records)
-      sleep_records = filter_by_date(sleep_records)
 
     console.print(
       f"[green]✓ Parsed {len(hr_records)} heart rate, {len(sleep_records)} sleep records[/green]"
@@ -679,7 +729,7 @@ def analyze(
       for t in ["heart_rate", "resting_hr", "hrv", "cardio_fitness"]
     ):
       console.print("\n[bold]Step 2: Analyzing heart rate data...[/bold]")
-      with console.status("[bold green]Analyzing heart rate patterns..."):
+      with UnifiedProgress("Analyzing heart rate data", total=None) as progress:
         heart_rate_report = heart_rate_analyzer.analyze_comprehensive(
           heart_rate_records=hr_records,
           resting_hr_records=resting_hr_records
@@ -690,23 +740,27 @@ def analyze(
           if "cardio_fitness" in analysis_types
           else None,
         )
+        progress.update(1, "Heart rate analysis completed")
       console.print("[green]✓ Heart rate analysis completed[/green]")
 
     # Sleep analysis
     if "sleep" in analysis_types and sleep_records:
       console.print("\n[bold]Step 3: Analyzing sleep data...[/bold]")
-      with console.status("[bold green]Analyzing sleep patterns..."):
+      with UnifiedProgress("Analyzing sleep data", total=None) as progress:
         sleep_report = sleep_analyzer.analyze_comprehensive(sleep_records)  # type: ignore
+        progress.update(1, "Sleep analysis completed")
       console.print("[green]✓ Sleep analysis completed[/green]")
 
     # Generate highlights
     console.print("\n[bold]Step 4: Generating health insights...[/bold]")
-    with console.status(
-      "[bold green]Generating insights and recommendations..."
-    ):
+    with UnifiedProgress("Generating health insights", total=None) as progress:
       highlights = highlights_generator.generate_comprehensive_highlights(
         heart_rate_report=heart_rate_report,
         sleep_report=sleep_report,
+      )
+      progress.update(
+        1,
+        f"Generated {len(highlights.insights)} insights and {len(highlights.recommendations)} recommendations",
       )
     console.print(
       f"[green]✓ Generated {len(highlights.insights)} insights and {len(highlights.recommendations)} recommendations[/green]"

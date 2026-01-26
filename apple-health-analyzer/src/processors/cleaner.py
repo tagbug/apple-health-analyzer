@@ -30,7 +30,7 @@ class RecordRowData(BaseModel):
   source_version: str = "1.0"
   device: str = "Unknown"
   unit: str | None = None
-  value: float | None = None
+  value: float | str | None = None
   metadata: dict[str, Any] | None = None
 
   @classmethod
@@ -84,12 +84,25 @@ class RecordRowData(BaseModel):
     )
 
     value_val = row.get("value")
-    value = (
-      float(value_val)
-      if value_val is not None
-      and str(value_val).lower() not in ("", "nan", "none")
-      else None
-    )
+    # 对于睡眠记录等分类记录，value是字符串；对于数量记录，value是数字
+    if value_val is not None and str(value_val).lower() not in (
+      "",
+      "nan",
+      "none",
+    ):
+      # 检查是否是睡眠记录类型
+      record_type = row.get("type", "")
+      if "SleepAnalysis" in record_type or "Category" in record_type:
+        # 分类记录保持字符串
+        value = str(value_val)
+      else:
+        # 数量记录转换为float
+        try:
+          value = float(value_val)
+        except (ValueError, TypeError):
+          value = str(value_val)  # 如果转换失败，保持字符串
+    else:
+      value = None
 
     metadata = row.get("metadata", {})
     if metadata is None:
@@ -114,21 +127,39 @@ class RecordRowData(BaseModel):
     end_date = self.end_date if self.end_date is not None else self.start_date
 
     if self.value is not None:
-      # 创建 QuantityRecord
-      from src.core.data_models import QuantityRecord
+      # 检查是否是分类记录（value为字符串）
+      if isinstance(self.value, str):
+        # 创建 CategoryRecord
+        from src.core.data_models import CategoryRecord
 
-      return QuantityRecord(
-        type=self.type,
-        source_name=self.source_name,
-        start_date=self.start_date,
-        end_date=end_date,  # 现在保证不为 None
-        creation_date=self.creation_date,
-        source_version=self.source_version,
-        device=self.device,
-        unit=self.unit,
-        value=self.value,
-        metadata=self.metadata,
-      )
+        return CategoryRecord(
+          type=self.type,
+          source_name=self.source_name,
+          start_date=self.start_date,
+          end_date=end_date,  # 现在保证不为 None
+          creation_date=self.creation_date,
+          source_version=self.source_version,
+          device=self.device,
+          unit=None,  # 分类记录没有单位
+          value=self.value,
+          metadata=self.metadata,
+        )
+      else:
+        # 创建 QuantityRecord（value为数字）
+        from src.core.data_models import QuantityRecord
+
+        return QuantityRecord(
+          type=self.type,
+          source_name=self.source_name,
+          start_date=self.start_date,
+          end_date=end_date,  # 现在保证不为 None
+          creation_date=self.creation_date,
+          source_version=self.source_version,
+          device=self.device,
+          unit=self.unit,
+          value=self.value,
+          metadata=self.metadata,
+        )
     else:
       # 创建基础 HealthRecord
       return HealthRecord(

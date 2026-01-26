@@ -195,57 +195,83 @@ class HeartRateRecord(QuantityRecord):
 class RestingHeartRateRecord(QuantityRecord):
   """Resting heart rate measurement record."""
 
-  def __init__(self, **data):
-    super().__init__(
-      type="HKQuantityTypeIdentifierRestingHeartRate", unit="count/min", **data
-    )
+  model_config = ConfigDict(
+    validate_assignment=True,
+  )
+
+  def model_post_init(self, __context):
+    """Set default values after model initialization."""
+    if not self.type:
+      self.type = "HKQuantityTypeIdentifierRestingHeartRate"
+    if not self.unit:
+      self.unit = "count/min"
 
 
 class HeartRateVariabilityRecord(QuantityRecord):
   """Heart rate variability measurement record."""
 
-  def __init__(self, **data):
-    super().__init__(
-      type="HKQuantityTypeIdentifierHeartRateVariabilitySDNN", unit="ms", **data
-    )
+  model_config = ConfigDict(
+    validate_assignment=True,
+  )
+
+  def model_post_init(self, __context):
+    """Set default values after model initialization."""
+    if not self.type:
+      self.type = "HKQuantityTypeIdentifierHeartRateVariabilitySDNN"
+    if not self.unit:
+      self.unit = "ms"
 
 
 class WalkingHeartRateAverageRecord(QuantityRecord):
   """Walking heart rate average measurement record."""
 
-  def __init__(self, **data):
-    super().__init__(
-      type="HKQuantityTypeIdentifierWalkingHeartRateAverage",
-      unit="count/min",
-      **data,
-    )
+  type: str = Field(
+    default="HKQuantityTypeIdentifierWalkingHeartRateAverage",
+    description="Record type"
+  )
+  unit: str | None = Field(
+    default="count/min",
+    description="Measurement unit"
+  )
 
 
 class VO2MaxRecord(QuantityRecord):
   """VO2 Max (cardio fitness) measurement record."""
 
-  def __init__(self, **data):
-    super().__init__(
-      type="HKQuantityTypeIdentifierVO2Max", unit="mL/minkg", **data
-    )
+  type: str = Field(
+    default="HKQuantityTypeIdentifierVO2Max",
+    description="Record type"
+  )
+  unit: str | None = Field(
+    default="mL/minkg",
+    description="Measurement unit"
+  )
 
 
 class StepCountRecord(QuantityRecord):
   """Step count measurement record."""
 
-  def __init__(self, **data):
-    super().__init__(
-      type="HKQuantityTypeIdentifierStepCount", unit="count", **data
-    )
+  type: str = Field(
+    default="HKQuantityTypeIdentifierStepCount",
+    description="Record type"
+  )
+  unit: str | None = Field(
+    default="count",
+    description="Measurement unit"
+  )
 
 
 class DistanceRecord(QuantityRecord):
   """Walking/running distance measurement record."""
 
-  def __init__(self, **data):
-    super().__init__(
-      type="HKQuantityTypeIdentifierDistanceWalkingRunning", unit="km", **data
-    )
+  type: str = Field(
+    default="HKQuantityTypeIdentifierDistanceWalkingRunning",
+    description="Record type"
+  )
+  unit: str | None = Field(
+    default="km",
+    description="Measurement unit"
+  )
 
 
 class SleepRecord(CategoryRecord):

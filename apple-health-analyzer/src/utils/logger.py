@@ -11,8 +11,12 @@ from types import FrameType
 from typing import Any
 
 from loguru import logger
+from rich.console import Console
 
 from src.config import get_config
+
+# Global console instance for progress display
+console = Console()
 
 
 def setup_logging() -> None:
@@ -225,6 +229,215 @@ class ProgressLogger:
         self.logger.info(
           f"{self.operation}: {self.processed} items at {rate:.0f} items/s"
         )
+
+
+class UnifiedProgress:
+  """Unified progress display system combining console status and detailed logging.
+
+  Features:
+  - Rich console progress bars with ETA
+  - Detailed logging for background monitoring
+  - Multi-step operation support
+  - Memory-efficient for large datasets
+  """
+
+  def __init__(
+    self,
+    operation: str,
+    total: int | None = None,
+    show_progress: bool = True,
+    log_interval: int = 1000,
+    console_update_interval: float = 0.1,
+    quiet: bool = False,
+  ):
+    """
+    Initialize unified progress display.
+
+    Args:
+        operation: Name of the operation being performed
+        total: Total number of items to process (None for unknown)
+        show_progress: Whether to show console progress bar
+        log_interval: How often to log progress (in items)
+        console_update_interval: How often to update console progress (in seconds)
+    """
+    self.operation = operation
+    self.total = total
+    self.show_progress = show_progress
+    self.log_interval = log_interval
+    self.console_update_interval = console_update_interval
+    self.quiet = quiet
+
+    self.start_time = None
+    self.processed = 0
+    self.current_step = ""
+    self.step_start_time = None
+
+    self.logger = get_logger(__name__)
+
+    # Import here to avoid circular imports
+    from rich.progress import (
+      BarColumn,
+      Progress,
+      SpinnerColumn,
+      TaskProgressColumn,
+      TextColumn,
+      TimeRemainingColumn,
+    )
+
+    if show_progress:
+      if self.total is None:
+        # For unknown total, use spinner without progress bar
+        self.progress = Progress(
+          SpinnerColumn(),
+          TextColumn("[bold blue]{task.description}"),
+          TextColumn("[dim]{task.fields[details]}"),
+          console=console,
+          refresh_per_second=10,
+        )
+      else:
+        # For known total, use full progress bar
+        self.progress = Progress(
+          SpinnerColumn(),
+          TextColumn("[bold blue]{task.description}"),
+          BarColumn(),
+          TaskProgressColumn(),
+          TextColumn("•"),
+          TimeRemainingColumn(),
+          TextColumn("[dim]{task.fields[details]}"),
+          console=console,
+          refresh_per_second=10,
+        )
+    else:
+      self.progress = None
+
+    self.task_id = None
+
+  def __enter__(self):
+    self.start_time = time.time()
+    if not self.quiet:
+      self.logger.info(f"Starting {self.operation}")
+
+    if self.progress:
+      self.progress.__enter__()
+      self.task_id = self.progress.add_task(
+        self.operation, total=self.total, details="Initializing..."
+      )
+
+    return self
+
+  def __exit__(
+    self,
+    exc_type: type[BaseException] | None,
+    exc_val: BaseException | None,
+    exc_tb: FrameType | None,
+  ) -> bool | None:
+    end_time = time.time()
+    duration = end_time - (self.start_time or 0)
+
+    if exc_type is None:
+      if not self.quiet:
+        if self.total:
+          self.logger.info(
+            f"Completed {self.operation}: {self.processed}/{self.total} items in {duration:.1f}s"
+          )
+        else:
+          self.logger.info(
+            f"Completed {self.operation}: {self.processed} items in {duration:.1f}s"
+          )
+
+      if self.progress and self.task_id is not None:
+        self.progress.update(
+          self.task_id,
+          completed=self.total or self.processed,
+          details="✓ Completed",
+        )
+        self.progress.__exit__(None, None, None)
+
+    else:
+      if not self.quiet:
+        self.logger.error(
+          f"Failed {self.operation} after {duration:.1f}s: {exc_val}"
+        )
+
+      if self.progress and self.task_id is not None:
+        self.progress.update(self.task_id, details=f"❌ Failed: {exc_val}")
+        self.progress.__exit__(None, None, None)
+
+      # Re-raise the exception so calling code can handle it
+      return False
+
+  def update(
+    self, count: int = 1, details: str | None = None, step: str | None = None
+  ) -> None:
+    """Update progress counter and display information."""
+    self.processed += count
+
+    # Update step information
+    if step:
+      self.current_step = step
+      self.step_start_time = time.time()
+      if not self.quiet:
+        self.logger.info(f"Step: {step}")
+
+    # Update console progress
+    if self.progress and self.task_id is not None:
+      display_details = details or self.current_step or "Processing..."
+      self.progress.update(
+        self.task_id, completed=self.processed, details=display_details
+      )
+
+    # Log progress at intervals
+    if (
+      not self.quiet
+      and self.log_interval > 0
+      and self.processed % self.log_interval == 0
+    ):
+      elapsed = time.time() - (self.start_time or 0)
+      rate = self.processed / elapsed if elapsed > 0 else 0
+
+      if self.total:
+        percent = (self.processed / self.total) * 100
+        eta = (self.total - self.processed) / rate if rate > 0 else 0
+        self.logger.info(
+          f"{self.operation}: {self.processed}/{self.total} ({percent:.1f}%) at {rate:.0f} items/s, ETA: {eta:.0f}s"
+        )
+      else:
+        self.logger.info(
+          f"{self.operation}: {self.processed} items at {rate:.0f} items/s"
+        )
+
+  def set_step(self, step: str, details: str | None = None) -> None:
+    """Set current operation step."""
+    self.current_step = step
+    self.step_start_time = time.time()
+    if not self.quiet:
+      self.logger.info(f"Step: {step}")
+
+    if self.progress and self.task_id is not None:
+      display_details = details or f"Step: {step}"
+      self.progress.update(self.task_id, details=display_details)
+
+  def get_stats(self) -> dict[str, Any]:
+    """Get current progress statistics."""
+    elapsed = time.time() - (self.start_time or 0)
+    rate = self.processed / elapsed if elapsed > 0 else 0
+
+    stats = {
+      "operation": self.operation,
+      "processed": self.processed,
+      "total": self.total,
+      "elapsed_seconds": elapsed,
+      "rate_per_second": rate,
+      "current_step": self.current_step,
+    }
+
+    if self.total:
+      stats["percent_complete"] = (self.processed / self.total) * 100
+      stats["eta_seconds"] = (
+        (self.total - self.processed) / rate if rate > 0 else 0
+      )
+
+    return stats
 
 
 # Initialize logging on import

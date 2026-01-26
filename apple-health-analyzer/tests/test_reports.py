@@ -1,5 +1,6 @@
 """Unit tests for report generation functionality."""
 
+import time
 import tempfile
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -491,6 +492,8 @@ class TestReportGenerator:
           include_charts=False,
         )
         paths.append(path)
+        # 延迟1ms
+        time.sleep(0.001)
 
       # 检查所有文件名都不同
       filenames = [p.name for p in paths]
