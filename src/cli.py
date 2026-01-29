@@ -523,37 +523,43 @@ cli.add_command(visualize_command, name="visualize")
   type=click.Path(),
   help="Output directory for benchmark results",
 )
-def benchmark(xml_path: str, output: str | None):
+@click.option(
+  "--timeout",
+  type=int,
+  default=30,
+  help="Timeout in seconds for each test module (default: 30)",
+)
+def benchmark(xml_path: str, output: str | None, timeout: int):
   """Run performance benchmark tests on Apple Health data processing.
 
   XML_PATH: Path to the export.xml file
 
   Examples:\n
-      # Run benchmark with default output directory\n
+      # Run benchmark with default settings (30s timeout)\n
       uv run python main.py benchmark export.xml
 
       # Run benchmark with custom output directory\n
       uv run python main.py benchmark export.xml --output ./benchmark_results
+
+      # Run benchmark with longer timeout\n
+      uv run python main.py benchmark export.xml --timeout 60
   """
   try:
-    from src.benchmark import run_benchmark
+    from src.processors.benchmark import run_benchmark
 
     xml_file = Path(xml_path)
-    output_dir = output
+    output_dir = Path(output) if output else get_config().output_dir
 
     console.print(
       f"[bold blue]Running performance benchmark on:[/bold blue] {xml_file}"
     )
-
-    if output_dir:
-      console.print(f"[bold blue]Output directory:[/bold blue] {output_dir}")
+    console.print(f"[bold blue]Output directory:[/bold blue] {output_dir}")
+    console.print(
+      f"[bold blue]Timeout per module:[/bold blue] {timeout} seconds"
+    )
 
     # Run benchmark
-    run_benchmark(str(xml_file), output_dir)
-
-    console.print(
-      "\n[bold green]✓ Benchmark completed successfully![/bold green]"
-    )
+    run_benchmark(str(xml_file), str(output_dir), timeout=timeout)
 
   except Exception as e:
     logger.error(f"Benchmark failed: {e}")

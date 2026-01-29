@@ -182,11 +182,14 @@ uv run python main.py visualize export_data/export.xml --static
 ### 性能基准测试
 
 ```bash
-# 运行完整性能基准测试
+# 运行快速性能基准测试
 uv run python main.py benchmark export_data/export.xml
 
 # 指定输出目录保存测试结果
 uv run python main.py benchmark export_data/export.xml --output ./benchmark_results
+
+# 自定义超时时间（秒）
+uv run python main.py benchmark export_data/export.xml --timeout 60
 ```
 
 ## 配置
