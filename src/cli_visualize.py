@@ -51,14 +51,14 @@ def report(
 
   Combines data analysis and visualization to generate reports with complete analysis results, charts, and health insights.
 
-  Examples:
-      # Generate HTML report
+  Examples:\n
+      # Generate HTML report\n
       health-analyzer report export.xml --age 30 --gender male
 
-      # Generate Markdown report
+      # Generate Markdown report\n
       health-analyzer report export.xml --format markdown
 
-      # Generate both HTML and Markdown formats
+      # Generate both HTML and Markdown formats\n
       health-analyzer report export.xml --format both --age 30 --gender male
   """
   try:
@@ -236,14 +236,14 @@ def visualize(
 
   Supports generating various heart rate and sleep-related visualization charts.
 
-  Examples:
-      # Generate all charts
+  Examples:\n
+      # Generate all charts\n
       health-analyzer visualize export.xml
 
-      # Generate specific charts
+      # Generate specific charts\n
       health-analyzer visualize export.xml -c heart_rate_timeseries -c sleep_quality_trend
 
-      # Generate static PNG charts
+      # Generate static PNG charts\n
       health-analyzer visualize export.xml --static
   """
   try:

@@ -16,7 +16,7 @@ Apple Health 数据分析工具
 
 ```bash
 # 克隆项目
-git clone <your-repository-url>
+git clone https://github.com/tagbug/apple-health-analyzer.git
 cd apple-health-analyzer
 
 # 安装依赖
@@ -43,13 +43,13 @@ pip install -e .
 2. **访问个人资料**: 点击右上角头像 → 「导出健康数据」
 3. **选择数据范围**: 建议选择「所有数据」（可能需要几分钟）
 4. **等待导出**: 系统会生成包含所有健康数据的 ZIP 文件
-5. **传输文件**: 将导出的 `export.xml` 文件复制到项目目录
+5. **传输文件**: 将导出的 `export.xml` 文件复制到项目目录 (如 `export_data`)
 
 ### 快速上手
 
 ```bash
 # 1. 克隆并安装
-git clone <your-repository-url>
+git clone https://github.com/tagbug/apple-health-analyzer.git
 cd apple-health-analyzer
 uv sync
 
@@ -111,6 +111,7 @@ Commands:
   analyze    分析心率和睡眠数据
   report     生成综合健康分析报告
   visualize  生成可视化图表
+  benchmark  运行性能基准测试
 ```
 
 ### 解析数据
@@ -176,6 +177,16 @@ uv run python main.py visualize export_data/export.xml -c heart_rate_timeseries 
 
 # 生成静态PNG图表
 uv run python main.py visualize export_data/export.xml --static
+```
+
+### 性能基准测试
+
+```bash
+# 运行完整性能基准测试
+uv run python main.py benchmark export_data/export.xml
+
+# 指定输出目录保存测试结果
+uv run python main.py benchmark export_data/export.xml --output ./benchmark_results
 ```
 
 ## 配置

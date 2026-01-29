@@ -66,14 +66,14 @@ def parse(xml_path: str, output: str | None, types: list[str], preview: bool):
 
   XML_PATH: Path to the export.xml file
 
-  Examples:
-      # Parse all records and save to default output directory
+  Examples:\n
+      # Parse all records and save to default output directory\n
       uv run python main.py parse export.xml --output ./parsed_data
 
-      # Parse only heart rate data with preview
+      # Parse only heart rate data with preview\n
       uv run python main.py parse export.xml --types HeartRate --preview
 
-      # Parse specific record types
+      # Parse specific record types\n
       uv run python main.py parse export.xml --types HeartRate --types Sleep
   """
   try:
@@ -378,17 +378,17 @@ def export(
 
   XML_PATH: Path to the export.xml file
 
-  Examples:
-      # Export all data to both CSV and JSON (with data cleaning)
+  Examples:\n
+      # Export all data to both CSV and JSON (with data cleaning)\n
       uv run python main.py export export.xml
 
-      # Export only heart rate data to CSV
+      # Export only heart rate data to CSV\n
       uv run python main.py export export.xml --format csv --types HeartRate
 
-      # Export specific record types to custom output directory
+      # Export specific record types to custom output directory\n
       uv run python main.py export export.xml --output ./my_exports --types HeartRate --types Sleep
 
-      # Export without data cleaning (raw data)
+      # Export without data cleaning (raw data)\n
       uv run python main.py export export.xml --no-clean
   """
   try:
@@ -521,6 +521,52 @@ cli.add_command(visualize_command, name="visualize")
   "--output",
   "-o",
   type=click.Path(),
+  help="Output directory for benchmark results",
+)
+def benchmark(xml_path: str, output: str | None):
+  """Run performance benchmark tests on Apple Health data processing.
+
+  XML_PATH: Path to the export.xml file
+
+  Examples:\n
+      # Run benchmark with default output directory\n
+      uv run python main.py benchmark export.xml
+
+      # Run benchmark with custom output directory\n
+      uv run python main.py benchmark export.xml --output ./benchmark_results
+  """
+  try:
+    from src.benchmark import run_benchmark
+
+    xml_file = Path(xml_path)
+    output_dir = output
+
+    console.print(
+      f"[bold blue]Running performance benchmark on:[/bold blue] {xml_file}"
+    )
+
+    if output_dir:
+      console.print(f"[bold blue]Output directory:[/bold blue] {output_dir}")
+
+    # Run benchmark
+    run_benchmark(str(xml_file), output_dir)
+
+    console.print(
+      "\n[bold green]✓ Benchmark completed successfully![/bold green]"
+    )
+
+  except Exception as e:
+    logger.error(f"Benchmark failed: {e}")
+    console.print(f"[bold red]Error:[/bold red] {e}")
+    sys.exit(1)
+
+
+@cli.command()
+@click.argument("xml_path", type=click.Path(exists=True))
+@click.option(
+  "--output",
+  "-o",
+  type=click.Path(),
   help="Output directory for analysis results",
 )
 @click.option(
@@ -571,17 +617,17 @@ def analyze(
 
   XML_PATH: Path to the export.xml file
 
-  Examples:
-      # Basic analysis with age and gender for cardio fitness
+  Examples:\n
+      # Basic analysis with age and gender for cardio fitness\n
       uv run python main.py analyze export.xml --age 30 --gender male
 
-      # Analyze specific data types
+      # Analyze specific data types\n
       uv run python main.py analyze export.xml --types heart_rate --types sleep
 
-      # Analyze specific date range
+      # Analyze specific date range\n
       uv run python main.py analyze export.xml --date-range 2024-01-01:2024-12-31
 
-      # Analysis with custom output directory
+      # Analysis with custom output directory\n
       uv run python main.py analyze export.xml --output ./analysis_results
   """
   try:
