@@ -155,3 +155,6 @@ Thumbs.db
 *.tmp
 *.temp
 .ruff_cache/
+
+# apple health export data
+export_data/
