@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal, TypedDict
+from typing import Literal, Sequence, TypedDict
 
 import numpy as np
 import pandas as pd
@@ -87,7 +87,7 @@ class AnomalyDetector:
 
   def detect_anomalies(
     self,
-    records: list[HealthRecord],
+    records: Sequence[HealthRecord],
     methods: list[Literal["zscore", "iqr", "moving_average", "contextual"]]
     | None = None,
     context: Literal[
@@ -153,7 +153,7 @@ class AnomalyDetector:
     return unique_anomalies
 
   def generate_report(
-    self, anomalies: list[AnomalyRecord], total_records: int
+    self, anomalies: Sequence[AnomalyRecord], total_records: int
   ) -> AnomalyReport:
     """生成异常检测报告
 
@@ -511,7 +511,7 @@ class AnomalyDetector:
       return "low"
 
   def _deduplicate_anomalies(
-    self, anomalies: list[AnomalyRecord]
+    self, anomalies: Sequence[AnomalyRecord]
   ) -> list[AnomalyRecord]:
     """去重异常记录，保留最严重的"""
     if not anomalies:
@@ -537,7 +537,7 @@ class AnomalyDetector:
     return unique_anomalies
 
   def _analyze_time_distribution(
-    self, anomalies: list[AnomalyRecord]
+    self, anomalies: Sequence[AnomalyRecord]
   ) -> dict[str, dict[str, int]]:
     """分析异常的时间分布"""
     if not anomalies:
@@ -581,7 +581,7 @@ class AnomalyDetector:
     return distribution
 
   def _generate_recommendations(
-    self, anomalies: list[AnomalyRecord], anomaly_rate: float
+    self, anomalies: Sequence[AnomalyRecord], anomaly_rate: float
   ) -> list[str]:
     """生成异常检测建议"""
     recommendations = []
@@ -609,7 +609,9 @@ class AnomalyDetector:
 
     return recommendations
 
-  def _records_to_dataframe(self, records: list[HealthRecord]) -> pd.DataFrame:
+  def _records_to_dataframe(
+    self, records: Sequence[HealthRecord]
+  ) -> pd.DataFrame:
     """将健康记录转换为DataFrame"""
     data = []
     for record in records:

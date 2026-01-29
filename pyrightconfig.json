@@ -56,9 +56,15 @@
   "pythonPlatform": "Windows",
   "executionEnvironments": [
     {
-      "root": ".",
+      "root": "src",
       "pythonVersion": "3.12",
       "pythonPlatform": "Windows"
+    },
+    {
+      "root": "tests",
+      "pythonVersion": "3.12",
+      "pythonPlatform": "Windows",
+      "reportPrivateUsage": "none"
     }
   ]
 }

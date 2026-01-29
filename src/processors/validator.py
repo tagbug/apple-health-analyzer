@@ -6,7 +6,7 @@ data consistency validation, and quality scoring.
 
 from collections import defaultdict
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, Sequence
 
 import numpy as np
 
@@ -155,7 +155,7 @@ class DataValidator:
 
   def validate_records_comprehensive(
     self,
-    records: list[AnyRecord],
+    records: Sequence[AnyRecord],
     enable_outlier_detection: bool = True,
     enable_consistency_checks: bool = True,
   ) -> ValidationResult:
@@ -318,8 +318,8 @@ class DataValidator:
     record_type = record.record_type
 
     # Validate category values are reasonable strings
-    if not record.value or not isinstance(record.value, str):
-      result.add_error("Invalid or missing category value", record_type)
+    if not isinstance(record.value, str):
+      result.add_error("Invalid category value type", record_type)
     elif len(record.value.strip()) == 0:
       result.add_error("Empty category value", record_type)
 
@@ -428,7 +428,7 @@ class DataValidator:
       result.add_warning("Unusually high stand goal", "activity_summary")
 
   def _detect_outliers(
-    self, records: list[AnyRecord], result: ValidationResult
+    self, records: Sequence[AnyRecord], result: ValidationResult
   ) -> None:
     """Detect outliers in a list of records of the same type."""
     if len(records) < self.outlier_params["min_samples_for_stats"]:
@@ -491,11 +491,11 @@ class DataValidator:
       result.add_outlier(
         record,  # Type checker knows this is MeasurableRecord
         f"Outlier value {value:.2f} {record.measurement_unit} (z-score: {z_score:.2f})",
-        severity
+        severity,
       )
 
   def _perform_consistency_checks(
-    self, records: list[AnyRecord], result: ValidationResult
+    self, records: Sequence[AnyRecord], result: ValidationResult
   ) -> None:
     """Perform consistency checks across records."""
     # Check for duplicate timestamps within same source
@@ -551,7 +551,7 @@ class DataValidator:
         )
 
   def _validate_cross_record_consistency(
-    self, records: list[AnyRecord], result: ValidationResult
+    self, records: Sequence[AnyRecord], result: ValidationResult
   ) -> None:
     """Validate consistency between different types of records."""
     # Group records by date for cross-validation
@@ -566,18 +566,27 @@ class DataValidator:
     # Check for logical consistency between heart rate and workouts
     for _date, date_records in records_by_date.items():
       heart_rates = date_records.get("HKQuantityTypeIdentifierHeartRate", [])
-      workouts = date_records.get("Workout", [])
+      # Check for any workout records (they have "Workout:" prefix)
+      workouts = []
+      for record_type, records_list in date_records.items():
+        if record_type.startswith("Workout:"):
+          workouts.extend(records_list)
 
       if heart_rates and workouts:
         # Check if heart rate during workouts is reasonable
         hr_values = [
           getattr(r, "value", None)
           for r in heart_rates
-          if hasattr(r, "value") and isinstance(getattr(r, "value", None), (int, float))
+          if hasattr(r, "value")
+          and isinstance(getattr(r, "value", None), (int, float))
         ]
         if hr_values:
           # Filter out None values and ensure we have valid numbers
-          valid_hr_values = [v for v in hr_values if v is not None and isinstance(v, (int, float))]
+          valid_hr_values = [
+            v
+            for v in hr_values
+            if v is not None and isinstance(v, (int, float))
+          ]
           if valid_hr_values:
             max_hr = max(valid_hr_values)
             if max_hr > 0 and max_hr < 120:
@@ -588,7 +597,7 @@ class DataValidator:
 
 
 def validate_health_data(
-  records: list[AnyRecord],
+  records: Sequence[AnyRecord],
   enable_outlier_detection: bool = True,
   enable_consistency_checks: bool = True,
 ) -> ValidationResult:

@@ -10,7 +10,7 @@ from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, Sequence
 
 import numpy as np
 import pandas as pd
@@ -58,7 +58,9 @@ class OptimizedDataFrame:
     )
 
   @classmethod
-  def from_records(cls, records: list[HealthRecord]) -> "OptimizedDataFrame":
+  def from_records(
+    cls, records: Sequence[HealthRecord]
+  ) -> "OptimizedDataFrame":
     """Create OptimizedDataFrame from health records."""
     if not records:
       # Return empty arrays
@@ -86,8 +88,22 @@ class OptimizedDataFrame:
       units[i] = getattr(record, "unit", "Unknown")
 
       # Extract value based on record type
-      if hasattr(record, "value") and getattr(record, "value", None) is not None:
-        values[i] = float(record.value)  # type: ignore
+      if (
+        hasattr(record, "value") and getattr(record, "value", None) is not None
+      ):
+        # Handle different value types
+        value = record.value
+        if isinstance(value, (int, float)):
+          values[i] = float(value)
+        elif isinstance(value, str):
+          # For categorical values, store as NaN and handle separately
+          values[i] = np.nan
+        else:
+          # Try to convert to float, fallback to NaN
+          try:
+            values[i] = float(value)
+          except (ValueError, TypeError):
+            values[i] = np.nan
       else:
         values[i] = np.nan
 
@@ -108,8 +124,8 @@ class ParallelProcessor:
 
   def process_records_parallel(
     self,
-    records: list[HealthRecord],
-    process_func: Callable[[list[HealthRecord]], Any],
+    records: Sequence[HealthRecord],
+    process_func: Callable[[Sequence[HealthRecord]], Any],
     chunk_size: int = 10000,
   ) -> list[Any]:
     """Process records in parallel chunks.
@@ -318,7 +334,10 @@ class MemoryOptimizer:
     return optimized_df
 
   def chunked_processing(
-    self, data: list[Any], process_func: Callable[[list[Any]], Any], chunk_size: int = 50000
+    self,
+    data: list[Any],
+    process_func: Callable[[list[Any]], Any],
+    chunk_size: int = 50000,
   ) -> list[Any]:
     """Process large datasets in chunks to manage memory.
 
@@ -421,7 +440,7 @@ class PerformanceMonitor:
 
 # Convenience functions for easy access
 def create_optimized_dataframe(
-  records: list[HealthRecord],
+  records: Sequence[HealthRecord],
 ) -> OptimizedDataFrame:
   """Create an optimized DataFrame from health records.
 
@@ -435,7 +454,7 @@ def create_optimized_dataframe(
 
 
 def aggregate_health_data_parallel(
-  records: list[HealthRecord],
+  records: Sequence[HealthRecord],
   window: str = "1D",
   max_workers: int | None = None,
 ) -> pd.DataFrame:

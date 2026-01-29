@@ -45,6 +45,18 @@ pip install -e .
 4. **等待导出**: 系统会生成包含所有健康数据的 ZIP 文件
 5. **传输文件**: 将导出的 `export.xml` 文件复制到项目目录 (如 `export_data`)
 
+### 生成测试数据
+
+项目提供了便捷的测试数据生成工具，无需真实数据即可体验功能：
+
+```bash
+# 生成测试用的示例数据（约2000条记录，包含所有44种数据类型）
+python example/create_example_xml.py --count 2000
+
+# 每次运行都会生成不同的采样数据
+python example/create_example_xml.py --count 5000 --seed 12345
+```
+
 ### 快速上手
 
 ```bash
@@ -58,14 +70,17 @@ source .venv/bin/activate  # Linux/Mac
 # 或
 .venv\Scripts\activate     # Windows
 
-# 3. 查看数据概览
-uv run python main.py info export_data/export.xml
+# 3. 生成测试数据（可选）
+python example/create_example_xml.py
 
-# 4. 生成完整分析报告
-uv run python main.py report export_data/export.xml --age 30 --gender male
+# 4. 查看数据概览
+uv run python main.py info example/example.xml
 
-# 5. 生成可视化图表
-uv run python main.py visualize export_data/export.xml -c all --interactive
+# 5. 生成完整分析报告
+uv run python main.py report example/example.xml --age 30 --gender male
+
+# 6. 生成可视化图表
+uv run python main.py visualize example/example.xml -c all --interactive
 ```
 
 ### 典型使用场景

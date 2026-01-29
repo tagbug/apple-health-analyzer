@@ -6,7 +6,7 @@ including sleep quality analysis, activity patterns, and health correlations.
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Union
+from typing import Any, Mapping, Sequence, Union
 
 import numpy as np
 
@@ -18,7 +18,6 @@ from ..processors.optimized_processor import (
   StatisticalAggregator,
 )
 from ..utils.logger import get_logger
-from ..utils.type_conversion import safe_float
 
 logger = get_logger(__name__)
 
@@ -124,7 +123,7 @@ class ExtendedHealthAnalyzer:
 
   def analyze_comprehensive_health(
     self,
-    all_records: list[HealthRecord],
+    all_records: Sequence[HealthRecord],
     age: int | None = None,
     gender: str | None = None,
     weight_kg: float | None = None,
@@ -227,7 +226,7 @@ class ExtendedHealthAnalyzer:
     return report
 
   def _categorize_records(
-    self, records: list[HealthRecord]
+    self, records: Sequence[HealthRecord]
   ) -> dict[str, list[HealthRecord]]:
     """Categorize records by health metric type for efficient processing."""
     categories = {
@@ -257,7 +256,7 @@ class ExtendedHealthAnalyzer:
       # Body metrics
       elif any(
         keyword in record_type
-        for keyword in ["weight", "bodyfat", "musclemass", "bmi"]
+        for keyword in ["weight", "bodyfat", "musclemass", "bmi", "bodymass"]
       ):
         categories["body_metrics"].append(record)
       # Nutrition records
@@ -274,7 +273,7 @@ class ExtendedHealthAnalyzer:
     return categories
 
   def _analyze_sleep_quality(
-    self, sleep_records: list[HealthRecord]
+    self, sleep_records: Sequence[HealthRecord]
   ) -> SleepQualityAnalysis | None:
     """Analyze comprehensive sleep quality metrics."""
     if not sleep_records:
@@ -351,7 +350,7 @@ class ExtendedHealthAnalyzer:
     )
 
   def _analyze_activity_patterns(
-    self, activity_records: list[HealthRecord]
+    self, activity_records: Sequence[HealthRecord]
   ) -> ActivityPatternAnalysis | None:
     """Analyze activity patterns and exercise habits."""
     if not activity_records:
@@ -404,7 +403,7 @@ class ExtendedHealthAnalyzer:
 
   def _analyze_metabolic_health(
     self,
-    categorized_records: dict[str, list[HealthRecord]],
+    categorized_records: Mapping[str, Sequence[HealthRecord]],
     age: int | None,
     gender: str | None,
     weight_kg: float | None,
@@ -467,7 +466,7 @@ class ExtendedHealthAnalyzer:
     )
 
   def _analyze_stress_resilience(
-    self, categorized_records: dict[str, list[HealthRecord]]
+    self, categorized_records: Mapping[str, Sequence[HealthRecord]]
   ) -> StressResilienceAnalysis | None:
     """Analyze stress resilience and recovery capacity."""
     heart_rate_records = categorized_records.get("heart_rate", [])
@@ -505,7 +504,7 @@ class ExtendedHealthAnalyzer:
     )
 
   def _analyze_health_correlations(
-    self, categorized_records: dict[str, list[HealthRecord]]
+    self, categorized_records: Mapping[str, Sequence[HealthRecord]]
   ) -> dict[str, Any]:
     """Analyze correlations between different health metrics."""
     correlations = {}
@@ -596,7 +595,7 @@ class ExtendedHealthAnalyzer:
       stress_score = 1.0 - stress_resilience.stress_accumulation_score
       scores.append(stress_score)
 
-    return round(np.mean(scores), 2) if scores else 0.5 # type: ignore
+    return round(np.mean(scores), 2) if scores else 0.5  # type: ignore
 
   def _determine_wellness_trend(
     self, categorized_records: dict[str, list[HealthRecord]]
@@ -643,7 +642,7 @@ class ExtendedHealthAnalyzer:
     return optimizations
 
   def _assess_data_completeness(
-    self, categorized_records: dict[str, list[HealthRecord]]
+    self, categorized_records: Mapping[str, Sequence[HealthRecord]]
   ) -> Any:  # type: ignore
     """Assess data completeness across different health categories."""
     categories = [
@@ -677,7 +676,7 @@ class ExtendedHealthAnalyzer:
     return round(data_completeness * 0.9 + 0.1, 2)  # Min confidence of 0.1
 
   def _calculate_data_range(
-    self, records: list[HealthRecord]
+    self, records: Sequence[HealthRecord]
   ) -> tuple[datetime, datetime]:
     """Calculate the date range of health records."""
     if not records:
