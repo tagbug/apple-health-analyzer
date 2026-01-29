@@ -6,7 +6,7 @@ with support for categorized exports and manifest generation.
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 import pandas as pd
 
@@ -73,7 +73,9 @@ class DataExporter:
     self.output_dir.mkdir(parents=True, exist_ok=True)
     self.manifest = ExportManifest(self.output_dir)
 
-  def export_to_csv(self, records: list[AnyRecord], output_path: Path) -> int:
+  def export_to_csv(
+    self, records: Sequence[AnyRecord], output_path: Path
+  ) -> int:
     """Export records to CSV format.
 
     Args:
@@ -104,7 +106,9 @@ class DataExporter:
     logger.info(f"Exported {record_count} records to CSV: {output_path}")
     return record_count
 
-  def export_to_json(self, records: list[AnyRecord], output_path: Path) -> int:
+  def export_to_json(
+    self, records: Sequence[AnyRecord], output_path: Path
+  ) -> int:
     """Export records to JSON format.
 
     Args:
@@ -238,7 +242,7 @@ class DataExporter:
 
     return export_stats
 
-  def _records_to_dataframe(self, records: list[AnyRecord]) -> pd.DataFrame:
+  def _records_to_dataframe(self, records: Sequence[AnyRecord]) -> pd.DataFrame:
     """Convert records to pandas DataFrame.
 
     Args:

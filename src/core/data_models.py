@@ -227,38 +227,27 @@ class WalkingHeartRateAverageRecord(QuantityRecord):
 
   type: str = Field(
     default="HKQuantityTypeIdentifierWalkingHeartRateAverage",
-    description="Record type"
+    description="Record type",
   )
-  unit: str | None = Field(
-    default="count/min",
-    description="Measurement unit"
-  )
+  unit: str | None = Field(default="count/min", description="Measurement unit")
 
 
 class VO2MaxRecord(QuantityRecord):
   """VO2 Max (cardio fitness) measurement record."""
 
   type: str = Field(
-    default="HKQuantityTypeIdentifierVO2Max",
-    description="Record type"
+    default="HKQuantityTypeIdentifierVO2Max", description="Record type"
   )
-  unit: str | None = Field(
-    default="mL/minkg",
-    description="Measurement unit"
-  )
+  unit: str | None = Field(default="mL/minkg", description="Measurement unit")
 
 
 class StepCountRecord(QuantityRecord):
   """Step count measurement record."""
 
   type: str = Field(
-    default="HKQuantityTypeIdentifierStepCount",
-    description="Record type"
+    default="HKQuantityTypeIdentifierStepCount", description="Record type"
   )
-  unit: str | None = Field(
-    default="count",
-    description="Measurement unit"
-  )
+  unit: str | None = Field(default="count", description="Measurement unit")
 
 
 class DistanceRecord(QuantityRecord):
@@ -266,12 +255,9 @@ class DistanceRecord(QuantityRecord):
 
   type: str = Field(
     default="HKQuantityTypeIdentifierDistanceWalkingRunning",
-    description="Record type"
+    description="Record type",
   )
-  unit: str | None = Field(
-    default="km",
-    description="Measurement unit"
-  )
+  unit: str | None = Field(default="km", description="Measurement unit")
 
 
 class SleepRecord(CategoryRecord):
@@ -438,6 +424,7 @@ AnyRecord = (
   | SleepRecord
   | WorkoutRecord
   | ActivitySummaryRecord
+  | HealthRecord
 )
 
 # Record type mapping for parsing
