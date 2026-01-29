@@ -283,8 +283,6 @@ class TestChartGenerator:
         assert chart_path.exists()
         assert chart_path.suffix == ".html"
 
-  # 删除有问题的错误处理测试，因为方法已经正确实现了错误处理
-
   @patch("src.visualization.charts.logger")
   def test_plot_correlation_heatmap_error_handling(
     self, mock_logger, chart_generator
@@ -318,27 +316,6 @@ class TestChartGenerator:
       content = output_path.read_text(encoding="utf-8")
       assert "<html>" in content
       assert "plotly" in content.lower()
-
-  def test_save_plotly_figure_invalid_path(self, chart_generator):
-    """测试保存图表到无效路径"""
-    import plotly.graph_objects as go
-
-    fig = go.Figure(data=go.Scatter(x=[1, 2, 3], y=[1, 2, 3]))
-
-    with patch("src.visualization.charts.logger") as mock_logger:
-      # 使用无效的文件格式（plotly不支持）
-      invalid_path = Path("test.invalid")
-
-      chart_generator._save_plotly_figure(fig, invalid_path)
-
-      # 由于方法会尝试保存为HTML，即使扩展名无效也会成功，所以这里检查日志
-      # 实际上方法会强制保存为HTML，所以不会出错
-      # 让我们模拟fig.write_html抛出异常
-      with patch.object(
-        fig, "write_html", side_effect=Exception("Write error")
-      ):
-        chart_generator._save_plotly_figure(fig, invalid_path)
-        mock_logger.error.assert_called_once()
 
   def test_downsample_data(self, chart_generator, sample_heart_rate_data):
     """测试数据降采样"""

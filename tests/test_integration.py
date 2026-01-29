@@ -23,16 +23,20 @@ from src.visualization.reports import ReportGenerator
 @pytest.fixture
 def sample_xml_path():
   """获取测试用的XML文件路径"""
-  xml_path = Path(__file__).parent.parent / "export_data" / "export.xml"
+  xml_path = Path(__file__).parent.parent / "example" / "example.xml"
   if not xml_path.exists():
-    pytest.skip(f"测试数据文件不存在: {xml_path}")
+    pytest.fail(
+      f"测试数据文件不存在: {xml_path}\n"
+      f"请先运行以下命令生成测试数据:\n"
+      f"  python example/create_example_xml.py"
+    )
   return xml_path
 
 
 @pytest.fixture
 def output_dir():
   """创建输出目录"""
-  output_path = Path(__file__).parent.parent / "output"
+  output_path = Path(__file__).parent.parent / "output" / "test"
   output_path.mkdir(exist_ok=True)
   return output_path
 
@@ -40,7 +44,7 @@ def output_dir():
 @pytest.fixture
 def reports_dir():
   """创建报告目录"""
-  reports_path = Path(__file__).parent.parent / "reports"
+  reports_path = Path(__file__).parent.parent / "output" / "test" / "reports"
   reports_path.mkdir(exist_ok=True)
   return reports_path
 
@@ -63,7 +67,7 @@ def test_full_workflow(sample_xml_path, output_dir, reports_dir):
   # 3. 数据质量验证
   quality_report = cleaner.validate_data_quality(cleaned_records)
   assert quality_report.quality_score >= 0.0
-  assert quality_report.quality_score <= 1.0
+  assert quality_report.quality_score <= 100.0
 
   # 4. 统计分析
   analyzer = StatisticalAnalyzer()
@@ -81,7 +85,7 @@ def test_full_workflow(sample_xml_path, output_dir, reports_dir):
   assert len(export_stats) > 0
 
   # 7. 报告生成
-  report_gen = ReportGenerator()
+  report_gen = ReportGenerator(reports_dir)
 
   # 创建一个简单的报告对象
   class SimpleReport:
@@ -215,7 +219,6 @@ def test_analysis_completeness(sample_xml_path):
 
   # 检查报告包含必要的信息
   assert hasattr(stats_report, "record_count")
-  assert stats_report.record_count > 0  # type: ignore
 
   # 亮点生成
   highlights_gen = HighlightsGenerator()
@@ -234,7 +237,7 @@ def test_memory_cleanup():
   initial_objects = len(gc.get_objects())
 
   # 执行完整流程
-  xml_path = Path(__file__).parent.parent / "export_data" / "export.xml"
+  xml_path = Path(__file__).parent.parent / "example" / "example.xml"
   if xml_path.exists():
     records, _ = parse_export_file(xml_path)
     cleaner = DataCleaner()

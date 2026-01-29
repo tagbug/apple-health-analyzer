@@ -26,7 +26,9 @@ class ReportGenerator:
     Args:
         output_dir: Report output directory
     """
-    self.output_dir = Path(output_dir) if output_dir else Path("./reports")
+    self.output_dir = (
+      Path(output_dir) if output_dir else Path("./output/reports")
+    )
     self.output_dir.mkdir(parents=True, exist_ok=True)
 
     # 创建图表生成器
@@ -90,11 +92,12 @@ class ReportGenerator:
 
     # 保存报告
     import time
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S') + f"_{int(time.time() * 1000000) % 1000000:06d}"
-    report_path = (
-      self.output_dir
-      / f"health_report_{timestamp}.html"
+
+    timestamp = (
+      datetime.now().strftime("%Y%m%d_%H%M%S")
+      + f"_{int(time.time() * 1000000) % 1000000:06d}"
     )
+    report_path = self.output_dir / f"health_report_{timestamp}.html"
     report_path.write_text(html_content, encoding="utf-8")
 
     logger.info(f"HTML report saved to {report_path}")
@@ -584,7 +587,10 @@ class ReportGenerator:
     content = ""
 
     # 睡眠分析
-    if hasattr(report, "sleep_quality") and getattr(report, "sleep_quality", None) is not None:
+    if (
+      hasattr(report, "sleep_quality")
+      and getattr(report, "sleep_quality", None) is not None
+    ):
       content += '<div class="section">\n'
       content += "<h2>😴 睡眠质量分析</h2>\n"
       content += '<div class="dashboard-grid">\n'
