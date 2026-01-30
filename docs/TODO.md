@@ -42,5 +42,5 @@
 - [x] Produce `docs/PHASE-6-VERIFICATION.md`.
 
 ## Stage 7: Finalization
-- [ ] Produce `docs/FINAL-REPORT.md`.
-- [ ] Update `README.md` in English.
+- [x] Produce `docs/FINAL-REPORT.md`.
+- [x] Update `README.md` in English.
