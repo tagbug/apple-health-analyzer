@@ -55,6 +55,7 @@ class TestAnomalyDetector:
 
   def test_detect_anomalies_zscore_method(self):
     """Test Z-Score anomaly detection."""
+    np.random.seed(42)  # Ensure reproducibility
     detector = AnomalyDetector()
 
     # Create test records with clear outlier
