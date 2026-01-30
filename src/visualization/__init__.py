@@ -1,4 +1,4 @@
-"""可视化模块 - 提供图表生成和报告功能"""
+"""Visualization module providing chart and report helpers."""
 
 from .charts import ChartGenerator
 from .reports import ReportGenerator

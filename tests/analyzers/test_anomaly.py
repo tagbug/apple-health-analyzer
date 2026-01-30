@@ -55,6 +55,7 @@ class TestAnomalyDetector:
 
   def test_detect_anomalies_zscore_method(self):
     """Test Z-Score anomaly detection."""
+    np.random.seed(42)  # Ensure reproducibility
     detector = AnomalyDetector()
 
     # Create test records with clear outlier
@@ -365,9 +366,7 @@ class TestAnomalyDetector:
 
     # Test different deviation levels
     assert detector._calculate_severity(0.5) == "low"
-    assert (
-      detector._calculate_severity(2.0) == "low"
-    )  # 2.0 < 2.5 (medium threshold)
+    assert detector._calculate_severity(2.0) == "low"  # 2.0 < 2.5 (medium threshold)
     assert detector._calculate_severity(3.0) == "medium"  # 3.0 >= 2.5 but < 3.5
     assert detector._calculate_severity(4.0) == "high"  # 4.0 >= 3.5
 
@@ -428,9 +427,7 @@ class TestAnomalyDetector:
     assert len(deduplicated) == 2
 
     # First timestamp should keep the higher severity one
-    first_timestamp_anomalies = [
-      a for a in deduplicated if a.timestamp == timestamp
-    ]
+    first_timestamp_anomalies = [a for a in deduplicated if a.timestamp == timestamp]
     assert len(first_timestamp_anomalies) == 1
     assert first_timestamp_anomalies[0].severity == "high"
 
@@ -514,14 +511,12 @@ class TestAnomalyDetector:
       for i in range(15)  # 15 anomalies = 15% rate
     ]
 
-    recommendations = detector._generate_recommendations(
-      anomalies_high_rate, 0.15
-    )
-    assert any("异常率较高" in rec for rec in recommendations)
+    recommendations = detector._generate_recommendations(anomalies_high_rate, 0.15)
+    assert any("Anomaly rate is high" in rec for rec in recommendations)
 
     # Test low anomaly rate
     recommendations_low = detector._generate_recommendations([], 0.0001)
-    assert any("检测到的异常较少" in rec for rec in recommendations_low)
+    assert any("Few anomalies detected" in rec for rec in recommendations_low)
 
     # Test high severity concentration
     anomalies_high_severity = [
@@ -553,7 +548,7 @@ class TestAnomalyDetector:
     recommendations_severity = detector._generate_recommendations(
       anomalies_high_severity, 0.1
     )
-    assert any("高严重程度异常较多" in rec for rec in recommendations_severity)
+    assert any("High-severity anomalies are frequent" in rec for rec in recommendations_severity)
 
   def test_records_to_dataframe(self):
     """Test conversion of records to DataFrame."""
@@ -628,8 +623,8 @@ class TestAnomalyDetector:
     mock_logger.warning.assert_called()
     assert isinstance(anomalies, list)
 
-  def test_contextual_sleep_wake_not_implemented(self):
-    """Test that sleep/wake contextual detection is not implemented."""
+  def test_contextual_sleep_wake_detection(self):
+    """Test contextual sleep/wake detection returns a list."""
     detector = AnomalyDetector()
 
     records = [
@@ -651,4 +646,3 @@ class TestAnomalyDetector:
     )
 
     assert isinstance(anomalies, list)
-    # Currently returns empty list as not implemented

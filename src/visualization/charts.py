@@ -16,20 +16,20 @@ from ..utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-# 健康主题配色方案
+# Health-themed color palette
 HEALTH_COLORS = {
-  "primary": "#4CAF50",  # 健康绿
-  "secondary": "#2196F3",  # 信息蓝
-  "warning": "#FF9800",  # 橙色
-  "danger": "#F44336",  # 红色
-  "neutral": "#9E9E9E",  # 灰色
-  "success": "#8BC34A",  # 浅绿
-  "info": "#03A9F4",  # 浅蓝
-  "light": "#E8F5E9",  # 浅绿背景
-  "dark": "#1B5E20",  # 深绿
+  "primary": "#4CAF50",  # Health green
+  "secondary": "#2196F3",  # Info blue
+  "warning": "#FF9800",  # Orange
+  "danger": "#F44336",  # Red
+  "neutral": "#9E9E9E",  # Gray
+  "success": "#8BC34A",  # Light green
+  "info": "#03A9F4",  # Light blue
+  "light": "#E8F5E9",  # Light background
+  "dark": "#1B5E20",  # Dark green
 }
 
-# Plotly 主题配置
+# Plotly theme configuration
 PLOTLY_TEMPLATE = {
   "layout": {
     "font": {"family": "Arial, sans-serif", "size": 12},
@@ -60,26 +60,24 @@ class ChartGenerator:
     height: int = 600,
     dpi: int = 300,
   ):
-    """Initialize chart generator
+    """Initialize chart generator.
 
     Args:
-        theme: Theme name (health/light/dark)
-        width: Chart width
-        height: Chart height
-        dpi: Chart DPI (for static image export)
+        theme: Theme name (health/light/dark).
+        width: Chart width.
+        height: Chart height.
+        dpi: Chart DPI (for static image export).
     """
     self.theme = theme
     self.width = width
     self.height = height
     self.dpi = dpi
 
-    # 设置 matplotlib 样式
+    # Configure matplotlib styling.
     plt.style.use("seaborn-v0_8-darkgrid")
     sns.set_palette("husl")
 
-    logger.info(
-      f"ChartGenerator initialized: theme={theme}, size={width}x{height}"
-    )
+    logger.info(f"ChartGenerator initialized: theme={theme}, size={width}x{height}")
 
   def plot_heart_rate_timeseries(
     self,
@@ -88,33 +86,31 @@ class ChartGenerator:
     output_path: Path | None = None,
     interactive: bool = True,
   ) -> go.Figure | None:
-    """绘制心率时序图
+    """Plot heart rate timeseries.
 
     Args:
-        data: 包含时间和心率数据的DataFrame (columns: timestamp, value)
-        title: 图表标题
-        output_path: 输出路径 (可选)
-        interactive: 是否生成交互式图表
+        data: DataFrame with timestamp/value columns.
+        title: Chart title.
+        output_path: Output path (optional).
+        interactive: Whether to generate interactive charts.
 
     Returns:
-        Plotly Figure 对象或 None
+        Plotly Figure or None.
     """
     if data.empty:
       logger.warning("No data provided for heart rate timeseries")
       return None
 
-    logger.info(
-      f"Generating heart rate timeseries chart with {len(data)} points"
-    )
+    logger.info(f"Generating heart rate timeseries chart with {len(data)} points")
 
-    # 数据采样 (如果数据量过大)
+    # Downsample if the dataset is large.
     if len(data) > 10000:
       logger.info(f"Downsampling from {len(data)} to 10000 points")
       data = self._downsample_data(data, 10000)
 
     try:
       if interactive:
-        # 使用 Plotly 生成交互式图表
+        # Generate interactive chart with Plotly.
         fig = go.Figure()
 
         fig.add_trace(
@@ -130,7 +126,7 @@ class ChartGenerator:
           )
         )
 
-        # 添加平均线
+        # Add mean line.
         mean_hr = data["value"].mean()
         fig.add_hline(
           y=mean_hr,
@@ -155,7 +151,7 @@ class ChartGenerator:
 
         return fig
       else:
-        # 使用 Matplotlib 生成静态图表
+        # Generate static chart with Matplotlib.
         fig, ax = plt.subplots(figsize=(self.width / 100, self.height / 100))
         ax.plot(
           data["timestamp"],
@@ -194,40 +190,38 @@ class ChartGenerator:
     title: str = "静息心率趋势",
     output_path: Path | None = None,
   ) -> go.Figure | None:
-    """绘制静息心率趋势图
+    """Plot resting heart rate trend.
 
     Args:
-        data: 静息心率数据 (columns: start_date, value)
-        title: 图表标题
-        output_path: 输出路径
+        data: Resting HR data (start_date/value columns).
+        title: Chart title.
+        output_path: Output path.
 
     Returns:
-        Plotly Figure 对象或 None
+        Plotly Figure or None.
     """
     if data.empty:
       logger.warning("No data for resting heart rate trend")
       return None
 
-    logger.info(
-      f"Generating resting heart rate trend chart with {len(data)} points"
-    )
+    logger.info(f"Generating resting heart rate trend chart with {len(data)} points")
 
     try:
       fig = go.Figure()
 
-      # 实际数据点
+      # Actual data points.
       fig.add_trace(
         go.Scatter(
           x=data["start_date"],
           y=data["value"],
           mode="markers+lines",
           name="静息心率",
-          marker=dict(size=6, color=HEALTH_COLORS["primary"], opacity=0.7),
-          line=dict(color=HEALTH_COLORS["primary"], width=2),
+          marker={"size": 6, "color": HEALTH_COLORS["primary"], "opacity": 0.7},
+          line={"color": HEALTH_COLORS["primary"], "width": 2},
         )
       )
 
-      # 添加趋势线 (移动平均)
+      # Add trend line (moving average).
       if len(data) > 7:
         ma_7 = data["value"].rolling(window=7, center=True).mean()
         fig.add_trace(
@@ -236,15 +230,15 @@ class ChartGenerator:
             y=ma_7,
             mode="lines",
             name="7天移动平均",
-            line=dict(
-              color=HEALTH_COLORS["secondary"],
-              width=2,
-              dash="dash",
-            ),
+            line={
+              "color": HEALTH_COLORS["secondary"],
+              "width": 2,
+              "dash": "dash",
+            },
           )
         )
 
-      # 添加健康范围区域
+      # Add healthy range band.
       fig.add_hrect(
         y0=60,
         y1=100,
@@ -281,15 +275,15 @@ class ChartGenerator:
     title: str = "心率变异性 (HRV) 分析",
     output_path: Path | None = None,
   ) -> go.Figure | None:
-    """绘制HRV分析图
+    """Plot HRV analysis chart.
 
     Args:
-        data: HRV数据 (columns: start_date, value)
-        title: 图表标题
-        output_path: 输出路径
+        data: HRV data (columns: start_date, value).
+        title: Chart title.
+        output_path: Output path.
 
     Returns:
-        Plotly Figure 对象或 None
+        Plotly Figure or None.
     """
     if data.empty:
       logger.warning("No data for HRV analysis")
@@ -298,7 +292,7 @@ class ChartGenerator:
     logger.info(f"Generating HRV analysis chart with {len(data)} points")
 
     try:
-      # 创建子图: HRV趋势 + 分布直方图
+      # Create subplots: HRV trend + distribution histogram.
       fig = make_subplots(
         rows=2,
         cols=1,
@@ -307,21 +301,21 @@ class ChartGenerator:
         vertical_spacing=0.15,
       )
 
-      # HRV时序图
+      # HRV timeseries.
       fig.add_trace(
         go.Scatter(
           x=data["start_date"],
           y=data["value"],
           mode="lines+markers",
           name="SDNN",
-          line=dict(color=HEALTH_COLORS["info"], width=2),
-          marker=dict(size=4),
+          line={"color": HEALTH_COLORS["info"], "width": 2},
+          marker={"size": 4},
         ),
         row=1,
         col=1,
       )
 
-      # 添加移动平均
+      # Add moving average.
       if len(data) > 7:
         ma = data["value"].rolling(window=7, center=True).mean()
         fig.add_trace(
@@ -330,17 +324,17 @@ class ChartGenerator:
             y=ma,
             mode="lines",
             name="7天平均",
-            line=dict(
-              color=HEALTH_COLORS["secondary"],
-              width=2,
-              dash="dash",
-            ),
+            line={
+              "color": HEALTH_COLORS["secondary"],
+              "width": 2,
+              "dash": "dash",
+            },
           ),
           row=1,
           col=1,
         )
 
-      # HRV分布直方图
+      # HRV distribution histogram.
       fig.add_trace(
         go.Histogram(
           x=data["value"],
@@ -353,7 +347,7 @@ class ChartGenerator:
         col=1,
       )
 
-      # 更新布局
+      # Update layout.
       fig.update_xaxes(title_text="日期", row=1, col=1)
       fig.update_yaxes(title_text="SDNN (ms)", row=1, col=1)
       fig.update_xaxes(title_text="SDNN (ms)", row=2, col=1)
@@ -382,15 +376,15 @@ class ChartGenerator:
     title: str = "心率热力图 (日历视图)",
     output_path: Path | None = None,
   ) -> go.Figure | None:
-    """绘制心率热力图 (日历视图)
+    """Plot heart rate heatmap (calendar view).
 
     Args:
-        data: 每日心率数据 (columns: date, avg_hr)
-        title: 图表标题
-        output_path: 输出路径
+        data: Daily heart rate data (columns: date, avg_hr).
+        title: Chart title.
+        output_path: Output path.
 
     Returns:
-        Plotly Figure 对象或 None
+        Plotly Figure or None.
     """
     if data.empty:
       logger.warning("No data for heart rate heatmap")
@@ -399,26 +393,26 @@ class ChartGenerator:
     logger.info(f"Generating heart rate heatmap with {len(data)} days")
 
     try:
-      # 准备热力图数据: 周 x 星期几
+      # Prepare heatmap data: week x weekday.
       data = data.copy()
       data["date"] = pd.to_datetime(data["date"])
       data["week"] = data["date"].dt.isocalendar().week
       data["weekday"] = data["date"].dt.dayofweek
       data["year"] = data["date"].dt.year
 
-      # 创建透视表
+      # Create pivot table.
       pivot = data.pivot_table(
         values="avg_hr", index="week", columns="weekday", aggfunc="mean"
       )
 
-      # 创建热力图
+      # Create heatmap.
       fig = go.Figure(
         data=go.Heatmap(
           z=pivot.values,
           x=["周一", "周二", "周三", "周四", "周五", "周六", "周日"],
           y=pivot.index,
-          colorscale="RdYlGn_r",  # 红-黄-绿（反向）
-          colorbar=dict(title="平均心率<br>(bpm)"),
+          colorscale="RdYlGn_r",  # Red-yellow-green (reversed).
+          colorbar={"title": "平均心率<br>(bpm)"},
           hovertemplate="<b>第%{y}周 %{x}</b><br>"
           + "平均心率: %{z:.0f} bpm<br>"
           + "<extra></extra>",
@@ -449,26 +443,24 @@ class ChartGenerator:
     title: str = "心率分布分析",
     output_path: Path | None = None,
   ) -> go.Figure | None:
-    """绘制心率分布直方图和箱线图
+    """Plot heart rate histogram and box plot.
 
     Args:
-        data: 心率数据 (columns: value)
-        title: 图表标题
-        output_path: 输出路径
+        data: Heart rate data (columns: value).
+        title: Chart title.
+        output_path: Output path.
 
     Returns:
-        Plotly Figure 对象或 None
+        Plotly Figure or None.
     """
     if data.empty or "value" not in data.columns:
       logger.warning("No data for heart rate distribution")
       return None
 
-    logger.info(
-      f"Generating heart rate distribution chart with {len(data)} points"
-    )
+    logger.info(f"Generating heart rate distribution chart with {len(data)} points")
 
     try:
-      # 创建子图: 直方图 + 箱线图
+      # Create subplots: histogram + box plot.
       fig = make_subplots(
         rows=1,
         cols=2,
@@ -477,7 +469,7 @@ class ChartGenerator:
         horizontal_spacing=0.1,
       )
 
-      # 直方图
+      # Histogram.
       fig.add_trace(
         go.Histogram(
           x=data["value"],
@@ -491,7 +483,7 @@ class ChartGenerator:
         col=1,
       )
 
-      # 添加正态分布曲线
+      # Add normal distribution curve.
       mean = data["value"].mean()
       std = data["value"].std()
       x_range = np.linspace(data["value"].min(), data["value"].max(), 100)
@@ -509,25 +501,25 @@ class ChartGenerator:
           y=normal_dist,
           mode="lines",
           name="正态分布",
-          line=dict(color=HEALTH_COLORS["secondary"], width=2, dash="dash"),
+          line={"color": HEALTH_COLORS["secondary"], "width": 2, "dash": "dash"},
         ),
         row=1,
         col=1,
       )
 
-      # 箱线图
+      # Box plot.
       fig.add_trace(
         go.Box(
           y=data["value"],
           name="心率",
           marker_color=HEALTH_COLORS["primary"],
-          boxmean="sd",  # 显示均值和标准差
+          boxmean="sd",  # Show mean and standard deviation.
         ),
         row=1,
         col=2,
       )
 
-      # 更新布局
+      # Update layout.
       fig.update_xaxes(title_text="心率 (bpm)", row=1, col=1)
       fig.update_yaxes(title_text="频数", row=1, col=1)
       fig.update_yaxes(title_text="心率 (bpm)", row=1, col=2)
@@ -557,17 +549,17 @@ class ChartGenerator:
     title: str = "心率区间分布",
     output_path: Path | None = None,
   ) -> go.Figure | None:
-    """绘制心率区间分布图
+    """Plot heart rate zone distribution.
 
     Args:
-        data: 心率数据 (columns: value)
-        max_hr: 最大心率 (默认: 220)
-        age: 年龄 (用于计算最大心率)
-        title: 图表标题
-        output_path: 输出路径
+        data: Heart rate data (columns: value).
+        max_hr: Maximum heart rate (default: 220).
+        age: Age (used to estimate max heart rate).
+        title: Chart title.
+        output_path: Output path.
 
     Returns:
-        Plotly Figure 对象或 None
+        Plotly Figure or None.
     """
     if data.empty or "value" not in data.columns:
       logger.warning("No data for heart rate zones")
@@ -576,10 +568,10 @@ class ChartGenerator:
     logger.info(f"Generating heart rate zones chart with {len(data)} points")
 
     try:
-      # 计算年龄调整后的最大心率
+      # Compute age-adjusted maximum heart rate.
       max_hr_adjusted = max_hr - age
 
-      # 定义心率区间
+      # Define heart rate zones.
       zones = {
         "休息区 (50-60%)": (
           0.5 * max_hr_adjusted,
@@ -603,27 +595,27 @@ class ChartGenerator:
         ),
       }
 
-      # 统计每个区间的数据量
+      # Count records per zone.
       zone_counts = {}
       for zone_name, (lower, upper) in zones.items():
         count = len(data[(data["value"] >= lower) & (data["value"] < upper)])
         zone_counts[zone_name] = count
 
-      # 创建饼图
+      # Create pie chart.
       fig = go.Figure(
         data=[
           go.Pie(
             labels=list(zone_counts.keys()),
             values=list(zone_counts.values()),
-            marker=dict(
-              colors=[
+            marker={
+              "colors": [
                 HEALTH_COLORS["success"],
                 HEALTH_COLORS["primary"],
                 HEALTH_COLORS["info"],
                 HEALTH_COLORS["warning"],
                 HEALTH_COLORS["danger"],
               ]
-            ),
+            },
             hovertemplate="<b>%{label}</b><br>"
             + "记录数: %{value}<br>"
             + "占比: %{percent}<br>"
@@ -648,19 +640,15 @@ class ChartGenerator:
       logger.error(f"Error generating heart rate zones: {e}")
       return None
 
-  def _downsample_data(
-    self, data: pd.DataFrame, target_points: int
-  ) -> pd.DataFrame:
-    """数据降采样
-
-    使用简单的均匀采样策略
+  def _downsample_data(self, data: pd.DataFrame, target_points: int) -> pd.DataFrame:
+    """Downsample data using simple uniform sampling.
 
     Args:
-        data: 原始数据
-        target_points: 目标点数
+        data: Source data.
+        target_points: Target number of points.
 
     Returns:
-        采样后的数据
+        Downsampled data.
     """
     if len(data) <= target_points:
       return data
@@ -669,11 +657,11 @@ class ChartGenerator:
     return data.iloc[::step].copy()
 
   def _save_plotly_figure(self, fig: go.Figure, output_path: Path) -> None:
-    """保存 Plotly 图表
+    """Save a Plotly figure.
 
     Args:
-        fig: Plotly Figure 对象
-        output_path: 输出路径
+        fig: Plotly figure.
+        output_path: Output path.
     """
     try:
       output_path = Path(output_path)
@@ -684,7 +672,7 @@ class ChartGenerator:
       elif output_path.suffix in [".png", ".jpg", ".jpeg", ".svg", ".pdf"]:
         fig.write_image(str(output_path))
       else:
-        # 默认保存为 HTML
+        # Default to HTML.
         fig.write_html(str(output_path.with_suffix(".html")))
 
       logger.info(f"Chart saved to {output_path}")
@@ -698,15 +686,15 @@ class ChartGenerator:
     title: str = "睡眠时间线",
     output_path: Path | None = None,
   ) -> go.Figure | None:
-    """绘制睡眠时间线图
+    """Plot sleep timeline chart.
 
     Args:
-        data: 睡眠数据 (columns: start_date, end_date, value/stage)
-        title: 图表标题
-        output_path: 输出路径
+        data: Sleep data (columns: start_date, end_date, value/stage).
+        title: Chart title.
+        output_path: Output path.
 
     Returns:
-        Plotly Figure 对象或 None
+        Plotly Figure or None.
     """
     if data.empty:
       logger.warning("No data for sleep timeline")
@@ -715,7 +703,7 @@ class ChartGenerator:
     logger.info(f"Generating sleep timeline chart with {len(data)} sessions")
 
     try:
-      # 睡眠阶段颜色映射
+      # Sleep stage color mapping.
       stage_colors = {
         "Asleep": HEALTH_COLORS["primary"],
         "InBed": HEALTH_COLORS["light"],
@@ -727,7 +715,7 @@ class ChartGenerator:
 
       fig = go.Figure()
 
-      # 为每个睡眠阶段绘制条形
+      # Draw a segment for each sleep stage.
       for idx, row in data.iterrows():
         stage = row.get("value", "Asleep")
         if isinstance(stage, (int, float)):
@@ -738,10 +726,10 @@ class ChartGenerator:
             x=[row["start_date"], row["end_date"]],
             y=[idx, idx],
             mode="lines",
-            line=dict(
-              color=stage_colors.get(stage, HEALTH_COLORS["neutral"]),
-              width=20,
-            ),
+            line={
+              "color": stage_colors.get(stage, HEALTH_COLORS["neutral"]),
+              "width": 20,
+            },
             name=stage,
             showlegend=False,
             hovertemplate=f"<b>{stage}</b><br>"
@@ -775,15 +763,15 @@ class ChartGenerator:
     title: str = "睡眠质量趋势",
     output_path: Path | None = None,
   ) -> go.Figure | None:
-    """绘制睡眠质量趋势图
+    """Plot sleep quality trend chart.
 
     Args:
-        data: 睡眠质量数据 (columns: date, duration, efficiency)
-        title: 图表标题
-        output_path: 输出路径
+        data: Sleep quality data (columns: date, duration, efficiency).
+        title: Chart title.
+        output_path: Output path.
 
     Returns:
-        Plotly Figure 对象或 None
+        Plotly Figure or None.
     """
     if data.empty:
       logger.warning("No data for sleep quality trend")
@@ -792,37 +780,37 @@ class ChartGenerator:
     logger.info(f"Generating sleep quality trend chart with {len(data)} days")
 
     try:
-      # 创建双Y轴图表
+      # Create a dual-axis chart.
       fig = make_subplots(specs=[[{"secondary_y": True}]])
 
-      # 睡眠时长
+      # Sleep duration.
       fig.add_trace(
         go.Scatter(
           x=data["date"],
-          y=data["total_duration"] / 60,  # 转换为小时
+          y=data["total_duration"] / 60,  # Convert to hours.
           mode="lines+markers",
           name="睡眠时长",
-          line=dict(color=HEALTH_COLORS["primary"], width=2),
-          marker=dict(size=6),
+          line={"color": HEALTH_COLORS["primary"], "width": 2},
+          marker={"size": 6},
         ),
         secondary_y=False,
       )
 
-      # 睡眠效率
+      # Sleep efficiency.
       if "efficiency" in data.columns:
         fig.add_trace(
           go.Scatter(
             x=data["date"],
-            y=data["efficiency"] * 100,  # 转换为百分比
+            y=data["efficiency"] * 100,  # Convert to percentage.
             mode="lines+markers",
             name="睡眠效率",
-            line=dict(color=HEALTH_COLORS["secondary"], width=2),
-            marker=dict(size=6),
+            line={"color": HEALTH_COLORS["secondary"], "width": 2},
+            marker={"size": 6},
           ),
           secondary_y=True,
         )
 
-      # 添加推荐睡眠时长线
+      # Add recommended sleep duration line.
       fig.add_hline(
         y=7,
         line_dash="dash",
@@ -832,7 +820,7 @@ class ChartGenerator:
         secondary_y=False,
       )
 
-      # 更新布局
+      # Update layout.
       fig.update_xaxes(title_text="日期")
       fig.update_yaxes(title_text="睡眠时长 (小时)", secondary_y=False)
       fig.update_yaxes(title_text="睡眠效率 (%)", secondary_y=True)
@@ -860,15 +848,15 @@ class ChartGenerator:
     title: str = "睡眠阶段分布",
     output_path: Path | None = None,
   ) -> go.Figure | None:
-    """绘制睡眠阶段分布饼图
+    """Plot sleep stage distribution pie chart.
 
     Args:
-        data: 睡眠阶段数据 (columns: stage, duration)
-        title: 图表标题
-        output_path: 输出路径
+        data: Sleep stage data (columns: stage, duration).
+        title: Chart title.
+        output_path: Output path.
 
     Returns:
-        Plotly Figure 对象或 None
+        Plotly Figure or None.
     """
     if data.empty:
       logger.warning("No data for sleep stages distribution")
@@ -877,10 +865,10 @@ class ChartGenerator:
     logger.info("Generating sleep stages distribution chart")
 
     try:
-      # 聚合各阶段时长
+      # Aggregate duration per stage.
       stage_durations = data.groupby("stage")["duration"].sum()
 
-      # 睡眠阶段颜色
+      # Sleep stage colors.
       colors = {
         "Asleep": HEALTH_COLORS["primary"],
         "Core": HEALTH_COLORS["info"],
@@ -895,12 +883,12 @@ class ChartGenerator:
           go.Pie(
             labels=stage_durations.index,
             values=stage_durations.values,
-            marker=dict(
-              colors=[
+            marker={
+              "colors": [
                 colors.get(stage, HEALTH_COLORS["neutral"])
                 for stage in stage_durations.index
               ]
-            ),
+            },
             hovertemplate="<b>%{label}</b><br>"
             + "时长: %{value:.1f} 小时<br>"
             + "占比: %{percent}<br>"
@@ -931,15 +919,15 @@ class ChartGenerator:
     title: str = "睡眠规律性分析",
     output_path: Path | None = None,
   ) -> go.Figure | None:
-    """绘制睡眠规律性分析图
+    """Plot sleep consistency chart.
 
     Args:
-        data: 睡眠数据 (columns: date, bedtime, wake_time)
-        title: 图表标题
-        output_path: 输出路径
+        data: Sleep data (columns: date, bedtime, wake_time).
+        title: Chart title.
+        output_path: Output path.
 
     Returns:
-        Plotly Figure 对象或 None
+        Plotly Figure or None.
     """
     if data.empty:
       logger.warning("No data for sleep consistency")
@@ -950,9 +938,9 @@ class ChartGenerator:
     try:
       fig = go.Figure()
 
-      # 入睡时间
+      # Bedtime.
       if "bedtime" in data.columns:
-        # 将时间转换为小时数 (以24小时制表示)
+        # Convert time to hours (24-hour format).
         bedtime_hours = data["bedtime"].apply(
           lambda x: x.hour + x.minute / 60 if pd.notna(x) else None
         )
@@ -963,12 +951,12 @@ class ChartGenerator:
             y=bedtime_hours,
             mode="markers+lines",
             name="入睡时间",
-            marker=dict(size=6, color=HEALTH_COLORS["primary"]),
-            line=dict(color=HEALTH_COLORS["primary"], width=1.5),
+            marker={"size": 6, "color": HEALTH_COLORS["primary"]},
+            line={"color": HEALTH_COLORS["primary"], "width": 1.5},
           )
         )
 
-      # 起床时间
+      # Wake time.
       if "wake_time" in data.columns:
         wake_hours = data["wake_time"].apply(
           lambda x: x.hour + x.minute / 60 if pd.notna(x) else None
@@ -980,8 +968,8 @@ class ChartGenerator:
             y=wake_hours,
             mode="markers+lines",
             name="起床时间",
-            marker=dict(size=6, color=HEALTH_COLORS["secondary"]),
-            line=dict(color=HEALTH_COLORS["secondary"], width=1.5),
+            marker={"size": 6, "color": HEALTH_COLORS["secondary"]},
+            line={"color": HEALTH_COLORS["secondary"], "width": 1.5},
           )
         )
 
@@ -1010,15 +998,15 @@ class ChartGenerator:
     title: str = "工作日 vs 周末睡眠对比",
     output_path: Path | None = None,
   ) -> go.Figure | None:
-    """绘制工作日和周末睡眠对比图
+    """Plot weekday vs weekend sleep comparison.
 
     Args:
-        data: 睡眠数据 (columns: date, duration, is_weekend)
-        title: 图表标题
-        output_path: 输出路径
+        data: Sleep data (columns: date, duration, is_weekend).
+        title: Chart title.
+        output_path: Output path.
 
     Returns:
-        Plotly Figure 对象或 None
+        Plotly Figure or None.
     """
     if data.empty:
       logger.warning("No data for weekday vs weekend sleep")
@@ -1027,13 +1015,13 @@ class ChartGenerator:
     logger.info("Generating weekday vs weekend sleep chart")
 
     try:
-      # 分组数据
+      # Group data.
       weekday_data = data[~data["is_weekend"]]["duration"]
       weekend_data = data[data["is_weekend"]]["duration"]
 
       fig = go.Figure()
 
-      # 工作日箱线图
+      # Weekday box plot.
       fig.add_trace(
         go.Box(
           y=weekday_data,
@@ -1043,7 +1031,7 @@ class ChartGenerator:
         )
       )
 
-      # 周末箱线图
+      # Weekend box plot.
       fig.add_trace(
         go.Box(
           y=weekend_data,
@@ -1075,14 +1063,14 @@ class ChartGenerator:
     report: HeartRateAnalysisReport,
     output_dir: Path,
   ) -> dict[str, Path]:
-    """生成心率报告的所有图表
+    """Generate all charts for a heart rate report.
 
     Args:
-        report: 心率分析报告
-        output_dir: 输出目录
+        report: Heart rate analysis report.
+        output_dir: Output directory.
 
     Returns:
-        图表文件路径字典
+        Mapping of chart names to file paths.
     """
     logger.info("Generating heart rate report charts")
     output_dir = Path(output_dir)
@@ -1090,8 +1078,62 @@ class ChartGenerator:
 
     charts: dict[str, Path] = {}
 
-    # 这里暂时返回空字典，具体实现将在后续补充
-    # 需要根据 HeartRateAnalysisReport 的具体数据结构来实现
+    try:
+      # Resting heart rate trend chart.
+      if (
+        report.resting_hr_analysis
+        and report.daily_stats is not None
+        and not report.daily_stats.empty
+      ):
+        resting_hr_path = output_dir / "resting_hr_trend.html"
+        fig = self.plot_resting_hr_trend(
+          report.daily_stats, output_path=resting_hr_path
+        )
+        if fig:
+          charts["resting_hr_trend"] = resting_hr_path
+
+      # HRV analysis chart.
+      if (
+        report.hrv_analysis
+        and report.daily_stats is not None
+        and not report.daily_stats.empty
+      ):
+        hrv_path = output_dir / "hrv_analysis.html"
+        fig = self.plot_hrv_analysis(report.daily_stats, output_path=hrv_path)
+        if fig:
+          charts["hrv_analysis"] = hrv_path
+
+      # Heart rate heatmap.
+      if report.daily_stats is not None and not report.daily_stats.empty:
+        heatmap_path = output_dir / "heart_rate_heatmap.html"
+        # Prepare heatmap data.
+        heatmap_data = report.daily_stats.copy()
+        heatmap_data["date"] = pd.to_datetime(heatmap_data["interval_start"])
+        heatmap_data["avg_hr"] = heatmap_data["mean_value"]
+        fig = self.plot_heart_rate_heatmap(heatmap_data, output_path=heatmap_path)
+        if fig:
+          charts["heart_rate_heatmap"] = heatmap_path
+
+      # Heart rate distribution.
+      if report.daily_stats is not None and not report.daily_stats.empty:
+        distribution_path = output_dir / "heart_rate_distribution.html"
+        fig = self.plot_heart_rate_distribution(
+          report.daily_stats, output_path=distribution_path
+        )
+        if fig:
+          charts["heart_rate_distribution"] = distribution_path
+
+      # Heart rate zones.
+      if report.daily_stats is not None and not report.daily_stats.empty:
+        zones_path = output_dir / "heart_rate_zones.html"
+        fig = self.plot_heart_rate_zones(report.daily_stats, output_path=zones_path)
+        if fig:
+          charts["heart_rate_zones"] = zones_path
+
+      logger.info(f"Generated {len(charts)} heart rate report charts")
+
+    except Exception as e:
+      logger.error(f"Error generating heart rate report charts: {e}")
 
     return charts
 
@@ -1100,14 +1142,14 @@ class ChartGenerator:
     report: SleepAnalysisReport,
     output_dir: Path,
   ) -> dict[str, Path]:
-    """生成睡眠报告的所有图表
+    """Generate all charts for a sleep report.
 
     Args:
-        report: 睡眠分析报告
-        output_dir: 输出目录
+        report: Sleep analysis report.
+        output_dir: Output directory.
 
     Returns:
-        图表文件路径字典
+        Mapping of chart names to file paths.
     """
     logger.info("Generating sleep report charts")
     output_dir = Path(output_dir)
@@ -1115,8 +1157,94 @@ class ChartGenerator:
 
     charts: dict[str, Path] = {}
 
-    # 这里暂时返回空字典，具体实现将在后续补充
-    # 需要根据 SleepAnalysisReport 的具体数据结构来实现
+    try:
+      # Sleep timeline chart.
+      if report.sleep_sessions:
+        timeline_path = output_dir / "sleep_timeline.html"
+        # Prepare timeline data.
+        timeline_data = []
+        for session in report.sleep_sessions:
+          timeline_data.append(
+            {
+              "start_date": session.start_date,
+              "end_date": session.end_date,
+              "value": "Asleep",  # Simplified handling.
+            }
+          )
+        timeline_df = pd.DataFrame(timeline_data)
+        fig = self.plot_sleep_timeline(timeline_df, output_path=timeline_path)
+        if fig:
+          charts["sleep_timeline"] = timeline_path
+
+      # Sleep quality trend chart.
+      if report.daily_summary is not None and not report.daily_summary.empty:
+        quality_trend_path = output_dir / "sleep_quality_trend.html"
+        fig = self.plot_sleep_quality_trend(
+          report.daily_summary, output_path=quality_trend_path
+        )
+        if fig:
+          charts["sleep_quality_trend"] = quality_trend_path
+
+      # Sleep stage distribution.
+      if report.daily_summary is not None and not report.daily_summary.empty:
+        stages_path = output_dir / "sleep_stages_distribution.html"
+        # Prepare stage data.
+        stages_data = []
+        for _, row in report.daily_summary.iterrows():
+          if row.get("deep_sleep", 0) > 0:
+            stages_data.append({"stage": "Deep", "duration": row["deep_sleep"]})
+          if row.get("rem_sleep", 0) > 0:
+            stages_data.append({"stage": "REM", "duration": row["rem_sleep"]})
+        if stages_data:
+          stages_df = pd.DataFrame(stages_data)
+          fig = self.plot_sleep_stages_distribution(stages_df, output_path=stages_path)
+          if fig:
+            charts["sleep_stages_distribution"] = stages_path
+
+      # Sleep consistency analysis.
+      if report.daily_summary is not None and not report.daily_summary.empty:
+        consistency_path = output_dir / "sleep_consistency.html"
+        # Prepare consistency data.
+        consistency_data = []
+        for _, row in report.daily_summary.iterrows():
+          consistency_data.append(
+            {
+              "date": row["date"],
+              "bedtime": None,  # Needs extraction from session data.
+              "wake_time": None,
+            }
+          )
+        consistency_df = pd.DataFrame(consistency_data)
+        fig = self.plot_sleep_consistency(consistency_df, output_path=consistency_path)
+        if fig:
+          charts["sleep_consistency"] = consistency_path
+
+      # Weekday vs weekend sleep comparison.
+      if report.daily_summary is not None and not report.daily_summary.empty:
+        weekday_weekend_path = output_dir / "weekday_vs_weekend_sleep.html"
+        # Prepare comparison data.
+        comparison_data = []
+        for _, row in report.daily_summary.iterrows():
+          date = pd.to_datetime(row["date"])
+          is_weekend = date.weekday() >= 5
+          comparison_data.append(
+            {
+              "date": row["date"],
+              "duration": row["total_duration"] / 60,  # Convert to hours.
+              "is_weekend": is_weekend,
+            }
+          )
+        comparison_df = pd.DataFrame(comparison_data)
+        fig = self.plot_weekday_vs_weekend_sleep(
+          comparison_df, output_path=weekday_weekend_path
+        )
+        if fig:
+          charts["weekday_vs_weekend_sleep"] = weekday_weekend_path
+
+      logger.info(f"Generated {len(charts)} sleep report charts")
+
+    except Exception as e:
+      logger.error(f"Error generating sleep report charts: {e}")
 
     return charts
 
@@ -1127,21 +1255,21 @@ class ChartGenerator:
     title: str = "健康仪表盘",
     output_path: Path | None = None,
   ) -> go.Figure | None:
-    """绘制健康仪表盘
+    """Plot health dashboard chart.
 
     Args:
-        wellness_score: 整体健康评分 (0-1)
-        metrics: 各项健康指标字典
-        title: 图表标题
-        output_path: 输出路径
+        wellness_score: Overall wellness score (0-1).
+        metrics: Health metrics dictionary.
+        title: Chart title.
+        output_path: Output path.
 
     Returns:
-        Plotly Figure 对象或 None
+        Plotly Figure or None.
     """
     logger.info("Generating health dashboard chart")
 
     try:
-      # 创建子图布局
+      # Create subplot layout.
       fig = make_subplots(
         rows=2,
         cols=2,
@@ -1159,7 +1287,7 @@ class ChartGenerator:
         horizontal_spacing=0.1,
       )
 
-      # 1. 整体健康评分仪表盘
+      # 1. Overall wellness gauge.
       fig.add_trace(
         go.Indicator(
           mode="gauge+number",
@@ -1184,7 +1312,7 @@ class ChartGenerator:
         col=1,
       )
 
-      # 2. 关键指标雷达图
+      # 2. Key metrics radar chart.
       if metrics:
         categories = list(metrics.keys())
         values = [metrics[cat] for cat in categories]
@@ -1204,12 +1332,12 @@ class ChartGenerator:
         )
 
         fig.update_polars(
-          radialaxis=dict(range=[0, 1], showticklabels=False),
+          radialaxis={"range": [0, 1], "showticklabels": False},
           row=1,
           col=2,
         )
 
-      # 3. 指标趋势条形图
+      # 3. Metric trend bar chart.
       if metrics:
         fig.add_trace(
           go.Bar(
@@ -1222,7 +1350,7 @@ class ChartGenerator:
           col=1,
         )
 
-      # 4. 健康分布饼图
+      # 4. Health distribution pie chart.
       health_categories = {
         "优秀": max(0, wellness_score - 0.8) * 5,
         "良好": max(0, min(0.8, wellness_score) - 0.6) * 5,
@@ -1269,20 +1397,20 @@ class ChartGenerator:
     title: str = "健康指标相关性分析",
     output_path: Path | None = None,
   ) -> go.Figure | None:
-    """绘制健康指标相关性热力图
+    """Plot health metric correlation heatmap.
 
     Args:
-        correlation_data: 相关性数据字典
-        title: 图表标题
-        output_path: 输出路径
+        correlation_data: Correlation data dictionary.
+        title: Chart title.
+        output_path: Output path.
 
     Returns:
-        Plotly Figure 对象或 None
+        Plotly Figure or None.
     """
     logger.info("Generating correlation heatmap chart")
 
     try:
-      # 提取相关性矩阵
+      # Extract correlation matrix.
       correlations = {}
       for key, data in correlation_data.items():
         if isinstance(data, dict) and "correlation" in data:
@@ -1292,11 +1420,11 @@ class ChartGenerator:
         logger.warning("No correlation data available")
         return None
 
-      # 创建相关性矩阵
+      # Build correlation matrix.
       metrics = list(correlations.keys())
-      matrix = np.eye(len(metrics))  # 对角线为1
+      matrix = np.eye(len(metrics))  # Diagonal is 1.
 
-      # 填充相关性值
+      # Fill correlation values.
       for i, metric1 in enumerate(metrics):
         for j, metric2 in enumerate(metrics):
           if i != j:
@@ -1314,7 +1442,7 @@ class ChartGenerator:
           y=metrics,
           colorscale="RdBu",
           zmid=0,
-          colorbar=dict(title="相关系数"),
+          colorbar={"title": "相关系数"},
           hovertemplate="<b>%{x} vs %{y}</b><br>"
           + "相关系数: %{z:.2f}<br>"
           + "<extra></extra>",
@@ -1344,16 +1472,16 @@ class ChartGenerator:
     title: str = "健康趋势分析",
     output_path: Path | None = None,
   ) -> go.Figure | None:
-    """绘制健康趋势分析图
+    """Plot health trend analysis chart.
 
     Args:
-        trend_data: 趋势数据字典
-        dates: 日期列表
-        title: 图表标题
-        output_path: 输出路径
+        trend_data: Trend data dictionary.
+        dates: Date labels.
+        title: Chart title.
+        output_path: Output path.
 
     Returns:
-        Plotly Figure 对象或 None
+        Plotly Figure or None.
     """
     logger.info("Generating trend analysis chart")
 
@@ -1377,8 +1505,8 @@ class ChartGenerator:
             y=values,
             mode="lines+markers",
             name=metric_name,
-            line=dict(color=color, width=2),
-            marker=dict(size=6, color=color),
+            line={"color": color, "width": 2},
+            marker={"size": 6, "color": color},
           )
         )
 
@@ -1407,15 +1535,15 @@ class ChartGenerator:
     title: str = "活动热力图",
     output_path: Path | None = None,
   ) -> go.Figure | None:
-    """绘制活动模式热力图
+    """Plot activity pattern heatmap.
 
     Args:
-        activity_data: 活动数据 (columns: date, hour, activity_level)
-        title: 图表标题
-        output_path: 输出路径
+        activity_data: Activity data (columns: date, hour, activity_level).
+        title: Chart title.
+        output_path: Output path.
 
     Returns:
-        Plotly Figure 对象或 None
+        Plotly Figure or None.
     """
     if activity_data.empty:
       logger.warning("No activity data for heatmap")
@@ -1424,13 +1552,13 @@ class ChartGenerator:
     logger.info("Generating activity heatmap chart")
 
     try:
-      # 准备热力图数据
+      # Prepare heatmap data.
       activity_data = activity_data.copy()
       activity_data["date"] = pd.to_datetime(activity_data["date"])
       activity_data["weekday"] = activity_data["date"].dt.dayofweek
       activity_data["week"] = activity_data["date"].dt.isocalendar().week
 
-      # 创建透视表: 星期几 x 小时
+      # Create pivot table: weekday x hour.
       pivot = activity_data.pivot_table(
         values="activity_level",
         index="weekday",
@@ -1447,7 +1575,7 @@ class ChartGenerator:
           x=hours,
           y=weekdays,
           colorscale="Viridis",
-          colorbar=dict(title="活动水平"),
+          colorbar={"title": "活动水平"},
           hovertemplate="<b>%{y} %{x}</b><br>"
           + "活动水平: %{z:.2f}<br>"
           + "<extra></extra>",
@@ -1478,15 +1606,15 @@ class ChartGenerator:
     title: str = "健康指标环形图",
     output_path: Path | None = None,
   ) -> go.Figure | None:
-    """绘制环形健康指标图
+    """Plot circular health metrics chart.
 
     Args:
-        metrics: 健康指标字典
-        title: 图表标题
-        output_path: 输出路径
+        metrics: Health metrics dictionary.
+        title: Chart title.
+        output_path: Output path.
 
     Returns:
-        Plotly Figure 对象或 None
+        Plotly Figure or None.
     """
     logger.info("Generating circular health metrics chart")
 
@@ -1494,13 +1622,13 @@ class ChartGenerator:
       if not metrics:
         return None
 
-      # 创建环形条形图
+      # Create circular bar chart.
       categories = list(metrics.keys())
       values = list(metrics.values())
 
       fig = go.Figure()
 
-      # 背景圆环
+      # Background ring.
       fig.add_trace(
         go.Barpolar(
           r=[1] * len(categories),
@@ -1511,7 +1639,7 @@ class ChartGenerator:
         )
       )
 
-      # 数据环形条
+      # Data rings.
       colors = [
         HEALTH_COLORS["primary"],
         HEALTH_COLORS["secondary"],
@@ -1525,22 +1653,18 @@ class ChartGenerator:
         go.Barpolar(
           r=values,
           theta=categories,
-          marker_color=[
-            colors[i % len(colors)] for i in range(len(categories))
-          ],
+          marker_color=[colors[i % len(colors)] for i in range(len(categories))],
           name="健康指标",
-          hovertemplate="<b>%{theta}</b><br>"
-          + "值: %{r:.2f}<br>"
-          + "<extra></extra>",
+          hovertemplate="<b>%{theta}</b><br>" + "值: %{r:.2f}<br>" + "<extra></extra>",
         )
       )
 
       fig.update_layout(
         title=title,
-        polar=dict(
-          radialaxis=dict(range=[0, 1], showticklabels=False),
-          angularaxis=dict(showticklabels=True),
-        ),
+        polar={
+          "radialaxis": {"range": [0, 1], "showticklabels": False},
+          "angularaxis": {"showticklabels": True},
+        },
         width=self.width,
         height=self.height,
         template=PLOTLY_TEMPLATE,
@@ -1561,15 +1685,15 @@ class ChartGenerator:
     title: str = "健康时间线",
     output_path: Path | None = None,
   ) -> go.Figure | None:
-    """绘制健康时间线图
+    """Plot health timeline chart.
 
     Args:
-        timeline_data: 时间线数据 (columns: date, metric, value, category)
-        title: 图表标题
-        output_path: 输出路径
+        timeline_data: Timeline data (columns: date, metric, value, category).
+        title: Chart title.
+        output_path: Output path.
 
     Returns:
-        Plotly Figure 对象或 None
+        Plotly Figure or None.
     """
     if timeline_data.empty:
       logger.warning("No timeline data for health timeline")
@@ -1580,7 +1704,7 @@ class ChartGenerator:
     try:
       fig = go.Figure()
 
-      # 按类别分组绘制
+      # Plot by category.
       categories = timeline_data["category"].unique()
       colors = [
         HEALTH_COLORS["primary"],
@@ -1600,8 +1724,8 @@ class ChartGenerator:
             y=cat_data["value"],
             mode="lines+markers",
             name=category,
-            line=dict(color=color, width=2),
-            marker=dict(size=6, color=color),
+            line={"color": color, "width": 2},
+            marker={"size": 6, "color": color},
             hovertemplate="<b>%{fullData.name}</b><br>"
             + "日期: %{x}<br>"
             + "值: %{y:.2f}<br>"
@@ -1634,15 +1758,15 @@ class ChartGenerator:
     title: str = "健康风险评估",
     output_path: Path | None = None,
   ) -> go.Figure | None:
-    """绘制健康风险评估图
+    """Plot health risk assessment chart.
 
     Args:
-        risk_factors: 风险因素字典
-        title: 图表标题
-        output_path: 输出路径
+        risk_factors: Risk factors dictionary.
+        title: Chart title.
+        output_path: Output path.
 
     Returns:
-        Plotly Figure 对象或 None
+        Plotly Figure or None.
     """
     logger.info("Generating risk assessment chart")
 
@@ -1650,13 +1774,13 @@ class ChartGenerator:
       if not risk_factors:
         return None
 
-      # 创建瀑布图显示风险因素
+      # Build a bar chart of risk factors.
       factors = list(risk_factors.keys())
       values = list(risk_factors.values())
 
       fig = go.Figure()
 
-      # 绘制每个风险因素的条形
+      # Color bars by risk level.
       colors = []
       for value in values:
         if value > 0.7:
@@ -1672,13 +1796,11 @@ class ChartGenerator:
           y=values,
           marker_color=colors,
           name="风险水平",
-          hovertemplate="<b>%{x}</b><br>"
-          + "风险值: %{y:.2f}<br>"
-          + "<extra></extra>",
+          hovertemplate="<b>%{x}</b><br>" + "风险值: %{y:.2f}<br>" + "<extra></extra>",
         )
       )
 
-      # 添加风险等级线
+      # Add risk threshold lines.
       fig.add_hline(
         y=0.7,
         line_dash="dash",
@@ -1718,14 +1840,14 @@ class ChartGenerator:
     report: Any,  # ComprehensiveHealthReport
     output_dir: Path,
   ) -> dict[str, Path]:
-    """生成综合健康报告的所有图表
+    """Generate all charts for a comprehensive report.
 
     Args:
-        report: 综合健康分析报告
-        output_dir: 输出目录
+        report: Comprehensive health analysis report.
+        output_dir: Output directory.
 
     Returns:
-        图表文件路径字典
+        Mapping of chart names to file paths.
     """
     logger.info("Generating comprehensive health report charts")
     output_dir = Path(output_dir)
@@ -1734,12 +1856,12 @@ class ChartGenerator:
     charts = {}
 
     try:
-      # 健康仪表盘
+      # Health dashboard.
       if hasattr(report, "overall_wellness_score"):
         dashboard_path = output_dir / "health_dashboard.html"
         metrics = {}
 
-        # 收集各项指标
+        # Collect metrics.
         if hasattr(report, "sleep_quality") and report.sleep_quality:
           metrics["睡眠质量"] = min(
             1.0, report.sleep_quality.average_duration_hours / 8.0
@@ -1751,9 +1873,7 @@ class ChartGenerator:
         if hasattr(report, "metabolic_health") and report.metabolic_health:
           metrics["代谢健康"] = report.metabolic_health.metabolic_health_score
         if hasattr(report, "stress_resilience") and report.stress_resilience:
-          metrics["压力韧性"] = (
-            1.0 - report.stress_resilience.stress_accumulation_score
-          )
+          metrics["压力韧性"] = 1.0 - report.stress_resilience.stress_accumulation_score
 
         dashboard_fig = self.plot_health_dashboard(
           report.overall_wellness_score,
@@ -1763,7 +1883,7 @@ class ChartGenerator:
         if dashboard_fig:
           charts["dashboard"] = dashboard_path
 
-      # 相关性热力图
+      # Correlation heatmap.
       if hasattr(report, "health_correlations") and report.health_correlations:
         correlation_path = output_dir / "correlation_heatmap.html"
         correlation_fig = self.plot_correlation_heatmap(
@@ -1773,10 +1893,10 @@ class ChartGenerator:
         if correlation_fig:
           charts["correlation"] = correlation_path
 
-      # 健康时间线
-      # 这里需要准备时间线数据，暂时跳过
+      # Health timeline.
+      # Timeline data preparation is pending; skip for now.
 
-      # 风险评估
+      # Risk assessment.
       if hasattr(report, "stress_resilience") and report.stress_resilience:
         risk_path = output_dir / "risk_assessment.html"
         risk_factors = {

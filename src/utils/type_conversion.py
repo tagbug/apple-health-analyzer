@@ -4,7 +4,7 @@ Provides utilities for converting between NumPy types and Python types,
 ensuring type safety in numerical computations.
 """
 
-from typing import Any, Union
+from typing import Any
 
 import numpy as np
 
@@ -28,7 +28,7 @@ def numpy_to_python_scalar(value: Any) -> float:
   return float(value)
 
 
-def safe_float(value: Union[float, np.floating, np.integer, int]) -> Any:
+def safe_float(value: float | np.floating | np.integer | int) -> Any:
   """Safely convert numeric types to Python float.
 
   Handles both Python and NumPy numeric types safely.
@@ -44,7 +44,7 @@ def safe_float(value: Union[float, np.floating, np.integer, int]) -> Any:
   return float(value)
 
 
-def safe_int(value: Union[int, np.integer, float, np.floating]) -> int:
+def safe_int(value: int | np.integer | float | np.floating) -> int:
   """Safely convert numeric types to Python int.
 
   Args:

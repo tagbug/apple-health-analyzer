@@ -1,4 +1,4 @@
-"""健康洞察生成模块 - 从分析结果中提取关键洞察和建议"""
+"""Health highlights generator module for key insights and recommendations."""
 
 from dataclasses import dataclass
 from datetime import datetime
@@ -13,20 +13,20 @@ logger = get_logger(__name__)
 
 @dataclass
 class HealthInsight:
-  """健康洞察数据类"""
+  """Health insight data model."""
 
   category: Literal["heart_rate", "sleep", "correlation", "general"]
   priority: Literal["high", "medium", "low"]
   title: str
   message: str
   details: dict[str, Any] | None = None
-  confidence: float = 1.0  # 置信度 (0-1)
+  confidence: float = 1.0  # Confidence (0-1)
   timestamp: datetime | None = None
 
 
 @dataclass
 class HealthHighlights:
-  """健康洞察汇总"""
+  """Health highlights summary."""
 
   analysis_date: datetime
   insights: list[HealthInsight]
@@ -35,13 +35,13 @@ class HealthHighlights:
 
 
 class HighlightsGenerator:
-  """健康洞察生成器
+  """Health highlights generator.
 
-  从心率、睡眠等分析结果中提取关键洞察，生成可读性强的健康建议。
+  Extracts key insights from heart rate and sleep reports.
   """
 
   def __init__(self):
-    """初始化洞察生成器"""
+    """Initialize the highlights generator."""
     logger.info("HighlightsGenerator initialized")
 
   def generate_comprehensive_highlights(
@@ -50,42 +50,42 @@ class HighlightsGenerator:
     sleep_report: SleepAnalysisReport | None = None,
     correlation_data: dict[str, Any] | None = None,
   ) -> HealthHighlights:
-    """生成综合健康洞察
+    """Generate comprehensive health highlights.
 
     Args:
-        heart_rate_report: 心率分析报告
-        sleep_report: 睡眠分析报告
-        correlation_data: 关联分析数据
+        heart_rate_report: Heart rate analysis report.
+        sleep_report: Sleep analysis report.
+        correlation_data: Correlation insights.
 
     Returns:
-        综合健康洞察
+        Health highlights summary.
     """
     logger.info("Generating comprehensive health highlights")
 
     insights = []
 
-    # 心率洞察
+    # Heart rate insights.
     if heart_rate_report:
       hr_insights = self._generate_heart_rate_insights(heart_rate_report)
       insights.extend(hr_insights)
 
-    # 睡眠洞察
+    # Sleep insights.
     if sleep_report:
       sleep_insights = self._generate_sleep_insights(sleep_report)
       insights.extend(sleep_insights)
 
-    # 关联洞察
+    # Correlation insights.
     if correlation_data:
       corr_insights = self._generate_correlation_insights(correlation_data)
       insights.extend(corr_insights)
 
-    # 排序和过滤洞察
+    # Rank and filter insights.
     insights = self._rank_and_filter_insights(insights)
 
-    # 生成总结
+    # Generate summary.
     summary = self._generate_summary(insights, heart_rate_report, sleep_report)
 
-    # 生成建议
+    # Generate recommendations.
     recommendations = self._generate_recommendations(insights)
 
     highlights = HealthHighlights(
@@ -103,14 +103,14 @@ class HighlightsGenerator:
   def _generate_heart_rate_insights(
     self, report: HeartRateAnalysisReport
   ) -> list[HealthInsight]:
-    """生成心率相关洞察"""
+    """Generate heart rate related insights."""
     insights = []
 
-    # 静息心率洞察
+    # Resting heart rate insights.
     if report.resting_hr_analysis:
       resting_hr = report.resting_hr_analysis
 
-      # 趋势洞察
+      # Trend insights.
       if abs(resting_hr.change_from_baseline) > 2:
         if resting_hr.trend_direction == "decreasing":
           insights.append(
@@ -145,7 +145,7 @@ class HighlightsGenerator:
             )
           )
 
-      # 健康评级洞察
+      # Health rating insights.
       if resting_hr.health_rating == "excellent":
         insights.append(
           HealthInsight(
@@ -175,7 +175,7 @@ class HighlightsGenerator:
           )
         )
 
-    # HRV洞察
+    # HRV insights.
     if report.hrv_analysis:
       hrv = report.hrv_analysis
 
@@ -212,7 +212,7 @@ class HighlightsGenerator:
           )
         )
 
-      # 压力水平洞察
+      # Stress level insights.
       if hrv.stress_level in ["high", "very_high"]:
         insights.append(
           HealthInsight(
@@ -228,7 +228,7 @@ class HighlightsGenerator:
           )
         )
 
-    # 心肺适能洞察
+    # Cardio fitness insights.
     if report.cardio_fitness:
       cardio = report.cardio_fitness
 
@@ -255,7 +255,7 @@ class HighlightsGenerator:
         )
       )
 
-    # 异常检测洞察
+    # Anomaly detection insights.
     if report.anomalies and len(report.anomalies) > 0:
       anomaly_count = len(report.anomalies)
       if anomaly_count > 10:
@@ -275,14 +275,14 @@ class HighlightsGenerator:
   def _generate_sleep_insights(
     self, report: SleepAnalysisReport
   ) -> list[HealthInsight]:
-    """生成睡眠相关洞察"""
+    """Generate sleep-related insights."""
     insights = []
 
-    # 睡眠质量洞察
+    # Sleep quality insights.
     if report.quality_metrics:
       quality = report.quality_metrics
 
-      # 时长洞察
+      # Duration insights.
       if quality.average_duration < 7:
         insights.append(
           HealthInsight(
@@ -306,7 +306,7 @@ class HighlightsGenerator:
           )
         )
 
-      # 效率洞察
+      # Efficiency insights.
       if quality.average_efficiency < 0.85:
         insights.append(
           HealthInsight(
@@ -319,7 +319,7 @@ class HighlightsGenerator:
           )
         )
 
-      # 规律性洞察
+      # Consistency insights.
       if quality.consistency_score < 0.7:
         insights.append(
           HealthInsight(
@@ -332,11 +332,11 @@ class HighlightsGenerator:
           )
         )
 
-    # 睡眠模式洞察
+    # Sleep pattern insights.
     if report.pattern_analysis:
       patterns = report.pattern_analysis
 
-      # 社会时差洞察
+      # Social jetlag insights.
       if (
         patterns.weekday_vs_weekend
         and patterns.weekday_vs_weekend.get("social_jetlag", 0) > 2
@@ -353,7 +353,7 @@ class HighlightsGenerator:
           )
         )
 
-    # 睡眠-心率关联洞察
+    # Sleep-heart rate correlation insights.
     if report.hr_correlation:
       hr_corr = report.hr_correlation
 
@@ -369,7 +369,7 @@ class HighlightsGenerator:
           )
         )
 
-    # 异常检测洞察
+    # Anomaly detection insights.
     if report.anomalies and len(report.anomalies) > 0:
       anomaly_count = len(report.anomalies)
       if anomaly_count > 5:
@@ -389,22 +389,63 @@ class HighlightsGenerator:
   def _generate_correlation_insights(
     self, correlation_data: dict[str, Any]
   ) -> list[HealthInsight]:
-    """生成关联分析洞察"""
+    """Generate correlation insights."""
     insights = []
 
-    # 这里可以添加更复杂的关联分析洞察
-    # 目前返回空列表，后续扩展
+    if not correlation_data:
+      return insights
+
+    for key, data in correlation_data.items():
+      correlation_value = data.get("correlation", 0.0)
+      insight_text = data.get("insight", "")
+
+      # Determine priority by correlation strength.
+      abs_corr = abs(correlation_value)
+      if abs_corr >= 0.7:
+        priority = "high"
+        confidence = 0.9
+      elif abs_corr >= 0.4:
+        priority = "medium"
+        confidence = 0.8
+      else:
+        priority = "low"
+        confidence = 0.6
+
+      # Build title.
+      if key == "sleep_activity":
+        title = "睡眠与活动关联"
+      elif key == "hr_stress":
+        title = "心率与压力关联"
+      else:
+        title = f"健康指标关联 ({key})"
+
+      # Generate fallback insight text when missing.
+      if not insight_text:
+        direction = "正相关" if correlation_value > 0 else "负相关"
+        strength = "强" if abs_corr >= 0.7 else "中等" if abs_corr >= 0.4 else "弱"
+        insight_text = f"检测到{strength}{direction} (r={correlation_value:.2f})"
+
+      insights.append(
+        HealthInsight(
+          category="correlation",
+          priority=priority,
+          title=title,
+          message=insight_text,
+          details={"correlation": correlation_value, "type": key},
+          confidence=confidence,
+        )
+      )
 
     return insights
 
   def _rank_and_filter_insights(
     self, insights: list[HealthInsight]
   ) -> list[HealthInsight]:
-    """对洞察进行排序和过滤"""
+    """Rank and filter insights."""
     if not insights:
       return []
 
-    # 按优先级和置信度排序
+    # Sort by priority and confidence.
     priority_order = {"high": 3, "medium": 2, "low": 1}
 
     def sort_key(insight: HealthInsight) -> tuple[int, float]:
@@ -412,7 +453,7 @@ class HighlightsGenerator:
 
     insights.sort(key=sort_key, reverse=True)
 
-    # 限制数量，避免信息过载
+    # Limit count to avoid overload.
     max_insights = 10
     if len(insights) > max_insights:
       insights = insights[:max_insights]
@@ -425,32 +466,28 @@ class HighlightsGenerator:
     heart_rate_report: HeartRateAnalysisReport | None,
     sleep_report: SleepAnalysisReport | None,
   ) -> dict[str, Any]:
-    """生成总结信息"""
+    """Generate summary information."""
     summary: dict[str, Any] = {
       "total_insights": len(insights),
       "high_priority_count": sum(1 for i in insights if i.priority == "high"),
-      "medium_priority_count": sum(
-        1 for i in insights if i.priority == "medium"
-      ),
+      "medium_priority_count": sum(1 for i in insights if i.priority == "medium"),
       "low_priority_count": sum(1 for i in insights if i.priority == "low"),
       "categories": {},
       "data_quality": {},
     }
 
-    # 分类统计
+    # Category summary.
     categories = summary["categories"]
     if isinstance(categories, dict):
       for insight in insights:
         categories[insight.category] = categories.get(insight.category, 0) + 1
 
-    # 数据质量信息
+    # Data quality summary.
     data_quality = summary["data_quality"]
     if isinstance(data_quality, dict):
       if heart_rate_report:
         data_quality["heart_rate_records"] = heart_rate_report.record_count
-        data_quality["heart_rate_quality"] = (
-          heart_rate_report.data_quality_score
-        )
+        data_quality["heart_rate_quality"] = heart_rate_report.data_quality_score
 
       if sleep_report:
         data_quality["sleep_records"] = sleep_report.record_count
@@ -458,24 +495,18 @@ class HighlightsGenerator:
 
     return summary
 
-  def _generate_recommendations(
-    self, insights: list[HealthInsight]
-  ) -> list[str]:
-    """基于洞察生成建议"""
+  def _generate_recommendations(self, insights: list[HealthInsight]) -> list[str]:
+    """Generate recommendations based on insights."""
     recommendations = []
 
-    # 分析洞察中的关键问题
+    # Identify key issues in insights.
     has_sleep_duration_issue = any("睡眠时长不足" in i.title for i in insights)
-    has_sleep_efficiency_issue = any(
-      "睡眠效率低下" in i.title for i in insights
-    )
-    has_sleep_consistency_issue = any(
-      "睡眠规律性差" in i.title for i in insights
-    )
+    has_sleep_efficiency_issue = any("睡眠效率低下" in i.title for i in insights)
+    has_sleep_consistency_issue = any("睡眠规律性差" in i.title for i in insights)
     has_high_stress = any("高压力水平" in i.title for i in insights)
     has_poor_resting_hr = any("心率健康需要关注" in i.title for i in insights)
 
-    # 生成针对性建议
+    # Generate targeted recommendations.
     if has_sleep_duration_issue:
       recommendations.append("保证每晚7-9小时的睡眠时间，避免熬夜")
       recommendations.append("建立规律的作息时间表，包括周末")
@@ -493,12 +524,10 @@ class HighlightsGenerator:
       recommendations.append("保证充足的休息和娱乐时间")
 
     if has_poor_resting_hr:
-      recommendations.append(
-        "增加有氧运动，如快走、跑步或骑行，每周至少150分钟"
-      )
+      recommendations.append("增加有氧运动，如快走、跑步或骑行，每周至少150分钟")
       recommendations.append("定期监测心率指标，如有异常及时咨询医生")
 
-    # 通用建议
+    # Default recommendations.
     if not recommendations:
       recommendations.extend(
         [

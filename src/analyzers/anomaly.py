@@ -1,20 +1,22 @@
-"""异常检测模块 - 提供多种异常检测算法"""
+"""Anomaly detection module with multiple detection methods."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal, Sequence, TypedDict
+from typing import Literal, TypedDict
 
 import numpy as np
 import pandas as pd
 
 from ..core.data_models import CategoryRecord, HealthRecord, QuantityRecord
 from ..utils.logger import get_logger
+from ..utils.type_conversion import safe_float
 
 logger = get_logger(__name__)
 
 
 class SeverityThresholds(TypedDict):
-  """严重程度阈值配置"""
+  """Severity threshold configuration."""
 
   low: float
   medium: float
@@ -22,7 +24,7 @@ class SeverityThresholds(TypedDict):
 
 
 class AnomalyConfig(TypedDict, total=False):
-  """异常检测配置"""
+  """Anomaly detection configuration."""
 
   zscore_threshold: float
   iqr_multiplier: float
@@ -33,46 +35,46 @@ class AnomalyConfig(TypedDict, total=False):
 
 @dataclass
 class AnomalyRecord:
-  """异常记录数据类"""
+  """Anomaly record data model."""
 
   timestamp: datetime
   value: float
-  expected_value: float  # 预期值
-  deviation: float  # 偏差程度
-  severity: Literal["low", "medium", "high"]  # 严重程度
-  method: str  # 检测方法
-  confidence: float  # 置信度 (0-1)
-  context: dict[str, str | float | int]  # 上下文信息
+  expected_value: float  # Expected value
+  deviation: float  # Deviation magnitude
+  severity: Literal["low", "medium", "high"]  # Severity
+  method: str  # Detection method
+  confidence: float  # Confidence (0-1)
+  context: dict[str, str | float | int]  # Context metadata
 
 
 @dataclass
 class AnomalyReport:
-  """异常检测报告"""
+  """Anomaly detection report."""
 
   total_records: int
   anomaly_count: int
   anomaly_rate: float
   anomalies_by_severity: dict[str, int]
   anomalies_by_method: dict[str, int]
-  time_distribution: dict[str, dict[str, int]]  # 异常的时间分布
-  recommendations: list[str]  # 改进建议
+  time_distribution: dict[str, dict[str, int]]  # Time distribution of anomalies
+  recommendations: list[str]  # Recommendations
 
 
 class AnomalyDetector:
-  """异常检测核心类"""
+  """Core anomaly detection class."""
 
   def __init__(self, config: AnomalyConfig | None = None):
-    """初始化异常检测器
+    """Initialize the anomaly detector.
 
     Args:
-        config: 检测配置参数
+        config: Optional detection configuration overrides.
     """
     default_config: AnomalyConfig = {
-      "zscore_threshold": 3.0,  # Z-Score 阈值
-      "iqr_multiplier": 1.5,  # IQR 倍数
-      "ma_threshold": 2.0,  # 移动平均阈值
-      "context_threshold": 2.5,  # 上下文异常阈值
-      "severity_thresholds": {  # 严重程度阈值
+      "zscore_threshold": 3.0,  # Z-score threshold
+      "iqr_multiplier": 1.5,  # IQR multiplier
+      "ma_threshold": 2.0,  # Moving average threshold
+      "context_threshold": 2.5,  # Contextual anomaly threshold
+      "severity_thresholds": {  # Severity thresholds
         "low": 1.5,
         "medium": 2.5,
         "high": 3.5,
@@ -90,19 +92,17 @@ class AnomalyDetector:
     records: Sequence[HealthRecord],
     methods: list[Literal["zscore", "iqr", "moving_average", "contextual"]]
     | None = None,
-    context: Literal[
-      "time_of_day", "day_of_week", "sleep_wake"
-    ] = "time_of_day",
+    context: Literal["time_of_day", "day_of_week", "sleep_wake"] = "time_of_day",
   ) -> list[AnomalyRecord]:
-    """检测异常值
+    """Detect anomalies in a set of health records.
 
     Args:
-        records: 健康记录列表
-        methods: 检测方法列表
-        context: 上下文类型 (用于上下文异常检测)
+        records: Health record list.
+        methods: Detection methods to apply.
+        context: Context mode for contextual detection.
 
     Returns:
-        异常记录列表
+        List of anomaly records.
     """
     if not records:
       logger.warning("No records provided for anomaly detection")
@@ -115,7 +115,7 @@ class AnomalyDetector:
       f"Detecting anomalies in {len(records)} records using methods: {methods}"
     )
 
-    # 转换为DataFrame
+    # Convert to DataFrame for vectorized operations.
     df = self._records_to_dataframe(records)
 
     if df.empty or "value" not in df.columns:
@@ -124,7 +124,7 @@ class AnomalyDetector:
 
     all_anomalies = []
 
-    # 使用不同方法检测异常
+    # Run each detection method and collect anomalies.
     for method in methods:
       try:
         if method == "zscore":
@@ -146,7 +146,7 @@ class AnomalyDetector:
         logger.error(f"Error in {method} detection: {e}")
         continue
 
-    # 去重 (同一个时间点的异常只保留最严重的)
+    # Deduplicate anomalies by timestamp (keep the most severe one).
     unique_anomalies = self._deduplicate_anomalies(all_anomalies)
 
     logger.info(f"Total unique anomalies detected: {len(unique_anomalies)}")
@@ -155,34 +155,34 @@ class AnomalyDetector:
   def generate_report(
     self, anomalies: Sequence[AnomalyRecord], total_records: int
   ) -> AnomalyReport:
-    """生成异常检测报告
+    """Generate an anomaly detection report.
 
     Args:
-        anomalies: 异常记录列表
-        total_records: 总记录数
+        anomalies: Anomaly records.
+        total_records: Total record count.
 
     Returns:
-        异常检测报告
+        Anomaly report.
     """
     anomaly_count = len(anomalies)
     anomaly_rate = anomaly_count / total_records if total_records > 0 else 0
 
-    # 按严重程度分类
+    # Group by severity.
     by_severity = {
       "low": sum(1 for a in anomalies if a.severity == "low"),
       "medium": sum(1 for a in anomalies if a.severity == "medium"),
       "high": sum(1 for a in anomalies if a.severity == "high"),
     }
 
-    # 按方法分类
+    # Group by method.
     by_method = {}
     for anomaly in anomalies:
       by_method[anomaly.method] = by_method.get(anomaly.method, 0) + 1
 
-    # 时间分布分析
+    # Analyze time distribution.
     time_distribution = self._analyze_time_distribution(anomalies)
 
-    # 生成建议
+    # Generate recommendations.
     recommendations = self._generate_recommendations(anomalies, anomaly_rate)
 
     return AnomalyReport(
@@ -196,10 +196,10 @@ class AnomalyDetector:
     )
 
   def _detect_zscore(self, df: pd.DataFrame) -> list[AnomalyRecord]:
-    """Z-Score 异常检测
+    """Z-score anomaly detection.
 
-    原理: (x - μ) / σ > threshold
-    适用: 数据近似正态分布时效果最好
+    Principle: (x - mu) / sigma > threshold
+    Best for: roughly normal distributions
     """
     values = df["value"].dropna()
     if len(values) < 3:
@@ -222,7 +222,7 @@ class AnomalyDetector:
 
       if z_score > threshold:
         severity = self._calculate_severity(z_score)
-        confidence = min(1.0, z_score / 5.0)  # 基于Z-Score计算置信度
+        confidence = min(1.0, z_score / 5.0)  # Confidence from z-score magnitude.
 
         anomalies.append(
           AnomalyRecord(
@@ -244,13 +244,13 @@ class AnomalyDetector:
     return anomalies
 
   def _detect_iqr(self, df: pd.DataFrame) -> list[AnomalyRecord]:
-    """IQR 四分位距异常检测
+    """IQR-based anomaly detection.
 
-    原理: Q1 - k*IQR < x < Q3 + k*IQR
-    优势: 对极端值不敏感，更鲁棒
+    Principle: Q1 - k*IQR < x < Q3 + k*IQR
+    Best for: robust detection without assuming normality
     """
     values = df["value"].dropna()
-    if len(values) < 4:  # 需要至少4个值计算四分位数
+    if len(values) < 4:  # Need at least 4 values for quartiles.
       return []
 
     Q1 = values.quantile(0.25)
@@ -273,30 +273,30 @@ class AnomalyDetector:
       value = row["value"]
 
       if value < lower_bound or value > upper_bound:
-        # 计算偏差程度 (相对于IQR的倍数)
+        # Deviation relative to IQR.
         if value < lower_bound:
           deviation = (lower_bound - value) / IQR if IQR > 0 else 0
         else:
           deviation = (value - upper_bound) / IQR if IQR > 0 else 0
 
         severity = self._calculate_severity(deviation)
-        confidence = min(1.0, deviation / 3.0)  # 基于IQR倍数计算置信度
+        confidence = min(1.0, deviation / 3.0)  # Confidence based on IQR multiples.
 
         anomalies.append(
           AnomalyRecord(
             timestamp=row["start_date"],
             value=row["value"],
-            expected_value=float(np.asarray((Q1 + Q3) / 2)),  # 中位数作为预期值
+            expected_value=safe_float((Q1 + Q3) / 2),  # Midpoint as expected value.
             deviation=deviation,
             severity=severity,
             method="iqr",
             confidence=round(confidence, 3),
             context={
-              "Q1": round(float(np.asarray(Q1)), 2),
-              "Q3": round(float(np.asarray(Q3)), 2),
-              "IQR": round(float(np.asarray(IQR)), 2),
-              "lower_bound": round(float(np.asarray(lower_bound)), 2),
-              "upper_bound": round(float(np.asarray(upper_bound)), 2),
+              "Q1": round(safe_float(Q1), 2),
+              "Q3": round(safe_float(Q3), 2),
+              "IQR": round(safe_float(IQR), 2),
+              "lower_bound": round(safe_float(lower_bound), 2),
+              "upper_bound": round(safe_float(upper_bound), 2),
             },
           )
         )
@@ -306,15 +306,15 @@ class AnomalyDetector:
   def _detect_moving_average(
     self, df: pd.DataFrame, window: int = 7
   ) -> list[AnomalyRecord]:
-    """移动平均异常检测
+    """Moving average anomaly detection.
 
-    原理: 当前值与移动平均值偏差 > threshold * std
-    优势: 捕捉短期异常波动
+    Principle: deviation from moving average exceeds threshold * std
+    Best for: short-term fluctuations in time-series data
     """
     if len(df) < window:
       return []
 
-    # 计算移动平均和移动标准差
+    # Compute rolling mean and standard deviation.
     df = df.copy().sort_values("start_date")
     df["ma"] = df["value"].rolling(window=window, center=True).mean()
     df["ma_std"] = df["value"].rolling(window=window, center=True).std()
@@ -337,14 +337,14 @@ class AnomalyDetector:
           AnomalyRecord(
             timestamp=row["start_date"],
             value=row["value"],
-            expected_value=float(np.asarray(row["ma"])),
-            deviation=deviation / float(np.asarray(row["ma_std"])),
+            expected_value=safe_float(row["ma"]),
+            deviation=deviation / safe_float(row["ma_std"]),
             severity=severity,
             method="moving_average",
             confidence=round(confidence, 3),
             context={
-              "moving_average": round(float(np.asarray(row["ma"])), 2),
-              "ma_std": round(float(np.asarray(row["ma_std"])), 2),
+              "moving_average": round(safe_float(row["ma"]), 2),
+              "ma_std": round(safe_float(row["ma_std"]), 2),
               "window": window,
             },
           )
@@ -357,10 +357,7 @@ class AnomalyDetector:
     df: pd.DataFrame,
     context: Literal["time_of_day", "day_of_week", "sleep_wake"],
   ) -> list[AnomalyRecord]:
-    """上下文异常检测
-
-    基于时间模式的异常检测
-    """
+    """Contextual anomaly detection based on temporal patterns."""
     if context == "time_of_day":
       return self._detect_time_of_day_anomalies(df)
     elif context == "day_of_week":
@@ -371,14 +368,12 @@ class AnomalyDetector:
       logger.warning(f"Unknown context type: {context}")
       return []
 
-  def _detect_time_of_day_anomalies(
-    self, df: pd.DataFrame
-  ) -> list[AnomalyRecord]:
-    """按小时的异常检测"""
+  def _detect_time_of_day_anomalies(self, df: pd.DataFrame) -> list[AnomalyRecord]:
+    """Detect anomalies by hour of day."""
     df = df.copy()
     df["hour"] = df["start_date"].dt.hour
 
-    # 计算每个小时的统计值
+    # Compute hourly statistics.
     hourly_stats = df.groupby("hour")["value"].agg(["mean", "std"]).dropna()
 
     threshold = self.config["context_threshold"]
@@ -402,9 +397,9 @@ class AnomalyDetector:
         severity = self._calculate_severity(z_score)
         confidence = min(1.0, z_score / 4.0)
 
-        # 安全地处理pandas Scalar类型
-        mean_val_float = float(np.asarray(mean_val))
-        std_val_float = float(np.asarray(std_val))
+        # Safely handle pandas scalar types.
+        mean_val_float = safe_float(mean_val)
+        std_val_float = safe_float(std_val)
 
         anomalies.append(
           AnomalyRecord(
@@ -425,17 +420,13 @@ class AnomalyDetector:
 
     return anomalies
 
-  def _detect_day_of_week_anomalies(
-    self, df: pd.DataFrame
-  ) -> list[AnomalyRecord]:
-    """按星期的异常检测"""
+  def _detect_day_of_week_anomalies(self, df: pd.DataFrame) -> list[AnomalyRecord]:
+    """Detect anomalies by day of week."""
     df = df.copy()
     df["day_of_week"] = df["start_date"].dt.dayofweek  # 0=Monday, 6=Sunday
 
-    # 计算每周每一天的统计值
-    daily_stats = (
-      df.groupby("day_of_week")["value"].agg(["mean", "std"]).dropna()
-    )
+    # Compute daily statistics.
+    daily_stats = df.groupby("day_of_week")["value"].agg(["mean", "std"]).dropna()
 
     threshold = self.config["context_threshold"]
     anomalies = []
@@ -472,7 +463,7 @@ class AnomalyDetector:
           AnomalyRecord(
             timestamp=row["start_date"],
             value=row["value"],
-            expected_value=float(np.asarray(mean_val)),
+            expected_value=safe_float(mean_val),
             deviation=z_score,
             severity=severity,
             method="contextual_day_of_week",
@@ -480,27 +471,67 @@ class AnomalyDetector:
             context={
               "day_of_week": day,
               "day_name": day_names[day],
-              "daily_mean": round(float(np.asarray(mean_val)), 2),
-              "daily_std": round(float(np.asarray(std_val)), 2),
+              "daily_mean": round(safe_float(mean_val), 2),
+              "daily_std": round(safe_float(std_val), 2),
             },
           )
         )
 
     return anomalies
 
-  def _detect_sleep_wake_anomalies(
-    self, df: pd.DataFrame
-  ) -> list[AnomalyRecord]:
-    """睡眠/清醒状态异常检测"""
-    # 这需要睡眠数据，目前简化实现
-    # 实际实现需要结合睡眠记录
-    logger.info("Sleep/wake anomaly detection not yet implemented")
-    return []
+  def _detect_sleep_wake_anomalies(self, df: pd.DataFrame) -> list[AnomalyRecord]:
+    """Detect anomalies by sleep vs wake time windows."""
+    if df.empty or "start_date" not in df.columns or "value" not in df.columns:
+      return []
 
-  def _calculate_severity(
-    self, deviation: float
-  ) -> Literal["low", "medium", "high"]:
-    """根据偏差程度计算严重性"""
+    df = df.copy()
+    df["hour"] = df["start_date"].dt.hour
+    df["is_sleep_hour"] = (df["hour"] >= 22) | (df["hour"] < 6)
+
+    sleep_stats = df.groupby("is_sleep_hour")["value"].agg(["mean", "std"]).dropna()
+
+    threshold = self.config["context_threshold"]
+    anomalies = []
+
+    for _idx, row in df.iterrows():
+      is_sleep_hour = row["is_sleep_hour"]
+
+      if is_sleep_hour not in sleep_stats.index:
+        continue
+
+      mean_val = sleep_stats.loc[is_sleep_hour, "mean"]
+      std_val = sleep_stats.loc[is_sleep_hour, "std"]
+
+      if std_val == 0:
+        continue
+
+      z_score = abs(row["value"] - mean_val) / std_val
+
+      if z_score > threshold:
+        severity = self._calculate_severity(z_score)
+        confidence = min(1.0, z_score / 4.0)
+
+        anomalies.append(
+          AnomalyRecord(
+            timestamp=row["start_date"],
+            value=row["value"],
+            expected_value=safe_float(mean_val),
+            deviation=z_score,
+            severity=severity,
+            method="contextual_sleep_wake",
+            confidence=round(confidence, 3),
+            context={
+              "is_sleep_hour": bool(is_sleep_hour),
+              "sleep_mean": round(safe_float(mean_val), 2),
+              "sleep_std": round(safe_float(std_val), 2),
+            },
+          )
+        )
+
+    return anomalies
+
+  def _calculate_severity(self, deviation: float) -> Literal["low", "medium", "high"]:
+    """Compute severity from deviation magnitude."""
     thresholds = self.config["severity_thresholds"]
 
     if deviation >= thresholds["high"]:
@@ -513,11 +544,11 @@ class AnomalyDetector:
   def _deduplicate_anomalies(
     self, anomalies: Sequence[AnomalyRecord]
   ) -> list[AnomalyRecord]:
-    """去重异常记录，保留最严重的"""
+    """Deduplicate anomalies by timestamp, keeping the most severe."""
     if not anomalies:
       return []
 
-    # 按时间戳分组
+    # Group by timestamp.
     by_timestamp = {}
     for anomaly in anomalies:
       timestamp = anomaly.timestamp
@@ -525,12 +556,12 @@ class AnomalyDetector:
         by_timestamp[timestamp] = []
       by_timestamp[timestamp].append(anomaly)
 
-    # 对每个时间戳保留最严重的异常
+    # Keep the most severe anomaly per timestamp.
     unique_anomalies = []
     severity_order = {"low": 1, "medium": 2, "high": 3}
 
     for _timestamp, anomaly_list in by_timestamp.items():
-      # 按严重程度排序，取最严重的
+      # Pick the most severe anomaly.
       most_severe = max(anomaly_list, key=lambda x: severity_order[x.severity])
       unique_anomalies.append(most_severe)
 
@@ -539,7 +570,7 @@ class AnomalyDetector:
   def _analyze_time_distribution(
     self, anomalies: Sequence[AnomalyRecord]
   ) -> dict[str, dict[str, int]]:
-    """分析异常的时间分布"""
+    """Analyze the time distribution of anomalies."""
     if not anomalies:
       return {}
 
@@ -550,13 +581,11 @@ class AnomalyDetector:
     }
 
     for anomaly in anomalies:
-      # 按小时分布
+      # By hour.
       hour = anomaly.timestamp.hour
-      distribution["by_hour"][str(hour)] = (
-        distribution["by_hour"].get(str(hour), 0) + 1
-      )
+      distribution["by_hour"][str(hour)] = distribution["by_hour"].get(str(hour), 0) + 1
 
-      # 按星期分布
+      # By weekday.
       day_of_week = anomaly.timestamp.weekday()
       day_names = [
         "Monday",
@@ -572,7 +601,7 @@ class AnomalyDetector:
         distribution["by_day_of_week"].get(day_name, 0) + 1
       )
 
-      # 按月份分布
+      # By month.
       month = anomaly.timestamp.month
       distribution["by_month"][str(month)] = (
         distribution["by_month"].get(str(month), 0) + 1
@@ -583,41 +612,45 @@ class AnomalyDetector:
   def _generate_recommendations(
     self, anomalies: Sequence[AnomalyRecord], anomaly_rate: float
   ) -> list[str]:
-    """生成异常检测建议"""
+    """Generate recommendations based on anomaly findings."""
     recommendations = []
 
-    if anomaly_rate > 0.1:  # 异常率超过10%
-      recommendations.append("⚠️ 异常率较高，建议检查数据质量或调整检测阈值")
+    if anomaly_rate > 0.1:  # Anomaly rate exceeds 10%.
+      recommendations.append(
+        "⚠️ Anomaly rate is high; review data quality or adjust thresholds."
+      )
 
-    if anomaly_rate < 0.001:  # 异常率过低
-      recommendations.append("ℹ️ 检测到的异常较少，可能阈值设置过高")
+    if anomaly_rate < 0.001:  # Anomaly rate is very low.
+      recommendations.append("ℹ️ Few anomalies detected; thresholds may be too strict.")
 
-    # 分析严重程度分布
+    # Analyze severity distribution.
     high_severity = sum(1 for a in anomalies if a.severity == "high")
     if high_severity > len(anomalies) * 0.3:
-      recommendations.append("🚨 高严重程度异常较多，建议重点关注")
+      recommendations.append(
+        "🚨 High-severity anomalies are frequent; prioritize investigation."
+      )
 
-    # 分析时间分布
+    # Analyze time distribution.
     if anomalies:
       time_dist = self._analyze_time_distribution(anomalies)
 
-      # 检查是否集中在特定时间
+      # Check if anomalies cluster at specific times.
       hour_counts = time_dist.get("by_hour", {})
       max_hour_count = max(hour_counts.values()) if hour_counts else 0
       if max_hour_count > len(anomalies) * 0.5:
-        recommendations.append("📊 异常主要集中在特定小时，可能是正常模式")
+        recommendations.append(
+          "📊 Anomalies cluster at specific hours; this may reflect normal patterns."
+        )
 
     return recommendations
 
-  def _records_to_dataframe(
-    self, records: Sequence[HealthRecord]
-  ) -> pd.DataFrame:
-    """将健康记录转换为DataFrame"""
+  def _records_to_dataframe(self, records: Sequence[HealthRecord]) -> pd.DataFrame:
+    """Convert health records to a DataFrame."""
     data = []
     for record in records:
-      # 获取数值 (只处理有数值的记录)
+      # Use numeric value fields when present.
       value = None
-      # 检查是否是QuantityRecord或CategoryRecord子类，这些类有value属性
+      # Handle QuantityRecord/CategoryRecord subclasses with a value field.
       if isinstance(record, (QuantityRecord, CategoryRecord)):
         value = record.value
 

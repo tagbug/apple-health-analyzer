@@ -1,7 +1,4 @@
-"""
-端到端集成测试
-测试Apple Health数据分析器的完整工作流程
-"""
+"""End-to-end integration tests for Apple Health Analyzer."""
 
 import sys
 from datetime import datetime
@@ -9,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-# 添加src目录到Python路径
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+# Add src directory to Python path.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from src.analyzers.highlights import HighlightsGenerator
 from src.analyzers.statistical import StatisticalAnalyzer
@@ -22,12 +19,12 @@ from src.visualization.reports import ReportGenerator
 
 @pytest.fixture
 def sample_xml_path():
-  """获取测试用的XML文件路径"""
-  xml_path = Path(__file__).parent.parent / "example" / "example.xml"
+  """Get XML path for integration tests."""
+  xml_path = Path(__file__).resolve().parents[2] / "example" / "example.xml"
   if not xml_path.exists():
     pytest.fail(
-      f"测试数据文件不存在: {xml_path}\n"
-      f"请先运行以下命令生成测试数据:\n"
+      f"Test data file missing: {xml_path}\n"
+      f"Generate test data with:\n"
       f"  python example/create_example_xml.py"
     )
   return xml_path
@@ -35,66 +32,66 @@ def sample_xml_path():
 
 @pytest.fixture
 def output_dir():
-  """创建输出目录"""
-  output_path = Path(__file__).parent.parent / "output" / "test"
-  output_path.mkdir(exist_ok=True)
+  """Create output directory."""
+  output_path = Path(__file__).resolve().parents[2] / "output" / "test"
+  output_path.mkdir(parents=True, exist_ok=True)
   return output_path
 
 
 @pytest.fixture
 def reports_dir():
-  """创建报告目录"""
-  reports_path = Path(__file__).parent.parent / "output" / "test" / "reports"
-  reports_path.mkdir(exist_ok=True)
+  """Create reports directory."""
+  reports_path = Path(__file__).resolve().parents[2] / "output" / "test" / "reports"
+  reports_path.mkdir(parents=True, exist_ok=True)
   return reports_path
 
 
 @pytest.mark.slow
 @pytest.mark.integration
 def test_full_workflow(sample_xml_path, output_dir, reports_dir):
-  """测试完整工作流程"""
-  # 1. 数据解析
+  """Test full workflow."""
+  # 1. Parse records.
   records, stats = parse_export_file(sample_xml_path)
   assert len(records) > 0
   assert stats is not None
 
-  # 2. 数据清洗
+  # 2. Clean records.
   cleaner = DataCleaner()
   cleaned_records, dedup_result = cleaner.deduplicate_by_time_window(records)
   assert len(cleaned_records) > 0
   assert len(cleaned_records) <= len(records)
 
-  # 3. 数据质量验证
+  # 3. Validate data quality.
   quality_report = cleaner.validate_data_quality(cleaned_records)
   assert quality_report.quality_score >= 0.0
   assert quality_report.quality_score <= 100.0
 
-  # 4. 统计分析
+  # 4. Statistical analysis.
   analyzer = StatisticalAnalyzer()
   stats_report = analyzer.generate_report(cleaned_records)
   assert stats_report is not None
 
-  # 5. 亮点生成
+  # 5. Highlights generation.
   highlights_gen = HighlightsGenerator()
   highlights = highlights_gen.generate_comprehensive_highlights()
   assert highlights is not None
 
-  # 6. 数据导出
+  # 6. Export data.
   exporter = DataExporter(output_dir)
   export_stats = exporter.export_by_category(sample_xml_path)
   assert len(export_stats) > 0
 
-  # 7. 报告生成
+  # 7. Report generation.
   report_gen = ReportGenerator(reports_dir)
 
-  # 创建一个简单的报告对象
+  # Create a minimal report object.
   class SimpleReport:
     def __init__(self, records, stats_report, quality_report, highlights):
       self.records = records
       self.stats_report = stats_report
       self.quality_report = quality_report
       self.highlights = highlights
-      # 添加一些必需的属性
+      # Include required attributes.
       self.overall_wellness_score = 0.75
       self.data_range = (datetime.now(), datetime.now())
       self.data_completeness_score = 0.85
@@ -109,26 +106,26 @@ def test_full_workflow(sample_xml_path, output_dir, reports_dir):
 
 @pytest.mark.integration
 def test_error_handling():
-  """测试错误处理"""
-  # 测试不存在的文件
+  """Test error handling."""
+  # Missing file.
   with pytest.raises(FileNotFoundError):
     parse_export_file(Path("nonexistent.xml"))
 
-  # 测试空记录列表
+  # Empty record list.
   cleaner = DataCleaner()
   result, dedup_result = cleaner.deduplicate_by_time_window([])
   assert len(result) == 0
 
-  # 测试无效数据
+  # Invalid data.
   analyzer = StatisticalAnalyzer()
   report = analyzer.generate_report([])
-  assert report is not None  # 应该能处理空数据
+  assert report is not None  # Should handle empty data.
 
 
 @pytest.mark.integration
 def test_edge_cases(sample_xml_path):
-  """测试边缘情况"""
-  # 测试单条记录
+  """Test edge cases."""
+  # Single record.
   from src.core.data_models import QuantityRecord
 
   single_record = QuantityRecord(
@@ -147,9 +144,9 @@ def test_edge_cases(sample_xml_path):
   result, dedup_result = cleaner.deduplicate_by_time_window([single_record])
   assert len(result) == 1
 
-  # 测试大数据集子集
+  # Large dataset subset.
   records, _ = parse_export_file(sample_xml_path)
-  subset = records[:1000]  # 只处理前1000条
+  subset = records[:1000]  # Only process first 1000 records.
 
   cleaner = DataCleaner()
   cleaned_subset, _ = cleaner.deduplicate_by_time_window(subset)
@@ -161,15 +158,15 @@ def test_edge_cases(sample_xml_path):
 
 @pytest.mark.integration
 def test_data_consistency(sample_xml_path):
-  """测试数据一致性"""
-  # 多次解析同一文件应该得到相同的结果
+  """Test data consistency."""
+  # Parse the same file twice.
   records1, stats1 = parse_export_file(sample_xml_path)
   records2, stats2 = parse_export_file(sample_xml_path)
 
   assert len(records1) == len(records2)
   assert stats1["total_records"] == stats2["total_records"]
 
-  # 数据清洗应该是确定性的
+  # Cleaning should be deterministic.
   cleaner = DataCleaner()
   cleaned1, _ = cleaner.deduplicate_by_time_window(records1)
   cleaned2, _ = cleaner.deduplicate_by_time_window(records2)
@@ -179,64 +176,62 @@ def test_data_consistency(sample_xml_path):
 
 @pytest.mark.integration
 def test_export_formats(sample_xml_path, output_dir):
-  """测试各种导出格式"""
+  """Test export formats."""
   records, _ = parse_export_file(sample_xml_path)
   cleaner = DataCleaner()
   cleaned_records, _ = cleaner.deduplicate_by_time_window(records)
 
   exporter = DataExporter(output_dir)
 
-  # 测试CSV导出
+  # CSV export.
   csv_path = output_dir / "test_export.csv"
   csv_count = exporter.export_to_csv(cleaned_records, csv_path)
   assert csv_path.exists()
   assert csv_path.stat().st_size > 0
   assert csv_count > 0
 
-  # 测试JSON导出
+  # JSON export.
   json_path = output_dir / "test_export.json"
   json_count = exporter.export_to_json(cleaned_records, json_path)
   assert json_path.exists()
   assert json_path.stat().st_size > 0
   assert json_count > 0
 
-  # 记录数量应该一致
+  # Record counts should match.
   assert csv_count == json_count
 
 
 @pytest.mark.integration
 def test_analysis_completeness(sample_xml_path):
-  """测试分析的完整性"""
+  """Test analysis completeness."""
   records, _ = parse_export_file(sample_xml_path)
   cleaner = DataCleaner()
   cleaned_records, _ = cleaner.deduplicate_by_time_window(records)
 
-  # 统计分析
+  # Statistical analysis.
   analyzer = StatisticalAnalyzer()
-  stats_report = analyzer.generate_report(
-    cleaned_records, output_format="dataframe"
-  )
+  stats_report = analyzer.generate_report(cleaned_records, output_format="dataframe")
 
-  # 检查报告包含必要的信息
+  # Report should include required info.
   assert hasattr(stats_report, "record_count")
 
-  # 亮点生成
+  # Highlights generation.
   highlights_gen = HighlightsGenerator()
   highlights = highlights_gen.generate_comprehensive_highlights()
 
-  # 检查亮点包含必要的信息
+  # Highlights should include required info.
   assert hasattr(highlights, "insights")
   assert hasattr(highlights, "recommendations")
 
 
 @pytest.mark.integration
 def test_memory_cleanup():
-  """测试内存清理"""
+  """Test memory cleanup."""
   import gc
 
   initial_objects = len(gc.get_objects())
 
-  # 执行完整流程
+  # Run a workflow subset.
   xml_path = Path(__file__).parent.parent / "example" / "example.xml"
   if xml_path.exists():
     records, _ = parse_export_file(xml_path)
@@ -249,55 +244,55 @@ def test_memory_cleanup():
     highlights_gen = HighlightsGenerator()
     highlights_gen.generate_comprehensive_highlights()
 
-  # 强制垃圾回收
+  # Force garbage collection.
   gc.collect()
 
-  # 检查对象数量没有过度增长
+  # Ensure object count does not grow too much.
   final_objects = len(gc.get_objects())
   growth_ratio = final_objects / initial_objects
 
-  # 对象增长不应超过50%
-  assert growth_ratio < 1.5, f"对象数量增长过大: {growth_ratio:.2f}"
+  # Object growth should not exceed 50%.
+  assert growth_ratio < 1.5, f"Object growth too large: {growth_ratio:.2f}"
 
 
 @pytest.mark.integration
 def test_workflow_robustness(sample_xml_path, output_dir):
-  """测试工作流程的鲁棒性"""
-  # 测试部分失败不影响整体流程
+  """Test workflow robustness."""
+  # Partial failures should not break the entire flow.
   try:
-    # 1. 解析
+    # 1. Parse.
     records, stats = parse_export_file(sample_xml_path)
 
-    # 2. 清洗 - 即使失败也继续
+    # 2. Clean - continue on failure.
     cleaner = DataCleaner()
     try:
       cleaned_records, _ = cleaner.deduplicate_by_time_window(records)
     except Exception:
-      cleaned_records = records  # 使用原始数据继续
+      cleaned_records = records  # Continue with raw data.
 
-    # 3. 分析 - 即使失败也继续
+    # 3. Analyze - continue on failure.
     analyzer = StatisticalAnalyzer()
     try:
       stats_report = analyzer.generate_report(cleaned_records)
     except Exception:
       stats_report = None
 
-    # 4. 亮点生成 - 即使失败也继续
+    # 4. Highlights - continue on failure.
     highlights_gen = HighlightsGenerator()
     try:
       highlights = highlights_gen.generate_comprehensive_highlights()
     except Exception:
       highlights = None
 
-    # 5. 导出 - 即使失败也继续
+    # 5. Export - continue on failure.
     exporter = DataExporter(output_dir)
     try:
       export_stats = exporter.export_by_category(sample_xml_path)
     except Exception:
       export_stats = {}
 
-    # 至少解析应该成功
+    # Parsing should succeed at minimum.
     assert len(records) > 0
 
   except Exception as e:
-    pytest.fail(f"工作流程过于脆弱: {e}")
+    pytest.fail(f"Workflow is too fragile: {e}")

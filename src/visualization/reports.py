@@ -26,12 +26,10 @@ class ReportGenerator:
     Args:
         output_dir: Report output directory
     """
-    self.output_dir = (
-      Path(output_dir) if output_dir else Path("./output/reports")
-    )
+    self.output_dir = Path(output_dir) if output_dir else Path("./output/reports")
     self.output_dir.mkdir(parents=True, exist_ok=True)
 
-    # 创建图表生成器
+    # Create chart generator.
     self.chart_generator = ChartGenerator()
 
     logger.info(f"ReportGenerator initialized: output_dir={self.output_dir}")
@@ -60,37 +58,35 @@ class ReportGenerator:
     """
     logger.info("Generating HTML report")
 
-    # 创建报告HTML内容
+    # Create report HTML content.
     html_content = self._create_html_structure(title)
 
-    # 添加执行摘要
+    # Add executive summary.
     html_content += self._create_executive_summary(
       heart_rate_report, sleep_report, highlights
     )
 
-    # 添加心率分析章节
+    # Add heart rate analysis section.
     if heart_rate_report:
       html_content += self._create_heart_rate_section(
         heart_rate_report, include_charts, heart_rate_data
       )
 
-    # 添加睡眠分析章节
+    # Add sleep analysis section.
     if sleep_report:
       html_content += self._create_sleep_section(sleep_report, include_charts)
 
-    # 添加Highlights章节
+    # Add highlights section.
     if highlights:
       html_content += self._create_highlights_section(highlights)
 
-    # 添加数据质量信息
-    html_content += self._create_data_quality_section(
-      heart_rate_report, sleep_report
-    )
+    # Add data quality section.
+    html_content += self._create_data_quality_section(heart_rate_report, sleep_report)
 
-    # 关闭HTML
+    # Close HTML.
     html_content += self._close_html_structure()
 
-    # 保存报告
+    # Save report.
     import time
 
     timestamp = (
@@ -110,38 +106,34 @@ class ReportGenerator:
     sleep_report: SleepAnalysisReport | None = None,
     highlights: HealthHighlights | None = None,
   ) -> Path:
-    """生成Markdown格式报告
+    """Generate a Markdown report.
 
     Args:
-        title: 报告标题
-        heart_rate_report: 心率分析报告
-        sleep_report: 睡眠分析报告
-        highlights: 健康洞察
+        title: Report title.
+        heart_rate_report: Heart rate analysis report.
+        sleep_report: Sleep analysis report.
+        highlights: Health insights.
 
     Returns:
-        报告文件路径
+        Report file path.
     """
     logger.info("Generating Markdown report")
 
     md_content = f"# {title}\n\n"
-    md_content += (
-      f"**生成时间**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-    )
+    md_content += f"**生成时间**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
     md_content += "---\n\n"
 
-    # 执行摘要
+    # Executive summary.
     md_content += "## 执行摘要\n\n"
     if heart_rate_report:
       md_content += f"- **心率记录数**: {heart_rate_report.record_count}\n"
-      md_content += (
-        f"- **数据质量**: {heart_rate_report.data_quality_score:.1%}\n"
-      )
+      md_content += f"- **数据质量**: {heart_rate_report.data_quality_score:.1%}\n"
     if sleep_report:
       md_content += f"- **睡眠记录数**: {sleep_report.record_count}\n"
       md_content += f"- **数据质量**: {sleep_report.data_quality_score:.1%}\n"
     md_content += "\n"
 
-    # Highlights
+    # Highlights.
     if highlights:
       md_content += "## 关键发现\n\n"
       for i, insight in enumerate(highlights.insights[:5], 1):
@@ -154,15 +146,13 @@ class ReportGenerator:
         md_content += f"{i}. {emoji} **{insight.title}**\n"
         md_content += f"   - {insight.message}\n\n"
 
-    # 心率分析
+    # Heart rate analysis.
     if heart_rate_report:
       md_content += "## 心率分析\n\n"
       md_content += "### 数据概览\n\n"
       md_content += f"- 记录总数: {heart_rate_report.record_count}\n"
       md_content += f"- 时间范围: {heart_rate_report.data_range[0]} 至 {heart_rate_report.data_range[1]}\n"
-      md_content += (
-        f"- 数据质量评分: {heart_rate_report.data_quality_score:.1%}\n\n"
-      )
+      md_content += f"- 数据质量评分: {heart_rate_report.data_quality_score:.1%}\n\n"
 
       if heart_rate_report.resting_hr_analysis:
         rhr = heart_rate_report.resting_hr_analysis
@@ -173,12 +163,14 @@ class ReportGenerator:
         md_content += f"- 趋势: {rhr.trend_direction}\n"
         md_content += f"- 健康评级: {rhr.health_rating}\n\n"
 
-    # 睡眠分析
+    # Sleep analysis.
     if sleep_report:
       md_content += "## 睡眠分析\n\n"
       md_content += "### 数据概览\n\n"
       md_content += f"- 记录总数: {sleep_report.record_count}\n"
-      md_content += f"- 时间范围: {sleep_report.data_range[0]} 至 {sleep_report.data_range[1]}\n"
+      md_content += (
+        f"- 时间范围: {sleep_report.data_range[0]} 至 {sleep_report.data_range[1]}\n"
+      )
       md_content += f"- 数据质量评分: {sleep_report.data_quality_score:.1%}\n\n"
 
       if sleep_report.quality_metrics:
@@ -188,17 +180,16 @@ class ReportGenerator:
         md_content += f"- 平均效率: {quality.average_efficiency:.1%}\n"
         md_content += f"- 规律性评分: {quality.consistency_score:.1%}\n\n"
 
-    # 建议
+    # Recommendations.
     if highlights and highlights.recommendations:
       md_content += "## 健康建议\n\n"
       for i, rec in enumerate(highlights.recommendations, 1):
         md_content += f"{i}. {rec}\n"
       md_content += "\n"
 
-    # 保存报告
+    # Save report.
     report_path = (
-      self.output_dir
-      / f"health_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
+      self.output_dir / f"health_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
     )
     report_path.write_text(md_content, encoding="utf-8")
 
@@ -211,19 +202,19 @@ class ReportGenerator:
     title: str = "综合健康分析报告",
     include_charts: bool = True,
   ) -> Path:
-    """生成综合健康分析报告
+    """Generate comprehensive health analysis report.
 
     Args:
-        report: 综合健康分析报告
-        title: 报告标题
-        include_charts: 是否包含图表
+        report: Comprehensive health analysis report.
+        title: Report title.
+        include_charts: Whether to include charts.
 
     Returns:
-        报告文件路径
+        Report file path.
     """
     logger.info("Generating comprehensive health report")
 
-    # 生成图表
+    # Generate charts.
     charts = {}
     if include_charts:
       try:
@@ -231,15 +222,13 @@ class ReportGenerator:
           report, self.output_dir / "charts"
         )
       except Exception as e:
-        logger.warning(f"图表生成失败，将继续生成文本报告: {e}")
+        logger.warning(f"Chart generation failed; continuing with text report: {e}")
         charts = {}
 
-    # 创建HTML内容
-    html_content = self._create_comprehensive_html_structure(
-      title, report, charts
-    )
+    # Create HTML content.
+    html_content = self._create_comprehensive_html_structure(title, report, charts)
 
-    # 保存报告
+    # Save report.
     report_path = (
       self.output_dir
       / f"comprehensive_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
@@ -255,7 +244,7 @@ class ReportGenerator:
     report: Any,
     charts: dict[str, Path],
   ) -> str:
-    """创建综合报告HTML结构"""
+    """Create comprehensive report HTML structure."""
     html_content = f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -483,10 +472,10 @@ class ReportGenerator:
         </div>
 """
 
-    # 执行摘要
+    # Executive summary.
     html_content += self._create_comprehensive_summary(report)
 
-    # 健康仪表盘
+    # Health dashboard.
     if "dashboard" in charts:
       html_content += f"""
         <div class="section">
@@ -498,13 +487,13 @@ class ReportGenerator:
         </div>
       """
 
-    # 详细分析章节
+    # Detailed analysis sections.
     html_content += self._create_detailed_analysis_sections(report, charts)
 
-    # 建议部分
+    # Recommendations section.
     html_content += self._create_recommendations_section(report)
 
-    # 页脚
+    # Footer.
     html_content += """
         <div class="footer">
             <p>本报告由 Apple Health Analyzer 自动生成 | 数据来源: Apple Health 导出数据</p>
@@ -517,12 +506,12 @@ class ReportGenerator:
     return html_content
 
   def _create_comprehensive_summary(self, report: Any) -> str:
-    """创建综合摘要"""
+    """Create comprehensive summary."""
     content = '<div class="section">\n'
     content += "<h2>📈 执行摘要</h2>\n"
     content += '<div class="dashboard-grid">\n'
 
-    # 整体健康评分
+    # Overall wellness score.
     if hasattr(report, "overall_wellness_score"):
       score_class = (
         "success"
@@ -538,14 +527,14 @@ class ReportGenerator:
       )
       content += "</div>\n"
 
-    # 数据范围
+    # Data range.
     if hasattr(report, "data_range"):
       content += '<div class="metric-card info">\n'
       content += '<div class="metric-title">数据时间范围</div>\n'
       content += f'<div class="metric-value" style="font-size:1.2em">{report.data_range[0].strftime("%Y-%m-%d")}<br>至<br>{report.data_range[1].strftime("%Y-%m-%d")}</div>\n'
       content += "</div>\n"
 
-    # 数据完整性
+    # Data completeness.
     if hasattr(report, "data_completeness_score"):
       completeness_class = (
         "success"
@@ -556,10 +545,12 @@ class ReportGenerator:
       )
       content += f'<div class="metric-card {completeness_class}">\n'
       content += '<div class="metric-title">数据完整性</div>\n'
-      content += f'<div class="metric-value">{report.data_completeness_score:.1%}</div>\n'
+      content += (
+        f'<div class="metric-value">{report.data_completeness_score:.1%}</div>\n'
+      )
       content += "</div>\n"
 
-    # 分析置信度
+    # Analysis confidence.
     if hasattr(report, "analysis_confidence"):
       confidence_class = (
         "success"
@@ -570,9 +561,7 @@ class ReportGenerator:
       )
       content += f'<div class="metric-card {confidence_class}">\n'
       content += '<div class="metric-title">分析置信度</div>\n'
-      content += (
-        f'<div class="metric-value">{report.analysis_confidence:.1%}</div>\n'
-      )
+      content += f'<div class="metric-value">{report.analysis_confidence:.1%}</div>\n'
       content += "</div>\n"
 
     content += "</div>\n"
@@ -583,10 +572,10 @@ class ReportGenerator:
   def _create_detailed_analysis_sections(
     self, report: Any, charts: dict[str, Path]
   ) -> str:
-    """创建详细分析章节"""
+    """Create detailed analysis sections."""
     content = ""
 
-    # 睡眠分析
+    # Sleep analysis.
     if (
       hasattr(report, "sleep_quality")
       and getattr(report, "sleep_quality", None) is not None
@@ -613,15 +602,13 @@ class ReportGenerator:
 
       content += '<div class="metric-card secondary">\n'
       content += '<div class="metric-title">规律性评分</div>\n'
-      content += (
-        f'<div class="metric-value">{sleep.consistency_score:.1%}</div>\n'
-      )
+      content += f'<div class="metric-value">{sleep.consistency_score:.1%}</div>\n'
       content += "</div>\n"
 
       content += "</div>\n"
       content += "</div>\n"
 
-    # 活动模式分析
+    # Activity pattern analysis.
     if getattr(report, "activity_patterns", None) is not None:
       content += '<div class="section">\n'
       content += "<h2>🏃 活动模式分析</h2>\n"
@@ -645,13 +632,15 @@ class ReportGenerator:
 
       content += '<div class="metric-card secondary">\n'
       content += '<div class="metric-title">活动一致性</div>\n'
-      content += f'<div class="metric-value">{activity.activity_consistency_score:.1%}</div>\n'
+      content += (
+        f'<div class="metric-value">{activity.activity_consistency_score:.1%}</div>\n'
+      )
       content += "</div>\n"
 
       content += "</div>\n"
       content += "</div>\n"
 
-    # 相关性分析
+    # Correlation analysis.
     if "correlation" in charts:
       content += f"""
         <div class="section">
@@ -663,7 +652,7 @@ class ReportGenerator:
         </div>
       """
 
-    # 风险评估
+    # Risk assessment.
     if "risk_assessment" in charts:
       content += f"""
         <div class="section">
@@ -678,11 +667,11 @@ class ReportGenerator:
     return content
 
   def _create_recommendations_section(self, report: Any) -> str:
-    """创建建议部分"""
+    """Create recommendations section."""
     content = '<div class="section">\n'
     content += "<h2>💡 个性化建议</h2>\n"
 
-    # 优先行动
+    # Priority actions.
     if hasattr(report, "priority_actions") and report.priority_actions:
       content += "<h3>优先行动项目</h3>\n"
       content += '<div class="recommendations">\n'
@@ -692,11 +681,8 @@ class ReportGenerator:
       content += "</ol>\n"
       content += "</div>\n"
 
-    # 生活方式优化
-    if (
-      hasattr(report, "lifestyle_optimization")
-      and report.lifestyle_optimization
-    ):
+    # Lifestyle optimization.
+    if hasattr(report, "lifestyle_optimization") and report.lifestyle_optimization:
       content += "<h3>生活方式优化建议</h3>\n"
       content += '<div class="recommendations">\n'
       content += "<ol>\n"
@@ -705,13 +691,13 @@ class ReportGenerator:
       content += "</ol>\n"
       content += "</div>\n"
 
-    # 预测洞察
+    # Predictive insights.
     if hasattr(report, "predictive_insights") and report.predictive_insights:
       content += "<h3>预测性洞察</h3>\n"
       content += '<div class="insights-grid">\n'
 
       for insight in report.predictive_insights:
-        priority_class = "low"  # 默认低优先级
+        priority_class = "low"  # Default to low priority.
         if "⚠️" in insight or "风险" in insight:
           priority_class = "high"
         elif "📊" in insight or "建议" in insight:
@@ -727,7 +713,7 @@ class ReportGenerator:
     return content
 
   def _create_html_structure(self, title: str) -> str:
-    """创建HTML基础结构"""
+    """Create base HTML structure."""
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -743,26 +729,26 @@ class ReportGenerator:
             --light-bg: #f5f5f5;
             --card-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }}
-        
+
         * {{
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }}
-        
+
         body {{
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             line-height: 1.6;
             color: #333;
             background-color: var(--light-bg);
         }}
-        
+
         .container {{
             max-width: 1200px;
             margin: 0 auto;
             padding: 20px;
         }}
-        
+
         header {{
             background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
             color: white;
@@ -772,17 +758,17 @@ class ReportGenerator:
             margin-bottom: 30px;
             box-shadow: var(--card-shadow);
         }}
-        
+
         header h1 {{
             font-size: 2.5em;
             margin-bottom: 10px;
         }}
-        
+
         header .subtitle {{
             font-size: 1.1em;
             opacity: 0.9;
         }}
-        
+
         .section {{
             background: white;
             padding: 30px;
@@ -790,7 +776,7 @@ class ReportGenerator:
             border-radius: 8px;
             box-shadow: var(--card-shadow);
         }}
-        
+
         .section h2 {{
             color: var(--primary-color);
             font-size: 1.8em;
@@ -798,52 +784,52 @@ class ReportGenerator:
             padding-bottom: 10px;
             border-bottom: 2px solid var(--primary-color);
         }}
-        
+
         .section h3 {{
             color: var(--secondary-color);
             font-size: 1.4em;
             margin-top: 20px;
             margin-bottom: 15px;
         }}
-        
+
         .metric-grid {{
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
             gap: 20px;
             margin: 20px 0;
         }}
-        
+
         .metric-card {{
             background: var(--light-bg);
             padding: 20px;
             border-radius: 8px;
             border-left: 4px solid var(--primary-color);
         }}
-        
+
         .metric-card.warning {{
             border-left-color: var(--warning-color);
         }}
-        
+
         .metric-card.danger {{
             border-left-color: var(--danger-color);
         }}
-        
+
         .metric-label {{
             font-size: 0.9em;
             color: #666;
             margin-bottom: 5px;
         }}
-        
+
         .metric-value {{
             font-size: 2em;
             font-weight: bold;
             color: var(--primary-color);
         }}
-        
+
         .insight-list {{
             list-style: none;
         }}
-        
+
         .insight-item {{
             background: var(--light-bg);
             padding: 15px;
@@ -851,62 +837,62 @@ class ReportGenerator:
             border-radius: 8px;
             border-left: 4px solid var(--secondary-color);
         }}
-        
+
         .insight-item.high {{
             border-left-color: var(--danger-color);
         }}
-        
+
         .insight-item.medium {{
             border-left-color: var(--warning-color);
         }}
-        
+
         .insight-item.low {{
             border-left-color: var(--primary-color);
         }}
-        
+
         .insight-title {{
             font-weight: bold;
             font-size: 1.1em;
             margin-bottom: 8px;
         }}
-        
+
         .insight-message {{
             color: #666;
         }}
-        
+
         .recommendations {{
             background: #e8f5e9;
             padding: 20px;
             border-radius: 8px;
             border-left: 4px solid var(--primary-color);
         }}
-        
+
         .recommendations ol {{
             margin-left: 20px;
             margin-top: 10px;
         }}
-        
+
         .recommendations li {{
             margin-bottom: 10px;
         }}
-        
+
         footer {{
             text-align: center;
             padding: 20px;
             color: #666;
             font-size: 0.9em;
         }}
-        
+
         .chart-container {{
             margin: 30px 0;
             text-align: center;
         }}
-        
+
         @media (max-width: 768px) {{
             .metric-grid {{
                 grid-template-columns: 1fr;
             }}
-            
+
             header h1 {{
                 font-size: 1.8em;
             }}
@@ -927,45 +913,43 @@ class ReportGenerator:
     sleep_report: SleepAnalysisReport | None,
     highlights: HealthHighlights | None,
   ) -> str:
-    """创建执行摘要章节"""
+    """Create executive summary section."""
     content = '<div class="section">\n'
     content += "<h2>📊 执行摘要</h2>\n"
     content += '<div class="metric-grid">\n'
 
-    # 心率数据概览
+    # Heart rate overview.
     if heart_rate_report:
       content += '<div class="metric-card">\n'
       content += '<div class="metric-label">心率记录数</div>\n'
-      content += (
-        f'<div class="metric-value">{heart_rate_report.record_count:,}</div>\n'
-      )
+      content += f'<div class="metric-value">{heart_rate_report.record_count:,}</div>\n'
       content += "</div>\n"
 
       content += '<div class="metric-card">\n'
       content += '<div class="metric-label">心率数据质量</div>\n'
-      content += f'<div class="metric-value">{heart_rate_report.data_quality_score:.0%}</div>\n'
+      content += (
+        f'<div class="metric-value">{heart_rate_report.data_quality_score:.0%}</div>\n'
+      )
       content += "</div>\n"
 
-    # 睡眠数据概览
+    # Sleep data overview.
     if sleep_report:
       content += '<div class="metric-card">\n'
       content += '<div class="metric-label">睡眠记录数</div>\n'
-      content += (
-        f'<div class="metric-value">{sleep_report.record_count}</div>\n'
-      )
+      content += f'<div class="metric-value">{sleep_report.record_count}</div>\n'
       content += "</div>\n"
 
       content += '<div class="metric-card">\n'
       content += '<div class="metric-label">睡眠数据质量</div>\n'
-      content += f'<div class="metric-value">{sleep_report.data_quality_score:.0%}</div>\n'
+      content += (
+        f'<div class="metric-value">{sleep_report.data_quality_score:.0%}</div>\n'
+      )
       content += "</div>\n"
 
-    # Highlights统计
+    # Highlights summary.
     if highlights:
       high_count = sum(1 for i in highlights.insights if i.priority == "high")
-      content += (
-        f'<div class="metric-card {"danger" if high_count > 0 else ""}">\n'
-      )
+      content += f'<div class="metric-card {"danger" if high_count > 0 else ""}">\n'
       content += '<div class="metric-label">高优先级洞察</div>\n'
       content += f'<div class="metric-value">{high_count}</div>\n'
       content += "</div>\n"
@@ -981,19 +965,17 @@ class ReportGenerator:
     include_charts: bool,
     heart_rate_data: list | None = None,
   ) -> str:
-    """创建心率分析章节"""
+    """Create heart rate analysis section."""
     content = '<div class="section">\n'
     content += "<h2>❤️ 心率分析</h2>\n"
 
-    # 数据范围
+    # Data range.
     content += "<h3>数据概览</h3>\n"
-    content += (
-      f"<p>时间范围: {report.data_range[0]} 至 {report.data_range[1]}</p>\n"
-    )
+    content += f"<p>时间范围: {report.data_range[0]} 至 {report.data_range[1]}</p>\n"
     content += f"<p>记录总数: {report.record_count:,}</p>\n"
     content += f"<p>数据质量评分: {report.data_quality_score:.1%}</p>\n"
 
-    # 静息心率
+    # Resting heart rate.
     if report.resting_hr_analysis:
       rhr = report.resting_hr_analysis
       content += "<h3>静息心率分析</h3>\n"
@@ -1001,16 +983,12 @@ class ReportGenerator:
 
       content += '<div class="metric-card">\n'
       content += '<div class="metric-label">当前值</div>\n'
-      content += (
-        f'<div class="metric-value">{rhr.current_value:.0f} bpm</div>\n'
-      )
+      content += f'<div class="metric-value">{rhr.current_value:.0f} bpm</div>\n'
       content += "</div>\n"
 
       content += '<div class="metric-card">\n'
       content += '<div class="metric-label">基线值</div>\n'
-      content += (
-        f'<div class="metric-value">{rhr.baseline_value:.0f} bpm</div>\n'
-      )
+      content += f'<div class="metric-value">{rhr.baseline_value:.0f} bpm</div>\n'
       content += "</div>\n"
 
       change_class = "danger" if rhr.change_from_baseline > 2 else ""
@@ -1034,19 +1012,17 @@ class ReportGenerator:
   def _create_sleep_section(
     self, report: SleepAnalysisReport, include_charts: bool
   ) -> str:
-    """创建睡眠分析章节"""
+    """Create sleep analysis section."""
     content = '<div class="section">\n'
     content += "<h2>😴 睡眠分析</h2>\n"
 
-    # 数据范围
+    # Data range.
     content += "<h3>数据概览</h3>\n"
-    content += (
-      f"<p>时间范围: {report.data_range[0]} 至 {report.data_range[1]}</p>\n"
-    )
+    content += f"<p>时间范围: {report.data_range[0]} 至 {report.data_range[1]}</p>\n"
     content += f"<p>记录总数: {report.record_count}</p>\n"
     content += f"<p>数据质量评分: {report.data_quality_score:.1%}</p>\n"
 
-    # 睡眠质量指标
+    # Sleep quality metrics.
     if report.quality_metrics:
       quality = report.quality_metrics
       content += "<h3>睡眠质量指标</h3>\n"
@@ -1063,17 +1039,13 @@ class ReportGenerator:
       efficiency_class = "warning" if quality.average_efficiency < 0.85 else ""
       content += f'<div class="metric-card {efficiency_class}">\n'
       content += '<div class="metric-label">平均睡眠效率</div>\n'
-      content += (
-        f'<div class="metric-value">{quality.average_efficiency:.0%}</div>\n'
-      )
+      content += f'<div class="metric-value">{quality.average_efficiency:.0%}</div>\n'
       content += "</div>\n"
 
       consistency_class = "warning" if quality.consistency_score < 0.7 else ""
       content += f'<div class="metric-card {consistency_class}">\n'
       content += '<div class="metric-label">规律性评分</div>\n'
-      content += (
-        f'<div class="metric-value">{quality.consistency_score:.0%}</div>\n'
-      )
+      content += f'<div class="metric-value">{quality.consistency_score:.0%}</div>\n'
       content += "</div>\n"
 
       content += "</div>\n"
@@ -1082,16 +1054,16 @@ class ReportGenerator:
     return content
 
   def _create_highlights_section(self, highlights: HealthHighlights) -> str:
-    """创建Highlights章节"""
+    """Create highlights section."""
     content = '<div class="section">\n'
     content += "<h2>💡 关键发现与建议</h2>\n"
 
-    # 洞察列表
+    # Insight list.
     if highlights.insights:
       content += "<h3>健康洞察</h3>\n"
       content += '<ul class="insight-list">\n'
 
-      for insight in highlights.insights[:8]:  # 显示前8条
+      for insight in highlights.insights[:8]:  # Show the first 8 insights.
         content += f'<li class="insight-item {insight.priority}">\n'
         priority_emoji = {
           "high": "🔴",
@@ -1105,7 +1077,7 @@ class ReportGenerator:
 
       content += "</ul>\n"
 
-    # 建议
+    # Recommendations.
     if highlights.recommendations:
       content += "<h3>健康建议</h3>\n"
       content += '<div class="recommendations">\n'
@@ -1123,7 +1095,7 @@ class ReportGenerator:
     heart_rate_report: HeartRateAnalysisReport | None,
     sleep_report: SleepAnalysisReport | None,
   ) -> str:
-    """创建数据质量信息章节"""
+    """Create data quality section."""
     content = '<div class="section">\n'
     content += "<h2>📋 数据质量信息</h2>\n"
 
@@ -1131,9 +1103,7 @@ class ReportGenerator:
       content += "<h3>心率数据</h3>\n"
       content += "<ul>\n"
       content += f"<li>记录总数: {heart_rate_report.record_count:,}</li>\n"
-      content += (
-        f"<li>数据质量评分: {heart_rate_report.data_quality_score:.1%}</li>\n"
-      )
+      content += f"<li>数据质量评分: {heart_rate_report.data_quality_score:.1%}</li>\n"
       content += f"<li>时间范围: {heart_rate_report.data_range[0]} 至 {heart_rate_report.data_range[1]}</li>\n"
       content += "</ul>\n"
 
@@ -1141,9 +1111,7 @@ class ReportGenerator:
       content += "<h3>睡眠数据</h3>\n"
       content += "<ul>\n"
       content += f"<li>记录总数: {sleep_report.record_count}</li>\n"
-      content += (
-        f"<li>数据质量评分: {sleep_report.data_quality_score:.1%}</li>\n"
-      )
+      content += f"<li>数据质量评分: {sleep_report.data_quality_score:.1%}</li>\n"
       content += f"<li>时间范围: {sleep_report.data_range[0]} 至 {sleep_report.data_range[1]}</li>\n"
       content += "</ul>\n"
 
@@ -1151,7 +1119,7 @@ class ReportGenerator:
     return content
 
   def _close_html_structure(self) -> str:
-    """关闭HTML结构"""
+    """Close HTML structure."""
     return """
         <footer>
             <p>本报告由 Apple Health Analyzer 自动生成</p>

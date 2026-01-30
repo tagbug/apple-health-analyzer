@@ -61,6 +61,8 @@ Issues = "https://github.com/tagbug/apple-health-analyzer/issues"
 [tool.ruff]
 line-length = 88
 target-version = "py312"
+indent-width = 2
+fix = true
 
 [tool.ruff.lint]
 select = [
@@ -76,7 +78,13 @@ ignore = [
     "E501", # line too long, handled by black
     "B008", # do not perform function calls in argument defaults
     "C901", # too complex
+    "F841", # local variable name ... is assigned to but never used
 ]
+fixable = ["ALL"]
+
+[tool.ruff.format]
+line-ending = "auto"
+quote-style = "double"
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]

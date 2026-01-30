@@ -36,9 +36,7 @@ logger = get_logger(__name__)
   type=click.Choice(["male", "female"]),
   help="Gender (for cardio fitness analysis)",
 )
-@click.option(
-  "--no-charts", is_flag=True, help="Exclude charts (text report only)"
-)
+@click.option("--no-charts", is_flag=True, help="Exclude charts (text report only)")
 def report(
   xml_path: str,
   output: str | None,
@@ -72,9 +70,7 @@ def report(
     output_dir = Path(output) if output else get_config().output_dir / "reports"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    console.print(
-      f"[bold blue]Generating health report:[/bold blue] {xml_file}"
-    )
+    console.print(f"[bold blue]Generating health report:[/bold blue] {xml_file}")
     console.print(f"[bold blue]Output directory:[/bold blue] {output_dir}")
     console.print(f"[bold blue]Report format:[/bold blue] {format}")
 
@@ -144,9 +140,7 @@ def report(
     # Step 3: Generate highlights
     console.print("\n[bold]Step 3/4: Generating health insights...[/bold]")
     highlights_generator = HighlightsGenerator()
-    with console.status(
-      "[bold green]Generating insights and recommendations..."
-    ):
+    with console.status("[bold green]Generating insights and recommendations..."):
       highlights = highlights_generator.generate_comprehensive_highlights(
         heart_rate_report=heart_rate_report,
         sleep_report=sleep_report,
@@ -234,9 +228,7 @@ def report(
   default=True,
   help="Interactive charts (HTML) or static charts (PNG)",
 )
-@click.option(
-  "--age", type=int, help="User age (for heart rate zone calculation)"
-)
+@click.option("--age", type=int, help="User age (for heart rate zone calculation)")
 def visualize(
   xml_path: str,
   output: str | None,
@@ -269,9 +261,7 @@ def visualize(
     output_dir = Path(output) if output else get_config().output_dir / "charts"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    console.print(
-      f"[bold blue]Generating visualization charts:[/bold blue] {xml_file}"
-    )
+    console.print(f"[bold blue]Generating visualization charts:[/bold blue] {xml_file}")
     console.print(f"[bold blue]Output directory:[/bold blue] {output_dir}")
 
     # Determine charts to generate
@@ -297,9 +287,7 @@ def visualize(
 
     # Determine required data types
     need_hr = any(
-      c.startswith("heart_rate")
-      or c.startswith("resting")
-      or c.startswith("hrv")
+      c.startswith("heart_rate") or c.startswith("resting") or c.startswith("hrv")
       for c in selected_charts
     )
     need_sleep = any(
@@ -334,9 +322,7 @@ def visualize(
             hr_data.setdefault("heart_rate", []).append(record)
           elif record_type == "HKQuantityTypeIdentifierRestingHeartRate":
             hr_data.setdefault("resting_hr", []).append(record)
-          elif (
-            record_type == "HKQuantityTypeIdentifierHeartRateVariabilitySDNN"
-          ):
+          elif record_type == "HKQuantityTypeIdentifierHeartRateVariabilitySDNN":
             hr_data.setdefault("hrv", []).append(record)
           elif record_type == "HKCategoryTypeIdentifierSleepAnalysis":
             sleep_data.setdefault("sleep_records", []).append(record)
@@ -375,7 +361,7 @@ def visualize(
             if not df.empty:
               df = DataConverter.sample_data_for_performance(
                 df, 50000
-              )  # 采样以提高性能
+              )  # Downsample to improve performance.
               fig = chart_generator.plot_heart_rate_timeseries(
                 df,
                 output_path=output_dir / f"{chart_type}.html"
@@ -383,7 +369,7 @@ def visualize(
                 else output_dir / f"{chart_type}.png",
               )
 
-              if fig:  # 如果返回了figure，说明是交互式模式且未保存
+              if fig:  # Interactive mode returns a figure without saving.
                 if interactive:
                   file_path = output_dir / f"{chart_type}.html"
                   fig.write_html(file_path)
@@ -392,14 +378,12 @@ def visualize(
                   file_path = output_dir / f"{chart_type}.png"
                   fig.write_image(file_path, width=1200, height=600)
                   generated_files.append(file_path)
-              else:  # 静态模式已保存
+              else:  # Static mode already saved.
                 file_path = output_dir / f"{chart_type}.png"
                 if file_path.exists():
                   generated_files.append(file_path)
                 else:
-                  console.print(
-                    f"[yellow]⚠ 静态图表文件未找到: {file_path}[/yellow]"
-                  )
+                  console.print(f"[yellow]⚠ 静态图表文件未找到: {file_path}[/yellow]")
 
               console.print(f"[green]✓ 生成: {chart_type}[/green]")
 
@@ -428,9 +412,7 @@ def visualize(
                 if file_path.exists():
                   generated_files.append(file_path)
                 else:
-                  console.print(
-                    f"[yellow]⚠ 静态图表文件未找到: {file_path}[/yellow]"
-                  )
+                  console.print(f"[yellow]⚠ 静态图表文件未找到: {file_path}[/yellow]")
 
               console.print(f"[green]✓ 生成: {chart_type}[/green]")
 
@@ -459,9 +441,7 @@ def visualize(
                 if file_path.exists():
                   generated_files.append(file_path)
                 else:
-                  console.print(
-                    f"[yellow]⚠ 静态图表文件未找到: {file_path}[/yellow]"
-                  )
+                  console.print(f"[yellow]⚠ 静态图表文件未找到: {file_path}[/yellow]")
 
               console.print(f"[green]✓ 生成: {chart_type}[/green]")
 
@@ -470,7 +450,7 @@ def visualize(
             df = DataConverter.heart_rate_to_df(hr_data["heart_rate"])
             if not df.empty:
               df = DataConverter.sample_data_for_performance(df, 20000)
-              # 准备日平均数据
+              # Prepare daily average data.
               daily_df = DataConverter.aggregate_heart_rate_by_day(df)
               daily_df = daily_df.rename(columns={"mean_hr": "avg_hr"})
               fig = chart_generator.plot_heart_rate_heatmap(
@@ -494,9 +474,7 @@ def visualize(
                 if file_path.exists():
                   generated_files.append(file_path)
                 else:
-                  console.print(
-                    f"[yellow]⚠ 静态图表文件未找到: {file_path}[/yellow]"
-                  )
+                  console.print(f"[yellow]⚠ 静态图表文件未找到: {file_path}[/yellow]")
 
               console.print(f"[green]✓ 生成: {chart_type}[/green]")
 
@@ -525,9 +503,7 @@ def visualize(
                 if file_path.exists():
                   generated_files.append(file_path)
                 else:
-                  console.print(
-                    f"[yellow]⚠ 静态图表文件未找到: {file_path}[/yellow]"
-                  )
+                  console.print(f"[yellow]⚠ 静态图表文件未找到: {file_path}[/yellow]")
 
               console.print(f"[green]✓ 生成: {chart_type}[/green]")
 
@@ -559,17 +535,13 @@ def visualize(
                 if file_path.exists():
                   generated_files.append(file_path)
                 else:
-                  console.print(
-                    f"[yellow]⚠ 静态图表文件未找到: {file_path}[/yellow]"
-                  )
+                  console.print(f"[yellow]⚠ 静态图表文件未找到: {file_path}[/yellow]")
 
                 console.print(f"[green]✓ 生成: {chart_type}[/green]")
 
         elif chart_type == "sleep_timeline":
           if "sleep_sessions" in sleep_data and sleep_data["sleep_sessions"]:
-            df = DataConverter.sleep_sessions_to_df(
-              sleep_data["sleep_sessions"]
-            )
+            df = DataConverter.sleep_sessions_to_df(sleep_data["sleep_sessions"])
             if not df.empty:
               fig = chart_generator.plot_sleep_timeline(
                 df,
@@ -592,17 +564,13 @@ def visualize(
                 if file_path.exists():
                   generated_files.append(file_path)
                 else:
-                  console.print(
-                    f"[yellow]⚠ 静态图表文件未找到: {file_path}[/yellow]"
-                  )
+                  console.print(f"[yellow]⚠ 静态图表文件未找到: {file_path}[/yellow]")
 
               console.print(f"[green]✓ 生成: {chart_type}[/green]")
 
         elif chart_type == "sleep_quality_trend":
           if "sleep_sessions" in sleep_data and sleep_data["sleep_sessions"]:
-            df = DataConverter.sleep_sessions_to_df(
-              sleep_data["sleep_sessions"]
-            )
+            df = DataConverter.sleep_sessions_to_df(sleep_data["sleep_sessions"])
             if not df.empty:
               daily_df = DataConverter.aggregate_sleep_by_day(df)
               if not daily_df.empty:
@@ -627,17 +595,13 @@ def visualize(
                 if file_path.exists():
                   generated_files.append(file_path)
                 else:
-                  console.print(
-                    f"[yellow]⚠ 静态图表文件未找到: {file_path}[/yellow]"
-                  )
+                  console.print(f"[yellow]⚠ 静态图表文件未找到: {file_path}[/yellow]")
 
                 console.print(f"[green]✓ 生成: {chart_type}[/green]")
 
         elif chart_type == "sleep_stages_distribution":
           if "sleep_sessions" in sleep_data and sleep_data["sleep_sessions"]:
-            df = DataConverter.sleep_sessions_to_df(
-              sleep_data["sleep_sessions"]
-            )
+            df = DataConverter.sleep_sessions_to_df(sleep_data["sleep_sessions"])
             if not df.empty:
               stages_df = DataConverter.prepare_sleep_stages_distribution(df)
               if not stages_df.empty:
@@ -662,17 +626,13 @@ def visualize(
                 if file_path.exists():
                   generated_files.append(file_path)
                 else:
-                  console.print(
-                    f"[yellow]⚠ 静态图表文件未找到: {file_path}[/yellow]"
-                  )
+                  console.print(f"[yellow]⚠ 静态图表文件未找到: {file_path}[/yellow]")
 
                 console.print(f"[green]✓ 生成: {chart_type}[/green]")
 
         elif chart_type == "sleep_consistency":
           if "sleep_sessions" in sleep_data and sleep_data["sleep_sessions"]:
-            df = DataConverter.sleep_sessions_to_df(
-              sleep_data["sleep_sessions"]
-            )
+            df = DataConverter.sleep_sessions_to_df(sleep_data["sleep_sessions"])
             if not df.empty:
               fig = chart_generator.plot_sleep_consistency(
                 df,
@@ -695,19 +655,15 @@ def visualize(
                 if file_path.exists():
                   generated_files.append(file_path)
                 else:
-                  console.print(
-                    f"[yellow]⚠ 静态图表文件未找到: {file_path}[/yellow]"
-                  )
+                  console.print(f"[yellow]⚠ 静态图表文件未找到: {file_path}[/yellow]")
 
               console.print(f"[green]✓ 生成: {chart_type}[/green]")
 
         elif chart_type == "weekday_vs_weekend_sleep":
           if "sleep_sessions" in sleep_data and sleep_data["sleep_sessions"]:
-            df = DataConverter.sleep_sessions_to_df(
-              sleep_data["sleep_sessions"]
-            )
+            df = DataConverter.sleep_sessions_to_df(sleep_data["sleep_sessions"])
             if not df.empty:
-              # 添加周末标识
+              # Add weekend indicator.
               df_copy = df.copy()
               df_copy["is_weekend"] = df_copy["date"].dt.dayofweek >= 5
               fig = chart_generator.plot_weekday_vs_weekend_sleep(
@@ -731,16 +687,12 @@ def visualize(
                 if file_path.exists():
                   generated_files.append(file_path)
                 else:
-                  console.print(
-                    f"[yellow]⚠ 静态图表文件未找到: {file_path}[/yellow]"
-                  )
+                  console.print(f"[yellow]⚠ 静态图表文件未找到: {file_path}[/yellow]")
 
               console.print(f"[green]✓ 生成: {chart_type}[/green]")
 
         else:
-          console.print(
-            f"[yellow]⚠ Chart type not supported: {chart_type}[/yellow]"
-          )
+          console.print(f"[yellow]⚠ Chart type not supported: {chart_type}[/yellow]")
 
       except Exception as e:
         console.print(f"[red]✗ Failed to generate {chart_type}: {e}[/red]")

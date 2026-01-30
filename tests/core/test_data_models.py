@@ -6,7 +6,6 @@ import pytest
 
 from src.core.data_models import (
   ActivitySummaryRecord,
-  DataSourcePriority,
   HealthRecord,
   HeartRateRecord,
   QuantityRecord,
@@ -41,9 +40,7 @@ class TestHealthRecord:
     start_date = datetime.now(UTC)
     end_date = start_date.replace(hour=start_date.hour - 1)
 
-    with pytest.raises(
-      ValueError, match="end_date cannot be before start_date"
-    ):
+    with pytest.raises(ValueError, match="end_date cannot be before start_date"):
       HealthRecord(
         type="HKQuantityTypeIdentifierHeartRate",
         source_name="Apple Watch",
@@ -88,7 +85,7 @@ class TestHealthRecord:
       start_date=datetime.now(UTC),
       end_date=datetime.now(UTC),
     )
-    assert watch_record.source_priority == DataSourcePriority.APPLE_WATCH.value
+    assert watch_record.source_priority == 3
 
     # Xiaomi should have medium priority
     xiaomi_record = HealthRecord(
@@ -101,9 +98,7 @@ class TestHealthRecord:
       start_date=datetime.now(UTC),
       end_date=datetime.now(UTC),
     )
-    assert (
-      xiaomi_record.source_priority == DataSourcePriority.XIAOMI_HEALTH.value
-    )
+    assert xiaomi_record.source_priority == 2
 
     # iPhone should have lower priority
     phone_record = HealthRecord(
@@ -116,7 +111,7 @@ class TestHealthRecord:
       start_date=datetime.now(UTC),
       end_date=datetime.now(UTC),
     )
-    assert phone_record.source_priority == DataSourcePriority.IPHONE.value
+    assert phone_record.source_priority == 1
 
 
 class TestQuantityRecord:

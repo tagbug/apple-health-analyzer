@@ -1,6 +1,6 @@
 """Core modules for Apple Health data processing"""
 
-from .protocols import MeasurableRecord, CategoricalRecord, TemporalRecord
+from .protocols import CategoricalRecord, MeasurableRecord, TemporalRecord
 
 __all__ = [
     "MeasurableRecord",

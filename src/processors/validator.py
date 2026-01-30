@@ -5,8 +5,9 @@ data consistency validation, and quality scoring.
 """
 
 from collections import defaultdict
+from collections.abc import Sequence
 from datetime import datetime, timedelta
-from typing import Any, Sequence
+from typing import Any
 
 import numpy as np
 

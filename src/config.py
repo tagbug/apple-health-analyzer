@@ -17,14 +17,6 @@ class Environment(Enum):
   PROD = "prod"
 
 
-class DataSourcePriority(Enum):
-  """Data source priority levels (higher number = higher priority)."""
-
-  IPHONE = 1
-  XIAOMI_HEALTH = 2
-  APPLE_WATCH = 3
-
-
 class Config(BaseModel):
   """Main configuration class for the application."""
 
@@ -87,9 +79,7 @@ class Config(BaseModel):
     """Validate log level is a valid logging level."""
     valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
     if v.upper() not in valid_levels:
-      raise ValueError(
-        f"Invalid log level '{v}'. Must be one of: {valid_levels}"
-      )
+      raise ValueError(f"Invalid log level '{v}'. Must be one of: {valid_levels}")
     return v.upper()
 
   @property
@@ -146,12 +136,8 @@ def load_config() -> Config:
   config_data["output_dir"] = Path(output_dir)
 
   # Data source priorities
-  config_data["apple_watch_priority"] = int(
-    os.getenv("APPLE_WATCH_PRIORITY", "3")
-  )
-  config_data["xiaomi_health_priority"] = int(
-    os.getenv("XIAOMI_HEALTH_PRIORITY", "2")
-  )
+  config_data["apple_watch_priority"] = int(os.getenv("APPLE_WATCH_PRIORITY", "3"))
+  config_data["xiaomi_health_priority"] = int(os.getenv("XIAOMI_HEALTH_PRIORITY", "2"))
   config_data["iphone_priority"] = int(os.getenv("IPHONE_PRIORITY", "1"))
 
   # Logging
