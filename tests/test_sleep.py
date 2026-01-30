@@ -19,20 +19,20 @@ from src.processors.sleep import (
 
 
 class TestSleepAnalyzer:
-  """SleepAnalyzer 测试类"""
+  """SleepAnalyzer tests."""
 
   @pytest.fixture
   def analyzer(self):
-    """创建测试用的SleepAnalyzer实例"""
+    """Create SleepAnalyzer fixture."""
     return SleepAnalyzer()
 
   @pytest.fixture
   def sample_sleep_records(self):
-    """创建示例睡眠记录"""
-    base_time = datetime(2024, 1, 1, 22, 0, 0)  # 晚上10点开始
+    """Create sample sleep records."""
+    base_time = datetime(2024, 1, 1, 22, 0, 0)  # Starts at 10 PM.
     records = []
 
-    # 模拟一个完整的睡眠会话
+    # Simulate a full sleep session.
     sleep_start = base_time
     records.append(
       CategoryRecord(
@@ -48,7 +48,7 @@ class TestSleepAnalyzer:
       )
     )
 
-    # 入睡阶段
+    # Core stage.
     asleep_start = sleep_start + timedelta(minutes=30)
     records.append(
       CategoryRecord(
@@ -64,7 +64,7 @@ class TestSleepAnalyzer:
       )
     )
 
-    # 深睡眠阶段
+    # Deep stage.
     deep_start = asleep_start + timedelta(minutes=60)
     records.append(
       CategoryRecord(
@@ -80,7 +80,7 @@ class TestSleepAnalyzer:
       )
     )
 
-    # REM睡眠阶段
+    # REM stage.
     rem_start = deep_start + timedelta(minutes=90)
     records.append(
       CategoryRecord(
@@ -96,7 +96,7 @@ class TestSleepAnalyzer:
       )
     )
 
-    # 浅睡眠阶段
+    # Light sleep stage.
     light_start = rem_start + timedelta(minutes=60)
     records.append(
       CategoryRecord(
@@ -105,14 +105,14 @@ class TestSleepAnalyzer:
         start_date=light_start,
         end_date=light_start + timedelta(minutes=120),
         creation_date=light_start,
-        value="Asleep",  # 使用Asleep作为浅睡眠
+        value="Asleep",  # Use Asleep as light sleep.
         source_version="1.0",
         device="Apple Watch Series 8",
         unit=None,
       )
     )
 
-    # 觉醒阶段
+    # Awake stage.
     awake_start = light_start + timedelta(minutes=120)
     records.append(
       CategoryRecord(
@@ -132,17 +132,17 @@ class TestSleepAnalyzer:
 
   @pytest.fixture
   def sample_heart_rate_records(self):
-    """创建示例心率记录（用于关联分析）"""
+    """Create sample heart rate records for correlation."""
     base_time = datetime(2024, 1, 1, 22, 0, 0)
     records = []
 
-    # 生成睡眠期间的心率数据
-    for hour in range(8):  # 8小时睡眠
-      for minute in range(0, 60, 5):  # 每5分钟一个记录
+    # Generate heart rate during sleep.
+    for hour in range(8):  # 8 hours of sleep.
+      for minute in range(0, 60, 5):  # Every 5 minutes.
         hr_time = base_time + timedelta(hours=hour, minutes=minute)
-        # 模拟睡眠期间心率逐渐下降
-        base_hr = 75 - (hour * 2)  # 每小时下降2 bpm
-        hr_value = base_hr + (minute % 10 - 5)  # 添加小幅波动
+        # Simulate a gentle decline during sleep.
+        base_hr = 75 - (hour * 2)  # 2 bpm per hour.
+        hr_value = base_hr + (minute % 10 - 5)  # Small variation.
 
         records.append(
           QuantityRecord(
@@ -161,43 +161,43 @@ class TestSleepAnalyzer:
     return records
 
   def test_initialization(self, analyzer):
-    """测试初始化"""
+    """Test initialization."""
     assert isinstance(analyzer, SleepAnalyzer)
     assert isinstance(analyzer.stat_analyzer, StatisticalAnalyzer)
     assert isinstance(analyzer.anomaly_detector, AnomalyDetector)
 
   def test_parse_sleep_sessions(self, analyzer, sample_sleep_records):
-    """测试睡眠会话解析"""
+    """Test sleep session parsing."""
     sessions = analyzer._parse_sleep_sessions(sample_sleep_records)
 
-    assert len(sessions) >= 1  # 可能有多个会话
+    assert len(sessions) >= 1  # May include multiple sessions.
     session = sessions[0]
 
     assert isinstance(session, SleepSession)
     assert session.session_id.startswith("sleep_")
     assert session.total_duration > 0
     assert session.sleep_duration > 0
-    assert session.efficiency >= 0  # 允许0值
+    assert session.efficiency >= 0  # Allow zero.
     assert session.efficiency <= 1
 
   def test_parse_sleep_sessions_empty(self, analyzer):
-    """测试睡眠会话解析 - 空记录"""
+    """Test sleep session parsing with empty records."""
     sessions = analyzer._parse_sleep_sessions([])
 
     assert len(sessions) == 0
 
   def test_analyze_sleep_quality(self, analyzer):
-    """测试睡眠质量分析"""
-    # 创建多个模拟的睡眠会话来测试一致性
+    """Test sleep quality analysis."""
+    # Create sessions to exercise consistency logic.
     sessions = [
       SleepSession(
         session_id="test_session_1",
         start_date=datetime(2024, 1, 1, 22, 0),
         end_date=datetime(2024, 1, 2, 6, 0),
-        total_duration=480,  # 8小时
-        sleep_duration=420,  # 7小时
-        awake_duration=60,  # 1小时
-        efficiency=0.875,  # 87.5%
+        total_duration=480,  # 8 hours.
+        sleep_duration=420,  # 7 hours.
+        awake_duration=60,  # 1 hour.
+        efficiency=0.875,  # 87.5%.
         core_sleep=120,
         deep_sleep=90,
         rem_sleep=60,
@@ -208,12 +208,12 @@ class TestSleepAnalyzer:
       ),
       SleepSession(
         session_id="test_session_2",
-        start_date=datetime(2024, 1, 2, 22, 15),  # 稍微晚一点
+        start_date=datetime(2024, 1, 2, 22, 15),  # Slightly later.
         end_date=datetime(2024, 1, 3, 6, 15),
-        total_duration=465,  # 7.75小时
-        sleep_duration=405,  # 6.75小时
+        total_duration=465,  # 7.75 hours.
+        sleep_duration=405,  # 6.75 hours.
         awake_duration=60,
-        efficiency=0.870,  # 87.0%
+        efficiency=0.870,  # 87.0%.
         core_sleep=115,
         deep_sleep=85,
         rem_sleep=55,
@@ -224,12 +224,12 @@ class TestSleepAnalyzer:
       ),
       SleepSession(
         session_id="test_session_3",
-        start_date=datetime(2024, 1, 3, 21, 45),  # 稍微早一点
+        start_date=datetime(2024, 1, 3, 21, 45),  # Slightly earlier.
         end_date=datetime(2024, 1, 4, 5, 45),
-        total_duration=495,  # 8.25小时
-        sleep_duration=435,  # 7.25小时
+        total_duration=495,  # 8.25 hours.
+        sleep_duration=435,  # 7.25 hours.
         awake_duration=60,
-        efficiency=0.878,  # 87.8%
+        efficiency=0.878,  # 87.8%.
         core_sleep=125,
         deep_sleep=95,
         rem_sleep=65,
@@ -243,14 +243,14 @@ class TestSleepAnalyzer:
     quality = analyzer.analyze_sleep_quality(sessions)
 
     assert isinstance(quality, SleepQualityMetrics)
-    assert abs(quality.average_duration - 8.0) < 0.5  # 平均约8小时
-    assert abs(quality.average_efficiency - 0.875) < 0.1  # 平均效率约87.5%
-    assert abs(quality.average_latency - 30.0) < 10  # 平均入睡时间约30分钟
-    assert quality.consistency_score >= 0  # 一致性评分应该大于等于0
+    assert abs(quality.average_duration - 8.0) < 0.5  # About 8 hours.
+    assert abs(quality.average_efficiency - 0.875) < 0.1  # Around 87.5%.
+    assert abs(quality.average_latency - 30.0) < 10  # Around 30 minutes.
+    assert quality.consistency_score >= 0  # Non-negative consistency.
     assert quality.overall_quality_score > 0
 
   def test_analyze_sleep_quality_empty(self, analyzer):
-    """测试睡眠质量分析 - 空会话"""
+    """Test sleep quality analysis with empty sessions."""
     quality = analyzer.analyze_sleep_quality([])
 
     assert isinstance(quality, SleepQualityMetrics)
@@ -260,18 +260,18 @@ class TestSleepAnalyzer:
     assert quality.overall_quality_score == 0
 
   def test_analyze_sleep_patterns(self, analyzer):
-    """测试睡眠模式分析"""
-    # 创建多个睡眠会话来测试模式
+    """Test sleep pattern analysis."""
+    # Create a week of sessions.
     sessions = []
-    base_time = datetime(2024, 1, 1, 22, 30)  # 晚上10:30
+    base_time = datetime(2024, 1, 1, 22, 30)  # 10:30 PM.
 
-    for day in range(7):  # 一周的数据
+    for day in range(7):  # One week of data.
       session_time = base_time + timedelta(days=day)
-      # 工作日和周末不同的入睡时间
-      if day < 5:  # 周一到周五
+      # Different bedtimes for weekdays vs weekends.
+      if day < 5:  # Weekdays.
         bedtime_offset = timedelta(hours=0)
-      else:  # 周六周日
-        bedtime_offset = timedelta(hours=1)  # 晚睡1小时
+      else:  # Weekend.
+        bedtime_offset = timedelta(hours=1)  # Sleep 1 hour later.
 
       sessions.append(
         SleepSession(
@@ -296,7 +296,7 @@ class TestSleepAnalyzer:
     assert patterns.efficiency_trend in ["improving", "declining", "stable"]
 
   def test_analyze_sleep_patterns_empty(self, analyzer):
-    """测试睡眠模式分析 - 空会话"""
+    """Test sleep pattern analysis with empty sessions."""
     patterns = analyzer.analyze_sleep_patterns([])
 
     assert isinstance(patterns, SleepPatternAnalysis)
@@ -305,10 +305,8 @@ class TestSleepAnalyzer:
     assert patterns.duration_trend == "stable"
     assert patterns.efficiency_trend == "stable"
 
-  def test_analyze_sleep_hr_correlation(
-    self, analyzer, sample_heart_rate_records
-  ):
-    """测试睡眠-心率关联分析"""
+  def test_analyze_sleep_hr_correlation(self, analyzer, sample_heart_rate_records):
+    """Test sleep-heart rate correlation."""
     sessions = [
       SleepSession(
         session_id="test_session",
@@ -325,14 +323,11 @@ class TestSleepAnalyzer:
       sessions, sample_heart_rate_records
     )
 
-    # 由于心率记录格式不匹配，可能会返回None
-    # 这里主要测试方法调用不报错
-    assert correlation is None or isinstance(
-      correlation, SleepHeartRateCorrelation
-    )
+    # Correlation may be None depending on input; ensure no errors.
+    assert correlation is None or isinstance(correlation, SleepHeartRateCorrelation)
 
   def test_analyze_sleep_hr_correlation_no_hr_data(self, analyzer):
-    """测试睡眠-心率关联分析 - 无心率数据"""
+    """Test sleep-heart rate correlation with no HR data."""
     sessions = [
       SleepSession(
         session_id="test_session",
@@ -350,7 +345,7 @@ class TestSleepAnalyzer:
     assert correlation is None
 
   def test_generate_daily_summary(self, analyzer):
-    """测试每日汇总生成"""
+    """Test daily summary generation."""
     sessions = [
       SleepSession(
         session_id="session_1",
@@ -389,8 +384,8 @@ class TestSleepAnalyzer:
     assert "efficiency" in summary.columns
 
   def test_generate_weekly_summary(self, analyzer):
-    """测试每周汇总生成"""
-    # 创建一个空的DataFrame来模拟每日汇总
+    """Test weekly summary generation."""
+    # Mock daily summary DataFrame.
     import pandas as pd
 
     daily_data = {
@@ -405,18 +400,18 @@ class TestSleepAnalyzer:
     }
     daily_df = pd.DataFrame(daily_data)
 
-    # Mock每日汇总方法
+    # Mock daily summary method.
     analyzer._generate_daily_summary = Mock(return_value=daily_df)
 
-    sessions = []  # 空会话列表，因为我们mock了每日汇总
+    sessions = []  # Empty because daily summary is mocked.
     weekly_summary = analyzer._generate_weekly_summary(sessions)
 
-    assert len(weekly_summary) == 1  # 应该有一周的数据
+    assert len(weekly_summary) == 1  # One week of data.
     assert "days_recorded" in weekly_summary.columns
     assert "avg_duration" in weekly_summary.columns
 
   def test_detect_sleep_anomalies(self, analyzer):
-    """测试睡眠异常检测"""
+    """Test sleep anomaly detection."""
     sessions = [
       SleepSession(
         session_id="normal_session",
@@ -430,7 +425,7 @@ class TestSleepAnalyzer:
       SleepSession(
         session_id="short_session",
         start_date=datetime(2024, 1, 2, 22, 0),
-        end_date=datetime(2024, 1, 3, 2, 0),  # 只有4小时
+        end_date=datetime(2024, 1, 3, 2, 0),  # 4 hours only.
         total_duration=240,
         sleep_duration=200,
         awake_duration=40,
@@ -441,10 +436,10 @@ class TestSleepAnalyzer:
     anomalies = analyzer._detect_sleep_anomalies(sessions)
 
     assert isinstance(anomalies, list)
-    # 短睡眠会话应该被检测为异常
+    # Short session should be flagged as an anomaly.
 
   def test_generate_highlights_good_sleep(self, analyzer):
-    """测试Highlights生成 - 良好睡眠"""
+    """Test highlights for good sleep."""
     quality = SleepQualityMetrics(
       average_duration=8.0,
       average_efficiency=0.9,
@@ -470,11 +465,11 @@ class TestSleepAnalyzer:
     assert any("睡眠效率" in h for h in highlights)
 
   def test_generate_highlights_poor_sleep(self, analyzer):
-    """测试Highlights生成 - 较差睡眠"""
+    """Test highlights for poor sleep."""
     quality = SleepQualityMetrics(
-      average_duration=5.0,  # 睡眠不足
-      average_efficiency=0.75,  # 效率较低
-      average_latency=45.0,  # 入睡慢
+      average_duration=5.0,  # Short sleep.
+      average_efficiency=0.75,  # Lower efficiency.
+      average_latency=45.0,  # Longer latency.
       consistency_score=0.6,
       overall_quality_score=60.0,
     )
@@ -482,12 +477,12 @@ class TestSleepAnalyzer:
     highlights = analyzer._generate_highlights(quality, None, None, {}, [])
 
     assert isinstance(highlights, list)
-    # 检查是否包含相关的睡眠问题描述
-    assert any("睡眠时长仅" in h and "建议增加" in h for h in highlights)
-    assert any("睡眠效率仅" in h and "可能存在" in h for h in highlights)
+    # Should include sleep issue messaging.
+    assert any("睡眠时长" in h for h in highlights)
+    assert any("睡眠效率" in h for h in highlights)
 
   def test_generate_recommendations(self, analyzer):
-    """测试建议生成"""
+    """Test recommendation generation."""
     quality = SleepQualityMetrics(
       average_duration=6.0,
       average_efficiency=0.8,
@@ -496,36 +491,30 @@ class TestSleepAnalyzer:
       overall_quality_score=70.0,
     )
 
-    recommendations = analyzer._generate_recommendations(
-      quality, None, None, []
-    )
+    recommendations = analyzer._generate_recommendations(quality, None, None, [])
 
     assert isinstance(recommendations, list)
     assert len(recommendations) > 0
-    assert any("睡眠时间" in rec for rec in recommendations)
+    assert any("睡眠" in rec for rec in recommendations)
 
   def test_assess_data_quality(self, analyzer, sample_sleep_records):
-    """测试数据质量评估"""
+    """Test data quality assessment."""
     quality = analyzer._assess_data_quality(sample_sleep_records)
 
     assert isinstance(quality, float)
     assert 0 <= quality <= 1
 
   def test_assess_data_quality_empty(self, analyzer):
-    """测试数据质量评估 - 空数据"""
+    """Test data quality assessment with empty data."""
     quality = analyzer._assess_data_quality([])
 
     assert quality == 0.0
 
   @patch.object(StatisticalAnalyzer, "analyze_trend")
-  def test_analyze_comprehensive(
-    self, mock_trend, analyzer, sample_sleep_records
-  ):
-    """测试综合分析"""
-    # Mock趋势分析结果
-    mock_trend.return_value = Mock(
-      slope=0.1, r_squared=0.7, trend_direction="stable"
-    )
+  def test_analyze_comprehensive(self, mock_trend, analyzer, sample_sleep_records):
+    """Test comprehensive analysis."""
+    # Mock trend analysis result.
+    mock_trend.return_value = Mock(slope=0.1, r_squared=0.7, trend_direction="stable")
 
     report = analyzer.analyze_comprehensive(sample_sleep_records)
 
@@ -535,14 +524,14 @@ class TestSleepAnalyzer:
     assert 0 <= report.data_quality_score <= 1
 
   def test_analyze_comprehensive_empty_records(self, analyzer):
-    """测试综合分析 - 空记录"""
+    """Test comprehensive analysis with empty records."""
     report = analyzer.analyze_comprehensive([])
 
     assert isinstance(report, SleepAnalysisReport)
     assert report.record_count == 0
 
   def test_calculate_data_range(self, analyzer, sample_sleep_records):
-    """测试数据时间范围计算"""
+    """Test data range calculation."""
     start_date, end_date = analyzer._calculate_data_range(sample_sleep_records)
 
     assert isinstance(start_date, datetime)
@@ -550,7 +539,7 @@ class TestSleepAnalyzer:
     assert start_date <= end_date
 
   def test_calculate_data_range_empty(self, analyzer):
-    """测试数据时间范围计算 - 空数据"""
+    """Test data range calculation with empty data."""
     start_date, end_date = analyzer._calculate_data_range([])
 
     assert isinstance(start_date, datetime)

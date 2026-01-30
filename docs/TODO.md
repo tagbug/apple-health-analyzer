@@ -32,9 +32,9 @@
 - [x] Produce `docs/PHASE-4-REFACTOR.md`.
 
 ## Stage 5: Tests Update
-- [ ] Update unit tests for refactor changes.
-- [ ] Refactor test structure and comments.
-- [ ] Produce `docs/PHASE-5-TESTS.md`.
+- [x] Update unit tests for refactor changes.
+- [x] Refactor test structure and comments.
+- [x] Produce `docs/PHASE-5-TESTS.md`.
 
 ## Stage 6: Systemic Testing
 - [ ] Run full test suite.

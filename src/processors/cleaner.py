@@ -238,6 +238,7 @@ class DataCleaner:
       "🐙Watch": 1,  # Apple Watch highest priority
       "Apple Watch": 1,  # Alias
       "小米运动健康": 2,  # Xiaomi Health
+      "Xiaomi Health": 2,  # Alias
       "Xiaomi Home": 2,  # Alias
       "🐙Phone": 3,  # iPhone lowest priority
       "iPhone": 3,  # Alias

@@ -38,8 +38,8 @@ class TestDataCleaner:
       # Xiaomi Health record (medium priority).
       HealthRecord(
         type="HKQuantityTypeIdentifierHeartRate",
-        source_name="小米运动健康",
-        start_date=base_time + timedelta(seconds=30),  # 时间窗口内重叠
+        source_name="Xiaomi Health",
+        start_date=base_time + timedelta(seconds=30),  # Overlapping window.
         end_date=base_time + timedelta(seconds=90),
         creation_date=base_time + timedelta(seconds=30),
         source_version="2.1.0",
@@ -51,7 +51,7 @@ class TestDataCleaner:
       HealthRecord(
         type="HKQuantityTypeIdentifierHeartRate",
         source_name="🐙Phone",
-        start_date=base_time + timedelta(seconds=45),  # 时间窗口内重叠
+        start_date=base_time + timedelta(seconds=45),  # Overlapping window.
         end_date=base_time + timedelta(seconds=105),
         creation_date=base_time + timedelta(seconds=45),
         source_version="15.0",
@@ -63,7 +63,7 @@ class TestDataCleaner:
       HealthRecord(
         type="HKQuantityTypeIdentifierHeartRate",
         source_name="🐙Watch",
-        start_date=base_time + timedelta(minutes=5),  # 不同时间窗口
+        start_date=base_time + timedelta(minutes=5),  # Different time window.
         end_date=base_time + timedelta(minutes=6),
         creation_date=base_time + timedelta(minutes=5),
         source_version="1.0",
@@ -77,6 +77,7 @@ class TestDataCleaner:
   def test_init_default_priority(self, cleaner):
     """Test default initialization."""
     assert cleaner.source_priority["🐙Watch"] == 1
+    assert cleaner.source_priority["Xiaomi Health"] == 2
     assert cleaner.source_priority["小米运动健康"] == 2
     assert cleaner.source_priority["🐙Phone"] == 3
     assert cleaner.default_window_seconds == 60
@@ -155,7 +156,7 @@ class TestDataCleaner:
       ),
       QuantityRecord(
         type="HKQuantityTypeIdentifierHeartRate",
-        source_name="小米运动健康",
+        source_name="Xiaomi Health",
         start_date=base_time + timedelta(seconds=30),
         end_date=base_time + timedelta(seconds=90),
         creation_date=base_time + timedelta(seconds=30),
@@ -306,8 +307,8 @@ class TestDataCleaner:
     invalid_record = MagicMock()
     invalid_record.type = "HKQuantityTypeIdentifierHeartRate"
     invalid_record.source_name = "🐙Watch"
-    invalid_record.start_date = datetime(2023, 11, 9, 12, 1, 0)  # 开始时间晚
-    invalid_record.end_date = datetime(2023, 11, 9, 12, 0, 0)  # 结束时间早
+    invalid_record.start_date = datetime(2023, 11, 9, 12, 1, 0)  # Start after end.
+    invalid_record.end_date = datetime(2023, 11, 9, 12, 0, 0)  # End before start.
     invalid_record.creation_date = datetime(2023, 11, 9, 12, 0, 0)
     invalid_record.metadata = {}
 
@@ -428,8 +429,8 @@ class TestDataCleaner:
 
     # Invalid timestamps (start after end).
     invalid_record = MagicMock()
-    invalid_record.start_date = base_time + timedelta(seconds=60)  # 开始时间晚
-    invalid_record.end_date = base_time  # 结束时间早
+    invalid_record.start_date = base_time + timedelta(seconds=60)  # Start after end.
+    invalid_record.end_date = base_time  # End before start.
     invalid_record.creation_date = base_time
 
     assert not cleaner._validate_timestamp(invalid_record)
@@ -463,7 +464,7 @@ class TestDataCleaner:
       source_version="1.0",
       device="Apple Watch",
       unit="count/min",
-      value=300.0,  # 过高
+      value=300.0,  # Too high.
       metadata={},
     )
     assert not cleaner._validate_value(invalid_record)
@@ -472,11 +473,11 @@ class TestDataCleaner:
     """Test quality score calculation."""
     # All valid records.
     score = cleaner._calculate_quality_score(10, 10, 0, 0)
-    assert score == 60.0  # 只有有效性评分
+    assert score == 60.0  # Only validity score.
 
     # Some invalid records.
     score = cleaner._calculate_quality_score(10, 8, 1, 1)
-    assert score < 60.0  # 被问题惩罚
+    assert score < 60.0  # Penalized by issues.
 
     # All invalid records.
     score = cleaner._calculate_quality_score(10, 0, 5, 5)

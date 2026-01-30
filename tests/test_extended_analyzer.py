@@ -83,9 +83,7 @@ class TestExtendedHealthAnalyzer:
       ),
     ]
 
-    report = analyzer.analyze_comprehensive_health(
-      records, age=30, gender="male"
-    )
+    report = analyzer.analyze_comprehensive_health(records, age=30, gender="male")
 
     assert isinstance(report, ComprehensiveHealthReport)
     assert report.sleep_quality is not None
@@ -498,7 +496,7 @@ class TestExtendedHealthAnalyzer:
       recovery_capacity_score=0.4,
       burnout_risk_level="high",
       resilience_trend="declining",
-      recommended_rest_periods=["建议每周安排1-2天完全休息日"],
+      recommended_rest_periods=["Schedule 1-2 full rest days per week"],
     )
 
     insights = analyzer._generate_predictive_insights(

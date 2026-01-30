@@ -66,16 +66,12 @@ class TestReportCommand:
     # Mock analyzers
     mock_hr_analyzer_instance = MagicMock()
     mock_hr_report = MagicMock()
-    mock_hr_analyzer_instance.analyze_comprehensive.return_value = (
-      mock_hr_report
-    )
+    mock_hr_analyzer_instance.analyze_comprehensive.return_value = mock_hr_report
     mock_hr_analyzer.return_value = mock_hr_analyzer_instance
 
     mock_sleep_analyzer_instance = MagicMock()
     mock_sleep_report = MagicMock()
-    mock_sleep_analyzer_instance.analyze_comprehensive.return_value = (
-      mock_sleep_report
-    )
+    mock_sleep_analyzer_instance.analyze_comprehensive.return_value = mock_sleep_report
     mock_sleep_analyzer.return_value = mock_sleep_analyzer_instance
 
     # Mock highlights generator
@@ -92,10 +88,11 @@ class TestReportCommand:
     # Create mock Path objects with stat() method
     mock_html_file = MagicMock(spec=Path)
     mock_html_file.name = "test.html"
-    mock_html_file.stat.return_value.st_size = 1024 * 1024  # 1MB
-    mock_html_file.__str__.return_value = "/tmp/test.html"
+    mock_html_file.stat = MagicMock(return_value=MagicMock(st_size=1024 * 1024))
 
-    mock_report_gen_instance.generate_html_report.return_value = mock_html_file
+    mock_report_gen_instance.generate_html_report = MagicMock(
+      return_value=mock_html_file
+    )
     mock_report_generator.return_value = mock_report_gen_instance
 
     runner = CliRunner()
@@ -116,11 +113,11 @@ class TestReportCommand:
         ],
       )
 
-      # 放宽断言条件：允许功能性失败，但不能是文件不存在错误
+      # Allow functional errors but not file-not-found.
       assert result.exit_code != 2, (
         f"FileNotFoundError should not occur: {result.output}"
       )
-      # 如果成功，验证输出
+      # If successful, verify output.
       if result.exit_code == 0:
         assert "Report generation successful" in result.output
 
@@ -189,9 +186,7 @@ class TestVisualizeCommand:
       )
 
       # The command should not fail with FileNotFoundError (exit code 2)
-      assert result.exit_code != 2, (
-        f"Unexpected FileNotFoundError: {result.output}"
-      )
+      assert result.exit_code != 2, f"Unexpected FileNotFoundError: {result.output}"
 
   @patch("src.cli_visualize.get_config")
   def test_visualize_command_missing_file(self, mock_get_config):
@@ -255,9 +250,7 @@ class TestVisualizeCommand:
 
       # The command should not fail with FileNotFoundError (exit code 2)
       # It may fail with other errors, but not file not found
-      assert result.exit_code != 2, (
-        f"Unexpected FileNotFoundError: {result.output}"
-      )
+      assert result.exit_code != 2, f"Unexpected FileNotFoundError: {result.output}"
 
 
 class TestCommandOptions:
@@ -292,16 +285,12 @@ class TestCommandOptions:
 
     mock_hr_analyzer_instance = MagicMock()
     mock_hr_report = MagicMock()
-    mock_hr_analyzer_instance.analyze_comprehensive.return_value = (
-      mock_hr_report
-    )
+    mock_hr_analyzer_instance.analyze_comprehensive.return_value = mock_hr_report
     mock_hr_analyzer.return_value = mock_hr_analyzer_instance
 
     mock_sleep_analyzer_instance = MagicMock()
     mock_sleep_report = MagicMock()
-    mock_sleep_analyzer_instance.analyze_comprehensive.return_value = (
-      mock_sleep_report
-    )
+    mock_sleep_analyzer_instance.analyze_comprehensive.return_value = mock_sleep_report
     mock_sleep_analyzer.return_value = mock_sleep_analyzer_instance
 
     mock_highlights_instance = MagicMock()
@@ -312,11 +301,11 @@ class TestCommandOptions:
     mock_highlights_generator.return_value = mock_highlights_instance
 
     mock_report_gen_instance = MagicMock()
-    mock_report_gen_instance.generate_html_report.return_value = Path(
-      "/tmp/test.html"
+    mock_report_gen_instance.generate_html_report = MagicMock(
+      return_value=Path("/tmp/test.html")
     )
-    mock_report_gen_instance.generate_markdown_report.return_value = Path(
-      "/tmp/test.md"
+    mock_report_gen_instance.generate_markdown_report = MagicMock(
+      return_value=Path("/tmp/test.md")
     )
     mock_report_generator.return_value = mock_report_gen_instance
 
@@ -328,11 +317,11 @@ class TestCommandOptions:
       # Test both format
       result = runner.invoke(report, [str(tmp_path), "--format", "both"])
 
-      # 放宽断言条件：允许功能性失败，但不能是文件不存在错误
+      # Allow functional errors but not file-not-found.
       assert result.exit_code != 2, (
         f"FileNotFoundError should not occur: {result.output}"
       )
-      # 如果成功，验证输出
+      # If successful, verify output.
       if result.exit_code == 0:
         assert "HTML report" in result.output
         assert "Markdown report" in result.output
@@ -398,9 +387,7 @@ class TestOutputDirectoryHandling:
 
       mock_hr_analyzer_instance = MagicMock()
       mock_hr_report = MagicMock()
-      mock_hr_analyzer_instance.analyze_comprehensive.return_value = (
-        mock_hr_report
-      )
+      mock_hr_analyzer_instance.analyze_comprehensive.return_value = mock_hr_report
       mock_hr_analyzer.return_value = mock_hr_analyzer_instance
 
       mock_sleep_analyzer_instance = MagicMock()
@@ -412,12 +399,14 @@ class TestOutputDirectoryHandling:
 
       mock_highlights_instance = MagicMock()
       mock_highlights = MagicMock()
-      mock_highlights_instance.generate_comprehensive_highlights.return_value = mock_highlights
+      mock_highlights_instance.generate_comprehensive_highlights.return_value = (
+        mock_highlights
+      )
       mock_highlights_generator.return_value = mock_highlights_instance
 
       mock_report_gen_instance = MagicMock()
-      mock_report_gen_instance.generate_html_report.return_value = (
-        custom_output / "test.html"
+      mock_report_gen_instance.generate_html_report = MagicMock(
+        return_value=custom_output / "test.html"
       )
       mock_report_generator.return_value = mock_report_gen_instance
 
@@ -425,14 +414,12 @@ class TestOutputDirectoryHandling:
       tmp_path = Path(temp_dir) / "test.xml"
       tmp_path.write_text("<xml></xml>")  # Create a minimal XML file
 
-      result = runner.invoke(
-        report, [str(tmp_path), "--output", str(custom_output)]
-      )
+      result = runner.invoke(report, [str(tmp_path), "--output", str(custom_output)])
 
-      # 放宽断言条件：允许功能性失败，但不能是文件不存在错误
+      # Allow functional errors but not file-not-found.
       assert result.exit_code != 2, (
         f"FileNotFoundError should not occur: {result.output}"
       )
-      # 如果成功，验证输出
+      # If successful, verify output.
       if result.exit_code == 0:
         assert str(custom_output) in result.output
