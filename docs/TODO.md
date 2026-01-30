@@ -26,10 +26,10 @@
 - [x] Produce `docs/PHASE-3-COMMENTS.md`.
 
 ## Stage 4: Refactor and Optimization
-- [ ] Minimize duplicate parsing passes.
-- [ ] Improve data conversion hot paths.
-- [ ] Refactor oversized functions safely.
-- [ ] Produce `docs/PHASE-4-REFACTOR.md`.
+- [x] Minimize duplicate parsing passes.
+- [x] Improve data conversion hot paths.
+- [x] Refactor oversized functions safely.
+- [x] Produce `docs/PHASE-4-REFACTOR.md`.
 
 ## Stage 5: Tests Update
 - [ ] Update unit tests for refactor changes.

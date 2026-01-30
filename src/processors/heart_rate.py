@@ -13,6 +13,7 @@ from ..analyzers.anomaly import AnomalyDetector, AnomalyReport
 from ..analyzers.statistical import StatisticalAnalyzer
 from ..core.data_models import HealthRecord, QuantityRecord
 from ..utils.logger import get_logger
+from ..utils.type_conversion import safe_float
 
 logger = get_logger(__name__)
 
@@ -264,7 +265,7 @@ class HeartRateAnalyzer:
 
     # Calculate current value (average of last 30 days).
     recent_data = df[df["start_date"] >= df["start_date"].max() - pd.Timedelta(days=30)]
-    current_value = (
+    current_value = safe_float(
       recent_data["value"].mean() if not recent_data.empty else df["value"].mean()
     )
 
@@ -272,7 +273,7 @@ class HeartRateAnalyzer:
     baseline_data = df[
       df["start_date"] <= df["start_date"].min() + pd.Timedelta(days=30)
     ]
-    baseline_value = (
+    baseline_value = safe_float(
       baseline_data["value"].mean() if not baseline_data.empty else df["value"].mean()
     )
 
@@ -328,7 +329,7 @@ class HeartRateAnalyzer:
 
     # Calculate current value (average of last 30 days).
     recent_data = df[df["start_date"] >= df["start_date"].max() - pd.Timedelta(days=30)]
-    current_sdnn = (
+    current_sdnn = safe_float(
       recent_data["value"].mean() if not recent_data.empty else df["value"].mean()
     )
 
@@ -336,7 +337,7 @@ class HeartRateAnalyzer:
     baseline_data = df[
       df["start_date"] <= df["start_date"].min() + pd.Timedelta(days=30)
     ]
-    baseline_sdnn = (
+    baseline_sdnn = safe_float(
       baseline_data["value"].mean() if not baseline_data.empty else df["value"].mean()
     )
 
@@ -390,7 +391,9 @@ class HeartRateAnalyzer:
       return None
 
     # Get current VO2Max value (latest record).
-    current_vo2_max = df["value"].iloc[-1]  # Assume records are time-sorted.
+    current_vo2_max = safe_float(
+      df["value"].iloc[-1]
+    )  # Assume records are time-sorted.
 
     # Age- and gender-adjusted rating.
     age_adjusted_rating = self._rate_vo2_max(current_vo2_max, self.age, self.gender)
@@ -742,10 +745,10 @@ class HeartRateAnalyzer:
       return 0.0
 
     # Check data completeness.
-    completeness = df["value"].notna().mean()
+    completeness = safe_float(df["value"].notna().mean())
 
     # Check value sanity (heart rate range).
-    reasonable = ((df["value"] >= 40) & (df["value"] <= 200)).mean()
+    reasonable = safe_float(((df["value"] >= 40) & (df["value"] <= 200)).mean())
 
     # Combined score.
     quality_score = (completeness + reasonable) / 2

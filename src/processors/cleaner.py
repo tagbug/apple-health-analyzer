@@ -244,6 +244,7 @@ class DataCleaner:
     }
 
     self.default_window_seconds = default_window_seconds
+    self._fast_dedup_threshold = 50000
     logger.info(
       f"DataCleaner initialized with {len(self.source_priority)} source priorities"
     )
@@ -295,6 +296,26 @@ class DataCleaner:
 
     for record_type, type_records in records_by_type.items():
       logger.debug(f"Processing {len(type_records)} records of type {record_type}")
+
+      if self._should_use_fast_dedup(len(type_records), strategy):
+        logger.info(
+          "Using fast deduplication path for %s (%s records, strategy=%s)",
+          record_type,
+          len(type_records),
+          strategy,
+        )
+        (
+          fast_deduped,
+          removed_sources,
+          removed_count,
+        ) = self._deduplicate_records_fast(type_records, window, strategy)
+
+        total_duplicates_removed += removed_count
+        for source, count in removed_sources.items():
+          duplicates_by_source[source] += count
+
+        deduplicated_records.extend(fast_deduped)
+        continue
 
       # Convert to DataFrame for processing.
       df = self._records_to_dataframe(type_records)
@@ -428,6 +449,58 @@ class DataCleaner:
     )
 
     return deduplicated_records, result
+
+  def _should_use_fast_dedup(self, record_count: int, strategy: str) -> bool:
+    """Check if fast deduplication path should be used."""
+    return record_count >= self._fast_dedup_threshold and strategy in {
+      "priority",
+      "latest",
+    }
+
+  def _deduplicate_records_fast(
+    self, records: list[HealthRecord], window_seconds: int, strategy: str
+  ) -> tuple[list[HealthRecord], dict[str, int], int]:
+    """Fast deduplication using dict-based grouping."""
+    selected: dict[int, tuple[HealthRecord, Any]] = {}
+    removed_sources = defaultdict(int)
+
+    for record in records:
+      time_key = self._compute_time_window_key(record.start_date, window_seconds)
+
+      if strategy == "latest":
+        record_value = getattr(record, "creation_date", record.start_date)
+      else:
+        record_value = self.source_priority.get(record.source_name, 999)
+
+      existing = selected.get(time_key)
+      if existing is None:
+        selected[time_key] = (record, record_value)
+      else:
+        _, existing_value = existing
+        if record_value < existing_value and strategy == "priority":
+          selected[time_key] = (record, record_value)
+        elif record_value > existing_value and strategy == "latest":
+          selected[time_key] = (record, record_value)
+
+    deduped_records = [record for record, _value in selected.values()]
+    selected_ids = {id(record) for record in deduped_records}
+
+    for record in records:
+      if id(record) not in selected_ids:
+        removed_sources[record.source_name] += 1
+
+    removed_count = len(records) - len(deduped_records)
+    return deduped_records, dict(removed_sources), removed_count
+
+  def _compute_time_window_key(self, start_date: datetime, window_seconds: int) -> int:
+    """Compute time window key for deduplication."""
+    if start_date.tzinfo is not None:
+      epoch = datetime(1970, 1, 1, tzinfo=start_date.tzinfo)
+    else:
+      epoch = datetime(1970, 1, 1)
+
+    seconds = int((start_date - epoch).total_seconds())
+    return seconds - (seconds % window_seconds)
 
   def merge_overlapping_records(
     self, records: list[HealthRecord], merge_threshold_seconds: int = 5

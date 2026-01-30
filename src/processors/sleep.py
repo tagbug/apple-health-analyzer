@@ -17,6 +17,7 @@ from ..analyzers.anomaly import AnomalyDetector
 from ..analyzers.statistical import StatisticalAnalyzer
 from ..core.data_models import CategoryRecord, HealthRecord, QuantityRecord
 from ..utils.logger import get_logger
+from ..utils.type_conversion import safe_float
 
 logger = get_logger(__name__)
 
@@ -871,12 +872,14 @@ class SleepAnalyzer:
       return None
 
     # Compute averaged metrics.
-    avg_sleep_hr = sum(m["avg_hr"] for m in sleep_hr_metrics) / len(sleep_hr_metrics)
-    hr_variability = sum(m["hr_variability"] for m in sleep_hr_metrics) / len(
-      sleep_hr_metrics
+    avg_sleep_hr = safe_float(
+      sum(m["avg_hr"] for m in sleep_hr_metrics) / len(sleep_hr_metrics)
     )
-    hr_drop_efficiency = sum(m["hr_drop_efficiency"] for m in sleep_hr_metrics) / len(
-      sleep_hr_metrics
+    hr_variability = safe_float(
+      sum(m["hr_variability"] for m in sleep_hr_metrics) / len(sleep_hr_metrics)
+    )
+    hr_drop_efficiency = safe_float(
+      sum(m["hr_drop_efficiency"] for m in sleep_hr_metrics) / len(sleep_hr_metrics)
     )
 
     # Recovery quality score (based on HR variability and drop efficiency).

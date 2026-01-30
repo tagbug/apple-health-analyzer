@@ -53,6 +53,8 @@ Goal:
 - Keep public APIs stable and outputs consistent.
 Output:
 - `docs/PHASE-4-REFACTOR.md` describing structural changes and optimizations.
+Status:
+- Completed in current iteration. See `docs/PHASE-4-REFACTOR.md` for details.
 
 ## Stage 5: Test Alignment and Test Refactor
 Goal:

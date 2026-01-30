@@ -18,6 +18,57 @@ class DataConverter:
   """
 
   @staticmethod
+  def _build_value_dataframe(
+    records: Sequence[HealthRecord],
+    *,
+    include_date: bool,
+    default_unit: str,
+    empty_columns: list[str],
+    dedupe_by_date: bool = False,
+  ) -> pd.DataFrame:
+    """Build a value DataFrame from HealthRecord items."""
+    if not records:
+      return pd.DataFrame(columns=empty_columns)
+
+    data = []
+    for record in records:
+      if isinstance(record, (QuantityRecord, CategoryRecord)) and hasattr(
+        record, "value"
+      ):
+        row = {
+          "timestamp": record.start_date,
+          "value": float(record.value),
+          "source": getattr(record, "source_name", "Unknown"),
+          "unit": getattr(record, "unit", default_unit),
+        }
+        if include_date:
+          row["date"] = record.start_date.date()
+        data.append(row)
+
+    df = pd.DataFrame(data)
+    if df.empty:
+      return df
+
+    if include_date:
+      df = df.sort_values("timestamp")
+      if dedupe_by_date:
+        df = df.drop_duplicates("date", keep="last")
+        df = df.sort_values("date").reset_index(drop=True)
+      else:
+        df = df.reset_index(drop=True)
+    else:
+      df = df.sort_values("timestamp").reset_index(drop=True)
+
+    if include_date:
+      ordered_columns = ["date", "timestamp", "value", "source", "unit"]
+      df = df[[col for col in ordered_columns if col in df.columns]]
+    else:
+      ordered_columns = ["timestamp", "value", "source", "unit"]
+      df = df[[col for col in ordered_columns if col in df.columns]]
+
+    return df
+
+  @staticmethod
   def heart_rate_to_df(records: Sequence[HealthRecord]) -> pd.DataFrame:
     """Convert heart rate records into a DataFrame.
 
@@ -27,26 +78,12 @@ class DataConverter:
     Returns:
         DataFrame with timestamps and heart rate values.
     """
-    if not records:
-      return pd.DataFrame(columns=["timestamp", "value", "source"])
-
-    data = []
-    for record in records:
-      if isinstance(record, (QuantityRecord, CategoryRecord)) and hasattr(
-        record, "value"
-      ):
-        data.append(
-          {
-            "timestamp": record.start_date,
-            "value": float(record.value),
-            "source": getattr(record, "source_name", "Unknown"),
-            "unit": getattr(record, "unit", "bpm"),
-          }
-        )
-
-    df = pd.DataFrame(data)
-    if not df.empty:
-      df = df.sort_values("timestamp").reset_index(drop=True)
+    df = DataConverter._build_value_dataframe(
+      records,
+      include_date=False,
+      default_unit="bpm",
+      empty_columns=["timestamp", "value", "source"],
+    )
 
     logger.debug(
       f"Converted {len(records)} heart rate records to DataFrame with {len(df)} rows"
@@ -63,29 +100,13 @@ class DataConverter:
     Returns:
         DataFrame with dates and resting heart rate values.
     """
-    if not records:
-      return pd.DataFrame(columns=["date", "value", "source"])
-
-    data = []
-    for record in records:
-      if isinstance(record, (QuantityRecord, CategoryRecord)) and hasattr(
-        record, "value"
-      ):
-        data.append(
-          {
-            "date": record.start_date.date(),
-            "timestamp": record.start_date,
-            "value": float(record.value),
-            "source": getattr(record, "source_name", "Unknown"),
-            "unit": getattr(record, "unit", "bpm"),
-          }
-        )
-
-    df = pd.DataFrame(data)
-    if not df.empty:
-      # Deduplicate by date, keeping the latest record.
-      df = df.sort_values("timestamp").drop_duplicates("date", keep="last")
-      df = df.sort_values("date").reset_index(drop=True)
+    df = DataConverter._build_value_dataframe(
+      records,
+      include_date=True,
+      default_unit="bpm",
+      empty_columns=["date", "value", "source"],
+      dedupe_by_date=True,
+    )
 
     logger.debug(
       f"Converted {len(records)} resting HR records to DataFrame with {len(df)} rows"
@@ -102,29 +123,13 @@ class DataConverter:
     Returns:
         DataFrame with dates and HRV values.
     """
-    if not records:
-      return pd.DataFrame(columns=["date", "value", "source"])
-
-    data = []
-    for record in records:
-      if isinstance(record, (QuantityRecord, CategoryRecord)) and hasattr(
-        record, "value"
-      ):
-        data.append(
-          {
-            "date": record.start_date.date(),
-            "timestamp": record.start_date,
-            "value": float(record.value),
-            "source": getattr(record, "source_name", "Unknown"),
-            "unit": getattr(record, "unit", "ms"),
-          }
-        )
-
-    df = pd.DataFrame(data)
-    if not df.empty:
-      # Deduplicate by date, keeping the latest record.
-      df = df.sort_values("timestamp").drop_duplicates("date", keep="last")
-      df = df.sort_values("date").reset_index(drop=True)
+    df = DataConverter._build_value_dataframe(
+      records,
+      include_date=True,
+      default_unit="ms",
+      empty_columns=["date", "value", "source"],
+      dedupe_by_date=True,
+    )
 
     logger.debug(
       f"Converted {len(records)} HRV records to DataFrame with {len(df)} rows"

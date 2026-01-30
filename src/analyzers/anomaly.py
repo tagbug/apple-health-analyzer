@@ -10,6 +10,7 @@ import pandas as pd
 
 from ..core.data_models import CategoryRecord, HealthRecord, QuantityRecord
 from ..utils.logger import get_logger
+from ..utils.type_conversion import safe_float
 
 logger = get_logger(__name__)
 
@@ -285,19 +286,17 @@ class AnomalyDetector:
           AnomalyRecord(
             timestamp=row["start_date"],
             value=row["value"],
-            expected_value=float(
-              np.asarray((Q1 + Q3) / 2)
-            ),  # Midpoint as expected value.
+            expected_value=safe_float((Q1 + Q3) / 2),  # Midpoint as expected value.
             deviation=deviation,
             severity=severity,
             method="iqr",
             confidence=round(confidence, 3),
             context={
-              "Q1": round(float(np.asarray(Q1)), 2),
-              "Q3": round(float(np.asarray(Q3)), 2),
-              "IQR": round(float(np.asarray(IQR)), 2),
-              "lower_bound": round(float(np.asarray(lower_bound)), 2),
-              "upper_bound": round(float(np.asarray(upper_bound)), 2),
+              "Q1": round(safe_float(Q1), 2),
+              "Q3": round(safe_float(Q3), 2),
+              "IQR": round(safe_float(IQR), 2),
+              "lower_bound": round(safe_float(lower_bound), 2),
+              "upper_bound": round(safe_float(upper_bound), 2),
             },
           )
         )
@@ -338,14 +337,14 @@ class AnomalyDetector:
           AnomalyRecord(
             timestamp=row["start_date"],
             value=row["value"],
-            expected_value=float(np.asarray(row["ma"])),
-            deviation=deviation / float(np.asarray(row["ma_std"])),
+            expected_value=safe_float(row["ma"]),
+            deviation=deviation / safe_float(row["ma_std"]),
             severity=severity,
             method="moving_average",
             confidence=round(confidence, 3),
             context={
-              "moving_average": round(float(np.asarray(row["ma"])), 2),
-              "ma_std": round(float(np.asarray(row["ma_std"])), 2),
+              "moving_average": round(safe_float(row["ma"]), 2),
+              "ma_std": round(safe_float(row["ma_std"]), 2),
               "window": window,
             },
           )
@@ -399,8 +398,8 @@ class AnomalyDetector:
         confidence = min(1.0, z_score / 4.0)
 
         # Safely handle pandas scalar types.
-        mean_val_float = float(np.asarray(mean_val))
-        std_val_float = float(np.asarray(std_val))
+        mean_val_float = safe_float(mean_val)
+        std_val_float = safe_float(std_val)
 
         anomalies.append(
           AnomalyRecord(
@@ -464,7 +463,7 @@ class AnomalyDetector:
           AnomalyRecord(
             timestamp=row["start_date"],
             value=row["value"],
-            expected_value=float(np.asarray(mean_val)),
+            expected_value=safe_float(mean_val),
             deviation=z_score,
             severity=severity,
             method="contextual_day_of_week",
@@ -472,8 +471,8 @@ class AnomalyDetector:
             context={
               "day_of_week": day,
               "day_name": day_names[day],
-              "daily_mean": round(float(np.asarray(mean_val)), 2),
-              "daily_std": round(float(np.asarray(std_val)), 2),
+              "daily_mean": round(safe_float(mean_val), 2),
+              "daily_std": round(safe_float(std_val), 2),
             },
           )
         )
@@ -516,15 +515,15 @@ class AnomalyDetector:
           AnomalyRecord(
             timestamp=row["start_date"],
             value=row["value"],
-            expected_value=float(np.asarray(mean_val)),
+            expected_value=safe_float(mean_val),
             deviation=z_score,
             severity=severity,
             method="contextual_sleep_wake",
             confidence=round(confidence, 3),
             context={
               "is_sleep_hour": bool(is_sleep_hour),
-              "sleep_mean": round(float(np.asarray(mean_val)), 2),
-              "sleep_std": round(float(np.asarray(std_val)), 2),
+              "sleep_mean": round(safe_float(mean_val), 2),
+              "sleep_std": round(safe_float(std_val), 2),
             },
           )
         )

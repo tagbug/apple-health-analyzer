@@ -9,6 +9,7 @@ import pandas as pd
 
 from ..core.data_models import CategoryRecord, HealthRecord, QuantityRecord
 from ..utils.logger import get_logger
+from ..utils.type_conversion import safe_float
 
 logger = get_logger(__name__)
 
@@ -206,16 +207,16 @@ class StatisticalAnalyzer:
       return None
 
     # Basic statistics
-    min_val = float(values.min())
-    max_val = float(values.max())
-    mean_val = float(values.mean())
-    median_val = float(values.median())
-    std_val = float(values.std()) if len(values) > 1 else 0.0
+    min_val = safe_float(values.min())
+    max_val = safe_float(values.max())
+    mean_val = safe_float(values.mean())
+    median_val = safe_float(values.median())
+    std_val = safe_float(values.std()) if len(values) > 1 else 0.0
 
     # Percentiles
-    p25 = float(values.quantile(0.25))
-    p75 = float(values.quantile(0.75))
-    p95 = float(values.quantile(0.95))
+    p25 = safe_float(values.quantile(0.25))
+    p75 = safe_float(values.quantile(0.75))
+    p95 = safe_float(values.quantile(0.95))
 
     # Time distribution analysis
     if "start_date" in data.columns:
@@ -561,10 +562,10 @@ class StatisticalAnalyzer:
     }
 
     # Get reasonable bounds with type safety.
-    default_min = float(values.min()) if not values.empty else 0.0
-    default_max = float(values.max()) if not values.empty else 100.0
+    default_min = safe_float(values.min()) if not values.empty else 0.0
+    default_max = safe_float(values.max()) if not values.empty else 100.0
     range_tuple = reasonable_ranges.get(record_type, (default_min, default_max))
-    min_val, max_val = float(range_tuple[0]), float(range_tuple[1])
+    min_val, max_val = safe_float(range_tuple[0]), safe_float(range_tuple[1])
 
     # Compute proportion within bounds.
     reasonable_mask = (values >= min_val) & (values <= max_val)
@@ -573,9 +574,9 @@ class StatisticalAnalyzer:
 
     # 3) Consistency score (30%) based on coefficient of variation.
     # CV = std / mean; lower indicates higher consistency.
-    mean_val = float(np.asarray(values.mean()))
+    mean_val = safe_float(values.mean())
     if mean_val > 0:
-      std_val = float(np.asarray(values.std()))
+      std_val = safe_float(values.std())
       cv = std_val / mean_val
       # CV in [0,1] is acceptable; above 1 indicates high variance.
       consistency = max(0, min(1, 1 - cv / 2))
