@@ -1,5 +1,7 @@
 """Tests for cli_visualize helper logic."""
 
+"""Chart helper tests for visualize CLI."""
+
 from datetime import datetime
 
 import pandas as pd

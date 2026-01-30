@@ -1,5 +1,7 @@
 """Tests for CLI command flows."""
 
+"""End-to-end CLI command tests."""
+
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -201,16 +203,12 @@ def test_export_success(tmp_path, monkeypatch):
     "src.processors.exporter.DataExporter", DummyExporter, raising=False
   )
 
-  monkeypatch.setattr(
-    "src.cli.UnifiedProgress",
-    MagicMock(
-      return_value=MagicMock(
-        __enter__=lambda s: s,
-        __exit__=lambda *a: None,
-        update=lambda *a, **k: None,
-      )
-    ),
+  progress = MagicMock(
+    __enter__=lambda s: s,
+    __exit__=lambda *a: None,
+    update=lambda *a, **k: None,
   )
+  monkeypatch.setattr("src.cli.UnifiedProgress", MagicMock(return_value=progress))
 
   output_dir = tmp_path / "out"
   output_dir.mkdir()
