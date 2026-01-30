@@ -61,6 +61,7 @@ Issues = "https://github.com/tagbug/apple-health-analyzer/issues"
 [tool.ruff]
 line-length = 88
 target-version = "py312"
+indent-size = 2
 
 [tool.ruff.lint]
 select = [
