@@ -21,7 +21,7 @@ class TestChartGenerator:
   @pytest.fixture
   def sample_heart_rate_data(self):
     """创建示例心率数据"""
-    dates = pd.date_range("2024-01-01", periods=100, freq="H")
+    dates = pd.date_range("2024-01-01", periods=100, freq="h")
     data = pd.DataFrame(
       {
         "timestamp": dates,

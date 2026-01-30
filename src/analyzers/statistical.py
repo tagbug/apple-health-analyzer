@@ -94,12 +94,12 @@ class StatisticalAnalyzer:
 
     # 根据区间类型设置频率
     freq_map = {
-      "hour": "H",
+      "hour": "h",
       "day": "D",
       "week": "W",
-      "month": "M",
-      "6month": "6M",
-      "year": "Y",
+      "month": "ME",
+      "6month": "6ME",
+      "year": "YE",
     }
 
     freq = freq_map.get(interval, "D")
@@ -129,25 +129,25 @@ class StatisticalAnalyzer:
       aggregated["interval_start"] = aggregated.index
       # 计算区间结束时间 - 分离复杂操作避免类型错误
       try:
-        if freq == "M":
+        if freq == "ME":
           # 月份比较复杂，使用下一个月的第一天减去1秒
           aggregated["interval_end"] = aggregated.index + pd.offsets.MonthEnd(1)
           aggregated["interval_end"] = aggregated[
             "interval_end"
           ] - pd.Timedelta(seconds=1)
-        elif freq == "6M":
+        elif freq == "6ME":
           aggregated["interval_end"] = aggregated.index + pd.offsets.MonthEnd(6)
           aggregated["interval_end"] = aggregated[
             "interval_end"
           ] - pd.Timedelta(seconds=1)
-        elif freq == "Y":
+        elif freq == "YE":
           aggregated["interval_end"] = aggregated.index + pd.offsets.YearEnd(1)
           aggregated["interval_end"] = aggregated[
             "interval_end"
           ] - pd.Timedelta(seconds=1)
         else:
           # 对于其他情况，直接计算delta
-          if freq == "H":
+          if freq == "h":
             delta = pd.Timedelta(hours=1) - pd.Timedelta(seconds=1)
           elif freq == "D":
             delta = pd.Timedelta(days=1) - pd.Timedelta(seconds=1)

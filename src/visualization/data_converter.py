@@ -207,7 +207,7 @@ class DataConverter:
 
     # 创建小时索引
     df_copy = df.copy()
-    df_copy["hour"] = df_copy["timestamp"].dt.floor("H")
+    df_copy["hour"] = df_copy["timestamp"].dt.floor("h")
 
     # 按小时聚合
     hourly_stats = (

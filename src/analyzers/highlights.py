@@ -392,8 +392,49 @@ class HighlightsGenerator:
     """生成关联分析洞察"""
     insights = []
 
-    # 这里可以添加更复杂的关联分析洞察
-    # 目前返回空列表，后续扩展
+    if not correlation_data:
+      return insights
+
+    for key, data in correlation_data.items():
+      correlation_value = data.get("correlation", 0.0)
+      insight_text = data.get("insight", "")
+      
+      # 根据相关性强度确定优先级
+      abs_corr = abs(correlation_value)
+      if abs_corr >= 0.7:
+        priority = "high"
+        confidence = 0.9
+      elif abs_corr >= 0.4:
+        priority = "medium"
+        confidence = 0.8
+      else:
+        priority = "low"
+        confidence = 0.6
+        
+      # 生成标题
+      if key == "sleep_activity":
+        title = "睡眠与活动关联"
+      elif key == "hr_stress":
+        title = "心率与压力关联"
+      else:
+        title = f"健康指标关联 ({key})"
+        
+      # 如果没有预设的洞察文本，生成默认文本
+      if not insight_text:
+        direction = "正相关" if correlation_value > 0 else "负相关"
+        strength = "强" if abs_corr >= 0.7 else "中等" if abs_corr >= 0.4 else "弱"
+        insight_text = f"检测到{strength}{direction} (r={correlation_value:.2f})"
+
+      insights.append(
+        HealthInsight(
+          category="correlation",
+          priority=priority,
+          title=title,
+          message=insight_text,
+          details={"correlation": correlation_value, "type": key},
+          confidence=confidence,
+        )
+      )
 
     return insights
 

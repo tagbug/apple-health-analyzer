@@ -259,7 +259,7 @@ class DataCleaner:
     strategy: str = "priority",
   ) -> tuple[list[HealthRecord], DeduplicationResult]:
     """
-    基于时间窗口的去重处理
+    基于时间窗口的去重处理 (优化版)
 
     Args:
         records: 待处理的记录列表
@@ -286,7 +286,7 @@ class DataCleaner:
     window = window_seconds or self.default_window_seconds
 
     logger.info(
-      f"Starting deduplication with strategy '{strategy}', window {window}s"
+      f"Starting optimized deduplication with strategy '{strategy}', window {window}s"
     )
 
     # 按记录类型分组处理
@@ -308,41 +308,106 @@ class DataCleaner:
 
       # 确保 start_date 是 datetime 类型
       df["start_date"] = pd.to_datetime(df["start_date"])
+      
+      # 确保 creation_date 是 datetime 类型
+      if "creation_date" in df.columns:
+        df["creation_date"] = pd.to_datetime(df["creation_date"])
 
-      # 按时间窗口分组
-      df["time_window"] = df["start_date"].dt.floor(f"{window}s").astype(str)
+      # 计算时间窗口
+      # 使用 floor 将时间向下取整到最近的窗口
+      df["time_window"] = df["start_date"].dt.floor(f"{window}s")
 
-      # 对每个时间窗口内的记录进行去重
-      cleaned_groups = []
-      groupby_result = list(df.groupby("time_window"))
-      windows_processed = len(groupby_result)  # 确保变量总是被赋值
+      original_count = len(df)
+      
+      if strategy == "priority":
+        # 计算优先级分数 (越小越高)
+        # 将未知的源设为最低优先级 (999)
+        df["priority_score"] = df["source_name"].map(self.source_priority).fillna(999)
+        
+        # 按时间窗口和优先级排序 (时间窗口升序, 优先级升序)
+        df.sort_values(by=["time_window", "priority_score"], ascending=[True, True], inplace=True)
+        
+        # 去重，保留每个时间窗口的第一条记录 (即优先级最高的)
+        deduped_df = df.drop_duplicates(subset=["time_window"], keep="first")
+        
+      elif strategy == "latest":
+        # 按时间窗口和创建时间排序 (时间窗口升序, 创建时间降序)
+        df.sort_values(by=["time_window", "creation_date"], ascending=[True, False], inplace=True)
+        
+        # 去重，保留每个时间窗口的第一条记录 (即最新的)
+        deduped_df = df.drop_duplicates(subset=["time_window"], keep="first")
+        
+      elif strategy == "average" and self._is_numeric_type(record_type):
+        # 确保 value 列是数值类型
+        df["value"] = pd.to_numeric(df["value"], errors="coerce")
+        
+        # 按时间窗口分组计算平均值
+        # 注意: 这会丢失非聚合列的信息，我们需要保留元数据等
+        # 这里我们取每组的第一条记录作为基础，然后更新 value
+        
+        # 1. 计算平均值和计数
+        grouped = df.groupby("time_window")["value"]
+        avg_values = grouped.mean()
+        counts = grouped.size()
+        
+        # 2. 获取每组的第一条记录作为模板
+        deduped_df = df.drop_duplicates(subset=["time_window"], keep="first").set_index("time_window")
+        
+        # 3. 更新 value 和添加计数
+        deduped_df["value"] = avg_values
+        deduped_df["_count"] = counts
+        deduped_df = deduped_df.reset_index()
+        
+        # 4. 更新元数据 (需要遍历，这部分可能较慢，但比完全循环好)
+        # 为了性能，这里我们简化处理，只标记这是一个平均值
+        # 如果需要精确的元数据更新，可以在 _dataframe_row_to_record 中处理
+        
+      elif strategy == "highest_quality":
+        # 计算质量分数
+        # 1. 源优先级分数 (0-40)
+        df["priority_score"] = df["source_name"].map(self.source_priority).fillna(999)
+        df["quality_score"] = (40 - (df["priority_score"] - 1) * 10).clip(lower=0)
+        
+        # 2. 时间戳合理性 (0-30)
+        time_diff = (df["creation_date"] - df["start_date"]).abs().dt.total_seconds()
+        df.loc[time_diff < 86400, "quality_score"] += 30
+        df.loc[(time_diff >= 86400) & (time_diff < 604800), "quality_score"] += 20
+        
+        # 排序: 质量分数降序
+        df.sort_values(by=["time_window", "quality_score"], ascending=[True, False], inplace=True)
+        
+        # 去重
+        deduped_df = df.drop_duplicates(subset=["time_window"], keep="first")
+        
+      else:
+        # 默认使用优先级策略
+        df["priority_score"] = df["source_name"].map(self.source_priority).fillna(999)
+        df.sort_values(by=["time_window", "priority_score"], ascending=[True, True], inplace=True)
+        deduped_df = df.drop_duplicates(subset=["time_window"], keep="first")
 
-      for _window_start, group in groupby_result:
-        if len(group) == 1:
-          # 只有一个记录，无需去重
-          cleaned_groups.append(group.iloc[0])
-          continue
+      # 计算移除的重复项
+      removed_count = original_count - len(deduped_df)
+      total_duplicates_removed += removed_count
+      
+      # 统计移除的源
+      if removed_count > 0:
+        removed_mask = ~df.index.isin(deduped_df.index)
+        removed_sources = df.loc[removed_mask, "source_name"].value_counts()
+        for source, count in removed_sources.items():
+          duplicates_by_source[source] += count
 
-        # 多个记录，需要去重
-        cleaned_record, duplicates_removed = self._deduplicate_group(
-          group, strategy, record_type
-        )
-
-        if cleaned_record is not None:
-          cleaned_groups.append(cleaned_record)
-
-        total_duplicates_removed += duplicates_removed
-        # 统计被移除的记录按数据源分布
-        if cleaned_record is not None:
-          cleaned_id = cleaned_record.name  # DataFrame index
-          for _, row in group.iterrows():
-            if row.name != cleaned_id:
-              duplicates_by_source[row["source_name"]] += 1
-
-      # 转换回记录对象
-      for cleaned_row in cleaned_groups:
-        record = self._dataframe_row_to_record(cleaned_row, record_type)
+      # 将结果转换回 HealthRecord 对象
+      for _, row in deduped_df.iterrows():
+        record = self._dataframe_row_to_record(row, record_type)
         if record:
+          if strategy == "average" and self._is_numeric_type(record_type):
+             # 为平均值策略添加元数据标记
+             if record.metadata is None:
+                 record.metadata = {}
+             record.metadata["deduplication_method"] = "average"
+             if "_count" in row:
+                 record.metadata["original_records_count"] = int(row["_count"])
+             
           deduplicated_records.append(record)
 
     processing_time = (datetime.now() - start_time).total_seconds()
@@ -354,7 +419,7 @@ class DataCleaner:
       strategy_used=strategy,
       processing_time_seconds=processing_time,
       duplicates_by_source=dict(duplicates_by_source),
-      time_windows_processed=windows_processed,
+      time_windows_processed=len(deduplicated_records),
     )
 
     logger.info(
@@ -536,128 +601,6 @@ class DataCleaner:
       data.append(row)
 
     return pd.DataFrame(data)
-
-  def _deduplicate_group(
-    self, group: pd.DataFrame, strategy: str, record_type: str
-  ) -> tuple[pd.Series | None, int]:
-    """
-    对单个时间窗口内的记录组进行去重
-
-    Returns:
-        (保留的记录行, 移除的重复记录数)
-    """
-    if len(group) <= 1:
-      return group.iloc[0] if len(group) == 1 else None, 0
-
-    if strategy == "priority":
-      return self._deduplicate_by_priority(group), len(group) - 1
-    elif strategy == "latest":
-      return self._deduplicate_by_latest(group), len(group) - 1
-    elif strategy == "average" and self._is_numeric_type(record_type):
-      return self._deduplicate_by_average(group), len(group) - 1
-    elif strategy == "highest_quality":
-      return self._deduplicate_by_quality(group), len(group) - 1
-    else:
-      # 默认使用优先级策略
-      return self._deduplicate_by_priority(group), len(group) - 1
-
-  def _deduplicate_by_priority(self, group: pd.DataFrame) -> pd.Series:
-    """按数据源优先级去重"""
-
-    # 为每条记录计算优先级分数
-    def get_priority_score(source_name: str) -> int:
-      return self.source_priority.get(source_name, 999)  # 默认最低优先级
-
-    group = group.copy()
-    group["priority_score"] = group["source_name"].apply(get_priority_score)
-
-    # 选择优先级最高的记录（分数最小）
-    idx = group["priority_score"].idxmin()
-    if idx is not None:
-      result = group.loc[idx]
-      assert isinstance(result, pd.Series)  # 类型细化
-      return result
-    else:
-      result = group.iloc[0]
-      assert isinstance(result, pd.Series)  # 类型细化
-      return result
-
-  def _deduplicate_by_latest(self, group: pd.DataFrame) -> pd.Series:
-    """保留最新的记录"""
-    idx = group["creation_date"].idxmax()
-    if idx is not None:
-      result = group.loc[idx]
-      assert isinstance(result, pd.Series)  # 类型细化
-      return result
-    else:
-      result = group.iloc[0]
-      assert isinstance(result, pd.Series)  # 类型细化
-      return result
-
-  def _deduplicate_by_average(self, group: pd.DataFrame) -> pd.Series:
-    """计算平均值（仅数值类型）"""
-    result = group.iloc[0].copy()  # 使用第一条记录作为模板
-
-    # 计算数值平均值
-    numeric_values = group["value"].dropna()
-    if not numeric_values.empty:
-      result["value"] = numeric_values.mean()
-
-    # 更新元数据表示这是平均值
-    result["metadata"] = {
-      **(result["metadata"] or {}),
-      "deduplication_method": "average",
-      "original_records_count": len(group),
-      "averaged_values_str": str(
-        list(numeric_values)
-      ),  # 转换为字符串避免序列化问题
-    }
-
-    return result
-
-  def _deduplicate_by_quality(self, group: pd.DataFrame) -> pd.Series:
-    """基于质量评分去重"""
-
-    def calculate_quality_score(row) -> float:
-      score = 0.0
-
-      # 元数据完整性 (0-30分)
-      metadata = row.get("metadata", {}) or {}
-      completeness = len(metadata) / 10  # 假设最多10个元数据字段
-      score += min(completeness * 30, 30)
-
-      # 数据源优先级 (0-40分)
-      priority = self.source_priority.get(row["source_name"], 999)
-      priority_score = max(
-        0, 40 - priority * 10
-      )  # 优先级1得40分，优先级2得30分等
-      score += priority_score
-
-      # 时间戳合理性 (0-30分)
-      if pd.notna(row.get("creation_date")) and pd.notna(row.get("start_date")):
-        time_diff = abs(
-          (row["creation_date"] - row["start_date"]).total_seconds()
-        )
-        if time_diff < 86400:  # 24小时内
-          score += 30
-        elif time_diff < 604800:  # 7天内
-          score += 20
-
-      return score
-
-    group = group.copy()
-    group["quality_score"] = group.apply(calculate_quality_score, axis=1)
-
-    # 选择质量评分最高的记录
-    idx = group["quality_score"].idxmax()
-    if idx is not None:
-      result = group.loc[idx]
-      assert isinstance(result, pd.Series)  # 类型细化
-      return result
-    else:
-      result = group.iloc[0]
-      assert isinstance(result, pd.Series)  # 类型细化
-      return result
 
   def _dataframe_row_to_record(
     self, row: pd.Series, record_type: str
