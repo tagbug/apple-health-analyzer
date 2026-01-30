@@ -78,8 +78,7 @@ class RecordRowData(BaseModel):
     unit_val = row.get("unit")
     unit = (
       str(unit_val)
-      if unit_val is not None
-      and str(unit_val).lower() not in ("", "nan", "none")
+      if unit_val is not None and str(unit_val).lower() not in ("", "nan", "none")
       else None
     )
 
@@ -299,9 +298,7 @@ class DataCleaner:
     duplicates_by_source = defaultdict(int)
 
     for record_type, type_records in records_by_type.items():
-      logger.debug(
-        f"Processing {len(type_records)} records of type {record_type}"
-      )
+      logger.debug(f"Processing {len(type_records)} records of type {record_type}")
 
       # 转换为 DataFrame 便于处理
       df = self._records_to_dataframe(type_records)
@@ -325,14 +322,18 @@ class DataCleaner:
         df["priority_score"] = df["source_name"].map(self.source_priority).fillna(999)
 
         # 按时间窗口和优先级排序 (时间窗口升序, 优先级升序)
-        df.sort_values(by=["time_window", "priority_score"], ascending=[True, True], inplace=True)
+        df.sort_values(
+          by=["time_window", "priority_score"], ascending=[True, True], inplace=True
+        )
 
         # 去重，保留每个时间窗口的第一条记录 (即优先级最高的)
         deduped_df = df.drop_duplicates(subset=["time_window"], keep="first")
 
       elif strategy == "latest":
         # 按时间窗口和创建时间排序 (时间窗口升序, 创建时间降序)
-        df.sort_values(by=["time_window", "creation_date"], ascending=[True, False], inplace=True)
+        df.sort_values(
+          by=["time_window", "creation_date"], ascending=[True, False], inplace=True
+        )
 
         # 去重，保留每个时间窗口的第一条记录 (即最新的)
         deduped_df = df.drop_duplicates(subset=["time_window"], keep="first")
@@ -351,7 +352,9 @@ class DataCleaner:
         counts = grouped.size()
 
         # 2. 获取每组的第一条记录作为模板
-        deduped_df = df.drop_duplicates(subset=["time_window"], keep="first").set_index("time_window")
+        deduped_df = df.drop_duplicates(subset=["time_window"], keep="first").set_index(
+          "time_window"
+        )
 
         # 3. 更新 value 和添加计数
         deduped_df["value"] = avg_values
@@ -374,7 +377,9 @@ class DataCleaner:
         df.loc[(time_diff >= 86400) & (time_diff < 604800), "quality_score"] += 20
 
         # 排序: 质量分数降序
-        df.sort_values(by=["time_window", "quality_score"], ascending=[True, False], inplace=True)
+        df.sort_values(
+          by=["time_window", "quality_score"], ascending=[True, False], inplace=True
+        )
 
         # 去重
         deduped_df = df.drop_duplicates(subset=["time_window"], keep="first")
@@ -382,7 +387,9 @@ class DataCleaner:
       else:
         # 默认使用优先级策略
         df["priority_score"] = df["source_name"].map(self.source_priority).fillna(999)
-        df.sort_values(by=["time_window", "priority_score"], ascending=[True, True], inplace=True)
+        df.sort_values(
+          by=["time_window", "priority_score"], ascending=[True, True], inplace=True
+        )
         deduped_df = df.drop_duplicates(subset=["time_window"], keep="first")
 
       # 计算移除的重复项
@@ -401,12 +408,12 @@ class DataCleaner:
         record = self._dataframe_row_to_record(row, record_type)
         if record:
           if strategy == "average" and self._is_numeric_type(record_type):
-             # 为平均值策略添加元数据标记
-             if record.metadata is None:
-                 record.metadata = {}
-             record.metadata["deduplication_method"] = "average"
-             if "_count" in row:
-                 record.metadata["original_records_count"] = int(row["_count"])
+            # 为平均值策略添加元数据标记
+            if record.metadata is None:
+              record.metadata = {}
+            record.metadata["deduplication_method"] = "average"
+            if "_count" in row:
+              record.metadata["original_records_count"] = int(row["_count"])
 
           deduplicated_records.append(record)
 
@@ -448,9 +455,7 @@ class DataCleaner:
     if not records or len(records) <= 1:
       return records
 
-    logger.info(
-      f"Merging overlapping records, threshold: {merge_threshold_seconds}s"
-    )
+    logger.info(f"Merging overlapping records, threshold: {merge_threshold_seconds}s")
 
     # 按记录类型分组
     records_by_type = defaultdict(list)
@@ -467,19 +472,13 @@ class DataCleaner:
 
       # 排序并合并
       sorted_records = sorted(type_records, key=lambda r: r.start_date)
-      merged = self._merge_sorted_records(
-        sorted_records, merge_threshold_seconds
-      )
+      merged = self._merge_sorted_records(sorted_records, merge_threshold_seconds)
       merged_records.extend(merged)
 
-    logger.info(
-      f"Merge completed: {len(records)} -> {len(merged_records)} records"
-    )
+    logger.info(f"Merge completed: {len(records)} -> {len(merged_records)} records")
     return merged_records
 
-  def validate_data_quality(
-    self, records: list[HealthRecord]
-  ) -> DataQualityReport:
+  def validate_data_quality(self, records: list[HealthRecord]) -> DataQualityReport:
     """
     验证数据质量并生成报告
 
@@ -658,11 +657,77 @@ class DataCleaner:
     self, record1: HealthRecord, record2: HealthRecord
   ) -> HealthRecord:
     """合并两条记录"""
-    # 创建合并后的记录
-    # 这里需要根据具体记录类型实现合并逻辑
-    # 暂时返回第一条记录
-    logger.warning("Record merging not fully implemented")
-    return record1
+    # 合并时间范围：使用较早的开始时间和较晚的结束时间
+    merged_start = min(record1.start_date, record2.start_date)
+    merged_end = max(record1.end_date, record2.end_date)
+
+    # 合并值：如果都是数值类型，取平均值；否则保留第一个值
+    merged_value = None
+    if (
+      hasattr(record1, "value")
+      and hasattr(record2, "value")
+      and record1.value is not None
+      and record2.value is not None
+    ):
+      if isinstance(record1.value, (int, float)) and isinstance(
+        record2.value, (int, float)
+      ):
+        merged_value = (record1.value + record2.value) / 2
+      else:
+        merged_value = record1.value  # 对于非数值类型，保留第一个
+
+    # 合并元数据
+    merged_metadata = {}
+    if record1.metadata:
+      merged_metadata.update(record1.metadata)
+    if record2.metadata:
+      merged_metadata.update(record2.metadata)
+    merged_metadata["merged_from"] = 2  # 标记这是合并的结果
+
+    # 创建合并后的记录，使用第一个记录作为模板
+    if hasattr(record1, "value") and merged_value is not None:
+      # 数值记录
+      from src.core.data_models import QuantityRecord
+
+      return QuantityRecord(
+        type=record1.type,
+        source_name=record1.source_name,
+        start_date=merged_start,
+        end_date=merged_end,
+        creation_date=min(record1.creation_date, record2.creation_date),
+        source_version=record1.source_version,
+        device=record1.device,
+        unit=getattr(record1, "unit", None),
+        value=merged_value,
+        metadata=merged_metadata,
+      )
+    elif hasattr(record1, "value"):
+      # 分类记录
+      from src.core.data_models import CategoryRecord
+
+      return CategoryRecord(
+        type=record1.type,
+        source_name=record1.source_name,
+        start_date=merged_start,
+        end_date=merged_end,
+        creation_date=min(record1.creation_date, record2.creation_date),
+        source_version=record1.source_version,
+        device=record1.device,
+        value=merged_value or record1.value,
+        metadata=merged_metadata,
+      )
+    else:
+      # 基础记录
+      return HealthRecord(
+        type=record1.type,
+        source_name=record1.source_name,
+        start_date=merged_start,
+        end_date=merged_end,
+        creation_date=min(record1.creation_date, record2.creation_date),
+        source_version=record1.source_version,
+        device=record1.device,
+        metadata=merged_metadata,
+      )
 
   def _validate_timestamp(self, record: HealthRecord) -> bool:
     """验证时间戳有效性"""

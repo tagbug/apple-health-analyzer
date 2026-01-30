@@ -7,6 +7,7 @@ import sys
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from pathlib import Path
+from typing import cast
 
 import click
 from rich.console import Console
@@ -16,6 +17,7 @@ from src.cli_visualize import report as report_command
 from src.cli_visualize import visualize as visualize_command
 from src.config import get_config, reload_config
 from src.core.exceptions import HealthAnalyzerError
+from src.core.data_models import HealthRecord
 from src.core.xml_parser import StreamingXMLParser, get_export_file_info
 from src.utils.logger import UnifiedProgress, get_logger
 
@@ -51,9 +53,7 @@ def cli(config_path: str | None, verbose: bool):
 
 @cli.command()
 @click.argument("xml_path", type=click.Path(exists=True))
-@click.option(
-  "--output", "-o", type=click.Path(), help="Output directory for results"
-)
+@click.option("--output", "-o", type=click.Path(), help="Output directory for results")
 @click.option(
   "--types",
   "-t",
@@ -91,25 +91,19 @@ def parse(xml_path: str, output: str | None, types: list[str], preview: bool):
 
     output_dir = Path(output) if output else get_config().output_dir
 
-    console.print(
-      f"[bold blue]Parsing Apple Health export:[/bold blue] {xml_file}"
-    )
+    console.print(f"[bold blue]Parsing Apple Health export:[/bold blue] {xml_file}")
     console.print(f"[bold blue]Output directory:[/bold blue] {output_dir}")
 
     # Get file info with better error handling
     try:
       file_info = get_export_file_info(xml_file)
       if file_info:
-        console.print(
-          f"[green]File size:[/green] {file_info['file_size_mb']:.1f} MB"
-        )
+        console.print(f"[green]File size:[/green] {file_info['file_size_mb']:.1f} MB")
         console.print(
           f"[green]Estimated records:[/green] {file_info['estimated_record_count']:,}"
         )
       else:
-        console.print(
-          "[yellow]Warning:[/yellow] Could not read file information"
-        )
+        console.print("[yellow]Warning:[/yellow] Could not read file information")
     except Exception as e:
       console.print(f"[yellow]Warning:[/yellow] Could not analyze file: {e}")
       console.print("[yellow]Continuing with parsing...[/yellow]")
@@ -118,12 +112,8 @@ def parse(xml_path: str, output: str | None, types: list[str], preview: bool):
     try:
       parser = StreamingXMLParser(xml_file)
     except Exception as e:
-      console.print(
-        f"[bold red]Error:[/bold red] Failed to initialize parser: {e}"
-      )
-      console.print(
-        "[yellow]Tip:[/yellow] Check if the file is a valid XML file"
-      )
+      console.print(f"[bold red]Error:[/bold red] Failed to initialize parser: {e}")
+      console.print("[yellow]Tip:[/yellow] Check if the file is a valid XML file")
       sys.exit(1)
 
     # Parse records with progress tracking
@@ -162,9 +152,7 @@ def parse(xml_path: str, output: str | None, types: list[str], preview: bool):
       # Provide helpful error messages based on error type
       error_str = str(e).lower()
       if "memory" in error_str:
-        console.print(
-          "[bold red]Error:[/bold red] Insufficient memory for parsing"
-        )
+        console.print("[bold red]Error:[/bold red] Insufficient memory for parsing")
         console.print(
           "[yellow]Tip:[/yellow] Try processing a smaller file or increase system memory"
         )
@@ -175,20 +163,14 @@ def parse(xml_path: str, output: str | None, types: list[str], preview: bool):
         console.print("[bold red]Error:[/bold red] File encoding issue")
         console.print("[yellow]Tip:[/yellow] Ensure the file is UTF-8 encoded")
       else:
-        console.print(
-          f"[bold red]Error:[/bold red] Failed to parse records: {e}"
-        )
-        console.print(
-          "[yellow]Tip:[/yellow] Check the XML file format and try again"
-        )
+        console.print(f"[bold red]Error:[/bold red] Failed to parse records: {e}")
+        console.print("[yellow]Tip:[/yellow] Check the XML file format and try again")
 
       sys.exit(1)
 
     # Validate parsing results
     if not records:
-      console.print(
-        "[yellow]Warning:[/yellow] No records were parsed from the file"
-      )
+      console.print("[yellow]Warning:[/yellow] No records were parsed from the file")
       if record_types:
         console.print(
           f"[yellow]Tip:[/yellow] Check if record types {record_types} exist in the file"
@@ -221,13 +203,9 @@ def parse(xml_path: str, output: str | None, types: list[str], preview: bool):
     # Success message with summary
     success_rate = stats.get("success_rate", 0)
     if success_rate >= 0.95:
-      console.print(
-        "[bold green]✓ Parsing completed successfully![/bold green]"
-      )
+      console.print("[bold green]✓ Parsing completed successfully![/bold green]")
     elif success_rate >= 0.80:
-      console.print(
-        "[bold yellow]⚠ Parsing completed with minor issues[/bold yellow]"
-      )
+      console.print("[bold yellow]⚠ Parsing completed with minor issues[/bold yellow]")
     else:
       console.print(
         "[bold yellow]⚠ Parsing completed but with significant data loss[/bold yellow]"
@@ -275,9 +253,7 @@ def info(xml_path: str):
 
     table.add_row("File Path", str(file_info["file_path"]))
     table.add_row("File Size", f"{file_info['file_size_mb']:.2f} MB")
-    table.add_row(
-      "Estimated Records", f"{file_info['estimated_record_count']:,}"
-    )
+    table.add_row("Estimated Records", f"{file_info['estimated_record_count']:,}")
     table.add_row("Last Modified", str(file_info["last_modified"]))
 
     console.print(table)
@@ -340,9 +316,7 @@ def info(xml_path: str):
       )[:10]:
         console.print(f"  {record_type}: {count}")
     else:
-      console.print(
-        "[yellow]No records could be parsed from the file.[/yellow]"
-      )
+      console.print("[yellow]No records could be parsed from the file.[/yellow]")
 
   except Exception as e:
     logger.error(f"Info command failed: {e}")
@@ -436,18 +410,12 @@ def export(
       console.print("\nPossible reasons:")
       if types:
         console.print("• The specified record types may not exist in the data")
-        console.print(
-          "• Use full type names like 'HKQuantityTypeIdentifierHeartRate'"
-        )
-        console.print(
-          "• Run 'health-analyzer info <file>' to see available types"
-        )
+        console.print("• Use full type names like 'HKQuantityTypeIdentifierHeartRate'")
+        console.print("• Run 'health-analyzer info <file>' to see available types")
       else:
         console.print("• The file may not contain valid Apple Health data")
         console.print("• Check if the XML file is corrupted")
-      console.print(
-        "\n[yellow]Export completed but no data was saved.[/yellow]"
-      )
+      console.print("\n[yellow]Export completed but no data was saved.[/yellow]")
       sys.exit(1)
 
     # Display results
@@ -554,9 +522,7 @@ def benchmark(xml_path: str, output: str | None, timeout: int):
       f"[bold blue]Running performance benchmark on:[/bold blue] {xml_file}"
     )
     console.print(f"[bold blue]Output directory:[/bold blue] {output_dir}")
-    console.print(
-      f"[bold blue]Timeout per module:[/bold blue] {timeout} seconds"
-    )
+    console.print(f"[bold blue]Timeout per module:[/bold blue] {timeout} seconds")
 
     # Run benchmark
     run_benchmark(str(xml_file), str(output_dir), timeout=timeout)
@@ -575,9 +541,7 @@ def benchmark(xml_path: str, output: str | None, timeout: int):
   type=click.Path(),
   help="Output directory for analysis results",
 )
-@click.option(
-  "--age", type=int, help="User age (required for cardio fitness analysis)"
-)
+@click.option("--age", type=int, help="User age (required for cardio fitness analysis)")
 @click.option(
   "--gender",
   type=click.Choice(["male", "female"]),
@@ -685,70 +649,59 @@ def analyze(
     else:
       analysis_types = types
 
-    console.print(
-      f"[bold blue]Analysis types:[/bold blue] {', '.join(analysis_types)}"
-    )
+    console.print(f"[bold blue]Analysis types:[/bold blue] {', '.join(analysis_types)}")
 
     # Initialize analyzers
-    heart_rate_analyzer = HeartRateAnalyzer(age=age, gender=gender)  # type: ignore
+    heart_rate_analyzer = HeartRateAnalyzer(
+      age=age,
+      gender=cast("Literal['male', 'female'] | None", gender),
+    )
     sleep_analyzer = SleepAnalyzer()
     highlights_generator = HighlightsGenerator()
 
     # Parse data with progress
     console.print("\n[bold]Step 1: Parsing health data...[/bold]")
     with UnifiedProgress("Parsing health data", total=None) as progress:
-      # Parse heart rate related records
       hr_records = []
       resting_hr_records = []
       hrv_records = []
       vo2_max_records = []
+      sleep_records = []
 
+      record_types = []
       if any(
         t in analysis_types
         for t in ["heart_rate", "resting_hr", "hrv", "cardio_fitness"]
       ):
-        from src.core.xml_parser import StreamingXMLParser
-
-        parser = StreamingXMLParser(xml_file)
-
-        # Parse heart rate data
-        hr_types = ["HKQuantityTypeIdentifierHeartRate"]
+        record_types.append("HKQuantityTypeIdentifierHeartRate")
         if "resting_hr" in analysis_types:
-          hr_types.append("HKQuantityTypeIdentifierRestingHeartRate")
+          record_types.append("HKQuantityTypeIdentifierRestingHeartRate")
         if "hrv" in analysis_types:
-          hr_types.append("HKQuantityTypeIdentifierHeartRateVariabilitySDNN")
+          record_types.append("HKQuantityTypeIdentifierHeartRateVariabilitySDNN")
         if "cardio_fitness" in analysis_types:
-          hr_types.append("HKQuantityTypeIdentifierVO2Max")
+          record_types.append("HKQuantityTypeIdentifierVO2Max")
 
-        records_generator = parser.parse_records(record_types=hr_types)
-        all_hr_records = list(records_generator)
+      if "sleep" in analysis_types:
+        record_types.append("HKCategoryTypeIdentifierSleepAnalysis")
+
+      if record_types:
+        parser = StreamingXMLParser(xml_file)
+        all_records = list(parser.parse_records(record_types=record_types))
 
         # Categorize records by type
         # Algorithm: Single-pass classification based on HK record type identifiers
-        for record in all_hr_records:
+        for record in all_records:
           record_type = getattr(record, "type", "")
           if record_type == "HKQuantityTypeIdentifierHeartRate":
             hr_records.append(record)
           elif record_type == "HKQuantityTypeIdentifierRestingHeartRate":
             resting_hr_records.append(record)
-          elif (
-            record_type == "HKQuantityTypeIdentifierHeartRateVariabilitySDNN"
-          ):
+          elif record_type == "HKQuantityTypeIdentifierHeartRateVariabilitySDNN":
             hrv_records.append(record)
           elif record_type == "HKQuantityTypeIdentifierVO2Max":
             vo2_max_records.append(record)
-
-      # Parse sleep data
-      sleep_records = []
-      if "sleep" in analysis_types:
-        from src.core.xml_parser import StreamingXMLParser
-
-        parser = StreamingXMLParser(xml_file)
-        sleep_records = list(
-          parser.parse_records(
-            record_types=["HKCategoryTypeIdentifierSleepAnalysis"]
-          )
-        )
+          elif record_type == "HKCategoryTypeIdentifierSleepAnalysis":
+            sleep_records.append(record)
 
       # Filter by date range if specified
       if start_date and end_date:
@@ -777,8 +730,7 @@ def analyze(
 
     # Heart rate analysis
     if any(
-      t in analysis_types
-      for t in ["heart_rate", "resting_hr", "hrv", "cardio_fitness"]
+      t in analysis_types for t in ["heart_rate", "resting_hr", "hrv", "cardio_fitness"]
     ):
       console.print("\n[bold]Step 2: Analyzing heart rate data...[/bold]")
       with UnifiedProgress("Analyzing heart rate data", total=None) as progress:
@@ -799,7 +751,9 @@ def analyze(
     if "sleep" in analysis_types and sleep_records:
       console.print("\n[bold]Step 3: Analyzing sleep data...[/bold]")
       with UnifiedProgress("Analyzing sleep data", total=None) as progress:
-        sleep_report = sleep_analyzer.analyze_comprehensive(sleep_records)  # type: ignore
+        sleep_report = sleep_analyzer.analyze_comprehensive(
+          cast(list[HealthRecord], sleep_records)
+        )
         progress.update(1, "Sleep analysis completed")
       console.print("[green]✓ Sleep analysis completed[/green]")
 
@@ -885,9 +839,7 @@ def _display_parsing_results(stats: dict):
   # Show top sources
   if stats["sources"]:
     console.print("\n[bold]Top Data Sources:[/bold]")
-    sorted_sources = sorted(
-      stats["sources"].items(), key=lambda x: x[1], reverse=True
-    )
+    sorted_sources = sorted(stats["sources"].items(), key=lambda x: x[1], reverse=True)
     for i, (source, count) in enumerate(sorted_sources[:5]):
       console.print(f"  {i + 1:2d}. {source}: {count:,}")
 
@@ -960,9 +912,7 @@ def _save_parsed_data(records: list, stats: dict, output_dir: Path):
           "validation_summary": validation_summary,
           "errors": validation_result.errors[:10],  # First 10 errors
           "warnings": validation_result.warnings[:10],  # First 10 warnings
-          "outliers": validation_result.outliers_detected[
-            :10
-          ],  # First 10 outliers
+          "outliers": validation_result.outliers_detected[:10],  # First 10 outliers
           "issues_by_type": validation_result.issues_by_type,
           "consistency_checks": validation_result.consistency_checks,
         },
@@ -972,9 +922,7 @@ def _save_parsed_data(records: list, stats: dict, output_dir: Path):
         default=str,
       )
 
-    console.print(
-      f"[green]✓ Validation report saved to: {validation_file}[/green]"
-    )
+    console.print(f"[green]✓ Validation report saved to: {validation_file}[/green]")
 
   except Exception as e:
     logger.warning(f"Data validation failed: {e}")
@@ -1081,12 +1029,8 @@ def _display_heart_rate_results(report):
 
   if report.cardio_fitness:
     cardio = report.cardio_fitness
-    console.print(
-      f"  [cyan]VO2 Max:[/cyan] {cardio.current_vo2_max:.1f} ml/min·kg"
-    )
-    console.print(
-      f"  [cyan]Fitness Rating:[/cyan] {cardio.age_adjusted_rating}"
-    )
+    console.print(f"  [cyan]VO2 Max:[/cyan] {cardio.current_vo2_max:.1f} ml/min·kg")
+    console.print(f"  [cyan]Fitness Rating:[/cyan] {cardio.age_adjusted_rating}")
 
   console.print(f"  [cyan]Data Quality:[/cyan] {report.data_quality_score:.1%}")
   console.print(f"  [cyan]Total Records:[/cyan] {report.record_count:,}")
@@ -1104,9 +1048,7 @@ def _display_sleep_results(report):
     console.print(
       f"  [cyan]Average Efficiency:[/cyan] {quality.average_efficiency:.1%}"
     )
-    console.print(
-      f"  [cyan]Consistency Score:[/cyan] {quality.consistency_score:.1%}"
-    )
+    console.print(f"  [cyan]Consistency Score:[/cyan] {quality.consistency_score:.1%}")
 
   console.print(f"  [cyan]Data Quality:[/cyan] {report.data_quality_score:.1%}")
   console.print(f"  [cyan]Total Records:[/cyan] {report.record_count:,}")
@@ -1142,9 +1084,7 @@ def _save_analysis_results_json(
 
   results = {
     "analysis_date": datetime.now().isoformat(),
-    "heart_rate": _report_to_dict(heart_rate_report)
-    if heart_rate_report
-    else None,
+    "heart_rate": _report_to_dict(heart_rate_report) if heart_rate_report else None,
     "sleep": _report_to_dict(sleep_report) if sleep_report else None,
     "highlights": {
       "insights": [
@@ -1180,9 +1120,7 @@ def _save_analysis_results_text(
   with open(output_file, "w", encoding="utf-8") as f:
     f.write("Apple Health Analysis Report\n")
     f.write("=" * 50 + "\n\n")
-    f.write(
-      f"Analysis Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-    )
+    f.write(f"Analysis Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
 
     if heart_rate_report:
       f.write("HEART RATE ANALYSIS\n")

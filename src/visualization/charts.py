@@ -77,9 +77,7 @@ class ChartGenerator:
     plt.style.use("seaborn-v0_8-darkgrid")
     sns.set_palette("husl")
 
-    logger.info(
-      f"ChartGenerator initialized: theme={theme}, size={width}x{height}"
-    )
+    logger.info(f"ChartGenerator initialized: theme={theme}, size={width}x{height}")
 
   def plot_heart_rate_timeseries(
     self,
@@ -103,9 +101,7 @@ class ChartGenerator:
       logger.warning("No data provided for heart rate timeseries")
       return None
 
-    logger.info(
-      f"Generating heart rate timeseries chart with {len(data)} points"
-    )
+    logger.info(f"Generating heart rate timeseries chart with {len(data)} points")
 
     # 数据采样 (如果数据量过大)
     if len(data) > 10000:
@@ -208,9 +204,7 @@ class ChartGenerator:
       logger.warning("No data for resting heart rate trend")
       return None
 
-    logger.info(
-      f"Generating resting heart rate trend chart with {len(data)} points"
-    )
+    logger.info(f"Generating resting heart rate trend chart with {len(data)} points")
 
     try:
       fig = go.Figure()
@@ -463,9 +457,7 @@ class ChartGenerator:
       logger.warning("No data for heart rate distribution")
       return None
 
-    logger.info(
-      f"Generating heart rate distribution chart with {len(data)} points"
-    )
+    logger.info(f"Generating heart rate distribution chart with {len(data)} points")
 
     try:
       # 创建子图: 直方图 + 箱线图
@@ -648,9 +640,7 @@ class ChartGenerator:
       logger.error(f"Error generating heart rate zones: {e}")
       return None
 
-  def _downsample_data(
-    self, data: pd.DataFrame, target_points: int
-  ) -> pd.DataFrame:
+  def _downsample_data(self, data: pd.DataFrame, target_points: int) -> pd.DataFrame:
     """数据降采样
 
     使用简单的均匀采样策略
@@ -1090,8 +1080,62 @@ class ChartGenerator:
 
     charts: dict[str, Path] = {}
 
-    # 这里暂时返回空字典，具体实现将在后续补充
-    # 需要根据 HeartRateAnalysisReport 的具体数据结构来实现
+    try:
+      # 静息心率趋势图
+      if (
+        report.resting_hr_analysis
+        and report.daily_stats is not None
+        and not report.daily_stats.empty
+      ):
+        resting_hr_path = output_dir / "resting_hr_trend.html"
+        fig = self.plot_resting_hr_trend(
+          report.daily_stats, output_path=resting_hr_path
+        )
+        if fig:
+          charts["resting_hr_trend"] = resting_hr_path
+
+      # HRV分析图
+      if (
+        report.hrv_analysis
+        and report.daily_stats is not None
+        and not report.daily_stats.empty
+      ):
+        hrv_path = output_dir / "hrv_analysis.html"
+        fig = self.plot_hrv_analysis(report.daily_stats, output_path=hrv_path)
+        if fig:
+          charts["hrv_analysis"] = hrv_path
+
+      # 心率热力图
+      if report.daily_stats is not None and not report.daily_stats.empty:
+        heatmap_path = output_dir / "heart_rate_heatmap.html"
+        # 准备热力图数据
+        heatmap_data = report.daily_stats.copy()
+        heatmap_data["date"] = pd.to_datetime(heatmap_data["interval_start"])
+        heatmap_data["avg_hr"] = heatmap_data["mean_value"]
+        fig = self.plot_heart_rate_heatmap(heatmap_data, output_path=heatmap_path)
+        if fig:
+          charts["heart_rate_heatmap"] = heatmap_path
+
+      # 心率分布分析
+      if report.daily_stats is not None and not report.daily_stats.empty:
+        distribution_path = output_dir / "heart_rate_distribution.html"
+        fig = self.plot_heart_rate_distribution(
+          report.daily_stats, output_path=distribution_path
+        )
+        if fig:
+          charts["heart_rate_distribution"] = distribution_path
+
+      # 心率区间分布
+      if report.daily_stats is not None and not report.daily_stats.empty:
+        zones_path = output_dir / "heart_rate_zones.html"
+        fig = self.plot_heart_rate_zones(report.daily_stats, output_path=zones_path)
+        if fig:
+          charts["heart_rate_zones"] = zones_path
+
+      logger.info(f"Generated {len(charts)} heart rate report charts")
+
+    except Exception as e:
+      logger.error(f"Error generating heart rate report charts: {e}")
 
     return charts
 
@@ -1115,8 +1159,94 @@ class ChartGenerator:
 
     charts: dict[str, Path] = {}
 
-    # 这里暂时返回空字典，具体实现将在后续补充
-    # 需要根据 SleepAnalysisReport 的具体数据结构来实现
+    try:
+      # 睡眠时间线图
+      if report.sleep_sessions:
+        timeline_path = output_dir / "sleep_timeline.html"
+        # 准备时间线数据
+        timeline_data = []
+        for session in report.sleep_sessions:
+          timeline_data.append(
+            {
+              "start_date": session.start_date,
+              "end_date": session.end_date,
+              "value": "Asleep",  # 简化处理
+            }
+          )
+        timeline_df = pd.DataFrame(timeline_data)
+        fig = self.plot_sleep_timeline(timeline_df, output_path=timeline_path)
+        if fig:
+          charts["sleep_timeline"] = timeline_path
+
+      # 睡眠质量趋势图
+      if report.daily_summary is not None and not report.daily_summary.empty:
+        quality_trend_path = output_dir / "sleep_quality_trend.html"
+        fig = self.plot_sleep_quality_trend(
+          report.daily_summary, output_path=quality_trend_path
+        )
+        if fig:
+          charts["sleep_quality_trend"] = quality_trend_path
+
+      # 睡眠阶段分布
+      if report.daily_summary is not None and not report.daily_summary.empty:
+        stages_path = output_dir / "sleep_stages_distribution.html"
+        # 准备阶段数据
+        stages_data = []
+        for _, row in report.daily_summary.iterrows():
+          if row.get("deep_sleep", 0) > 0:
+            stages_data.append({"stage": "Deep", "duration": row["deep_sleep"]})
+          if row.get("rem_sleep", 0) > 0:
+            stages_data.append({"stage": "REM", "duration": row["rem_sleep"]})
+        if stages_data:
+          stages_df = pd.DataFrame(stages_data)
+          fig = self.plot_sleep_stages_distribution(stages_df, output_path=stages_path)
+          if fig:
+            charts["sleep_stages_distribution"] = stages_path
+
+      # 睡眠一致性分析
+      if report.daily_summary is not None and not report.daily_summary.empty:
+        consistency_path = output_dir / "sleep_consistency.html"
+        # 准备一致性数据
+        consistency_data = []
+        for _, row in report.daily_summary.iterrows():
+          consistency_data.append(
+            {
+              "date": row["date"],
+              "bedtime": None,  # 需要从session数据提取
+              "wake_time": None,
+            }
+          )
+        consistency_df = pd.DataFrame(consistency_data)
+        fig = self.plot_sleep_consistency(consistency_df, output_path=consistency_path)
+        if fig:
+          charts["sleep_consistency"] = consistency_path
+
+      # 工作日 vs 周末睡眠对比
+      if report.daily_summary is not None and not report.daily_summary.empty:
+        weekday_weekend_path = output_dir / "weekday_vs_weekend_sleep.html"
+        # 准备对比数据
+        comparison_data = []
+        for _, row in report.daily_summary.iterrows():
+          date = pd.to_datetime(row["date"])
+          is_weekend = date.weekday() >= 5
+          comparison_data.append(
+            {
+              "date": row["date"],
+              "duration": row["total_duration"] / 60,  # 转换为小时
+              "is_weekend": is_weekend,
+            }
+          )
+        comparison_df = pd.DataFrame(comparison_data)
+        fig = self.plot_weekday_vs_weekend_sleep(
+          comparison_df, output_path=weekday_weekend_path
+        )
+        if fig:
+          charts["weekday_vs_weekend_sleep"] = weekday_weekend_path
+
+      logger.info(f"Generated {len(charts)} sleep report charts")
+
+    except Exception as e:
+      logger.error(f"Error generating sleep report charts: {e}")
 
     return charts
 
@@ -1525,13 +1655,9 @@ class ChartGenerator:
         go.Barpolar(
           r=values,
           theta=categories,
-          marker_color=[
-            colors[i % len(colors)] for i in range(len(categories))
-          ],
+          marker_color=[colors[i % len(colors)] for i in range(len(categories))],
           name="健康指标",
-          hovertemplate="<b>%{theta}</b><br>"
-          + "值: %{r:.2f}<br>"
-          + "<extra></extra>",
+          hovertemplate="<b>%{theta}</b><br>" + "值: %{r:.2f}<br>" + "<extra></extra>",
         )
       )
 
@@ -1672,9 +1798,7 @@ class ChartGenerator:
           y=values,
           marker_color=colors,
           name="风险水平",
-          hovertemplate="<b>%{x}</b><br>"
-          + "风险值: %{y:.2f}<br>"
-          + "<extra></extra>",
+          hovertemplate="<b>%{x}</b><br>" + "风险值: %{y:.2f}<br>" + "<extra></extra>",
         )
       )
 
@@ -1751,9 +1875,7 @@ class ChartGenerator:
         if hasattr(report, "metabolic_health") and report.metabolic_health:
           metrics["代谢健康"] = report.metabolic_health.metabolic_health_score
         if hasattr(report, "stress_resilience") and report.stress_resilience:
-          metrics["压力韧性"] = (
-            1.0 - report.stress_resilience.stress_accumulation_score
-          )
+          metrics["压力韧性"] = 1.0 - report.stress_resilience.stress_accumulation_score
 
         dashboard_fig = self.plot_health_dashboard(
           report.overall_wellness_score,

@@ -366,9 +366,7 @@ class TestAnomalyDetector:
 
     # Test different deviation levels
     assert detector._calculate_severity(0.5) == "low"
-    assert (
-      detector._calculate_severity(2.0) == "low"
-    )  # 2.0 < 2.5 (medium threshold)
+    assert detector._calculate_severity(2.0) == "low"  # 2.0 < 2.5 (medium threshold)
     assert detector._calculate_severity(3.0) == "medium"  # 3.0 >= 2.5 but < 3.5
     assert detector._calculate_severity(4.0) == "high"  # 4.0 >= 3.5
 
@@ -429,9 +427,7 @@ class TestAnomalyDetector:
     assert len(deduplicated) == 2
 
     # First timestamp should keep the higher severity one
-    first_timestamp_anomalies = [
-      a for a in deduplicated if a.timestamp == timestamp
-    ]
+    first_timestamp_anomalies = [a for a in deduplicated if a.timestamp == timestamp]
     assert len(first_timestamp_anomalies) == 1
     assert first_timestamp_anomalies[0].severity == "high"
 
@@ -515,9 +511,7 @@ class TestAnomalyDetector:
       for i in range(15)  # 15 anomalies = 15% rate
     ]
 
-    recommendations = detector._generate_recommendations(
-      anomalies_high_rate, 0.15
-    )
+    recommendations = detector._generate_recommendations(anomalies_high_rate, 0.15)
     assert any("异常率较高" in rec for rec in recommendations)
 
     # Test low anomaly rate
@@ -629,8 +623,8 @@ class TestAnomalyDetector:
     mock_logger.warning.assert_called()
     assert isinstance(anomalies, list)
 
-  def test_contextual_sleep_wake_not_implemented(self):
-    """Test that sleep/wake contextual detection is not implemented."""
+  def test_contextual_sleep_wake_detection(self):
+    """Test contextual sleep/wake detection returns a list."""
     detector = AnomalyDetector()
 
     records = [
@@ -652,4 +646,3 @@ class TestAnomalyDetector:
     )
 
     assert isinstance(anomalies, list)
-    # Currently returns empty list as not implemented

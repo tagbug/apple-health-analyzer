@@ -6,7 +6,7 @@ Provides type-safe data structures for health records with validation and serial
 from abc import ABC, abstractmethod
 from datetime import datetime
 from enum import Enum
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import (
   BaseModel,
@@ -61,7 +61,7 @@ class BaseRecord(BaseModel, ABC):
   @abstractmethod
   def record_type(self) -> str:
     """Return the record type identifier (must be implemented by subclasses)."""
-    pass
+    raise NotImplementedError
 
   @property
   def duration_seconds(self) -> float:
@@ -235,9 +235,7 @@ class WalkingHeartRateAverageRecord(QuantityRecord):
 class VO2MaxRecord(QuantityRecord):
   """VO2 Max (cardio fitness) measurement record."""
 
-  type: str = Field(
-    default="HKQuantityTypeIdentifierVO2Max", description="Record type"
-  )
+  type: str = Field(default="HKQuantityTypeIdentifierVO2Max", description="Record type")
   unit: str | None = Field(default="mL/minkg", description="Measurement unit")
 
 
@@ -310,9 +308,7 @@ class WorkoutRecord(BaseRecord):
   # Metrics
   calories: float | None = Field(None, description="Calories burned")
   distance_km: float | None = Field(None, description="Distance in kilometers")
-  average_heart_rate: float | None = Field(
-    None, description="Average heart rate"
-  )
+  average_heart_rate: float | None = Field(None, description="Average heart rate")
 
   @property
   def record_type(self) -> str:
@@ -344,9 +340,7 @@ class ActivitySummaryRecord(BaseRecord):
 
   # Activity rings
   move_calories: float | None = Field(None, description="Move ring calories")
-  exercise_minutes: float | None = Field(
-    None, description="Exercise ring minutes"
-  )
+  exercise_minutes: float | None = Field(None, description="Exercise ring minutes")
   stand_hours: float | None = Field(None, description="Stand ring hours")
 
   # Goals
@@ -356,9 +350,7 @@ class ActivitySummaryRecord(BaseRecord):
 
   # Achievements
   move_achieved: bool = Field(default=False, description="Move goal achieved")
-  exercise_achieved: bool = Field(
-    default=False, description="Exercise goal achieved"
-  )
+  exercise_achieved: bool = Field(default=False, description="Exercise goal achieved")
   stand_achieved: bool = Field(default=False, description="Stand goal achieved")
 
   def __init__(self, **data):
@@ -473,9 +465,7 @@ def create_record_from_xml_element(
         return None, [f"Unknown record type: {record_type}"]
 
     # Parse attributes with default value handling
-    data: dict[
-      str, str | float | int | datetime | dict[str, str | float | int] | None
-    ] = {
+    data: dict[str, Any] = {
       "type": record_type,
     }
 
@@ -524,9 +514,7 @@ def create_record_from_xml_element(
     # Value field - required for quantity records, optional for category
     value = element.get("value")
     if value is not None:
-      if record_class == QuantityRecord or issubclass(
-        record_class, QuantityRecord
-      ):
+      if record_class == QuantityRecord or issubclass(record_class, QuantityRecord):
         try:
           data["value"] = float(value)
         except (ValueError, TypeError):
@@ -537,9 +525,7 @@ def create_record_from_xml_element(
             return None, [f"Invalid value format: {value}"]
       else:
         data["value"] = value
-    elif record_class == QuantityRecord or issubclass(
-      record_class, QuantityRecord
-    ):
+    elif record_class == QuantityRecord or issubclass(record_class, QuantityRecord):
       if use_defaults:
         warnings.append("Missing value for quantity record, using 0.0")
         data["value"] = 0.0
@@ -565,14 +551,12 @@ def create_record_from_xml_element(
 
     # Create the record instance
     try:
-      record = record_class(**data)  # type: ignore
+      record = record_class(**data)
       return record, warnings
     except Exception as e:
       if use_defaults:
-        warnings.append(
-          f"Record validation failed: {e}, but proceeding with defaults"
-        )
-        return record_class(**data), warnings  # type: ignore
+        warnings.append(f"Record validation failed: {e}, but proceeding with defaults")
+        return record_class(**data), warnings
       else:
         return None, [f"Record validation failed: {e}"]
 

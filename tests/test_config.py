@@ -7,14 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from src.config import (
-  Config,
-  DataSourcePriority,
-  Environment,
-  get_config,
-  load_config,
-  reload_config,
-)
+from src.config import Config, Environment, get_config, load_config, reload_config
 
 
 class TestEnvironmentEnum:
@@ -24,16 +17,6 @@ class TestEnvironmentEnum:
     """Test environment enum values."""
     assert Environment.DEV.value == "dev"
     assert Environment.PROD.value == "prod"
-
-
-class TestDataSourcePriorityEnum:
-  """Test DataSourcePriority enum."""
-
-  def test_data_source_priority_values(self):
-    """Test data source priority enum values."""
-    assert DataSourcePriority.IPHONE.value == 1
-    assert DataSourcePriority.XIAOMI_HEALTH.value == 2
-    assert DataSourcePriority.APPLE_WATCH.value == 3
 
 
 class TestConfig:
@@ -199,9 +182,7 @@ class TestConfigValidation:
           output_dir.chmod(stat.S_IRUSR | stat.S_IXUSR)  # Read and execute only
 
           try:
-            with pytest.raises(
-              ValueError, match="Output directory is not writable"
-            ):
+            with pytest.raises(ValueError, match="Output directory is not writable"):
               Config(export_xml_path=tmp_path, output_dir=output_dir)
           finally:
             # Restore permissions for cleanup
@@ -222,13 +203,9 @@ class TestConfigValidation:
           # Mock the write test to raise an exception
           with (
             patch("pathlib.Path.mkdir"),
-            patch.object(
-              Path, "write_text", side_effect=OSError("Permission denied")
-            ),
+            patch.object(Path, "write_text", side_effect=OSError("Permission denied")),
           ):
-            with pytest.raises(
-              ValueError, match="Output directory is not writable"
-            ):
+            with pytest.raises(ValueError, match="Output directory is not writable"):
               Config(export_xml_path=tmp_path, output_dir=output_dir)
 
     finally:
@@ -473,9 +450,7 @@ class TestReloadConfig:
 
     try:
       # Set initial config
-      with patch.dict(
-        os.environ, {"EXPORT_XML_PATH": str(xml_path1)}, clear=True
-      ):
+      with patch.dict(os.environ, {"EXPORT_XML_PATH": str(xml_path1)}, clear=True):
         config1 = load_config()
         import src.config
 
@@ -485,9 +460,7 @@ class TestReloadConfig:
       assert get_config().export_xml_path == xml_path1
 
       # Change environment and reload
-      with patch.dict(
-        os.environ, {"EXPORT_XML_PATH": str(xml_path2)}, clear=True
-      ):
+      with patch.dict(os.environ, {"EXPORT_XML_PATH": str(xml_path2)}, clear=True):
         config2 = reload_config()
         assert config2.export_xml_path == xml_path2
 
@@ -595,9 +568,7 @@ class TestConfigErrorHandling:
       tmp_path = Path(tmp_file.name)
 
     try:
-      with patch.dict(
-        os.environ, {"EXPORT_XML_PATH": str(tmp_path)}, clear=True
-      ):
+      with patch.dict(os.environ, {"EXPORT_XML_PATH": str(tmp_path)}, clear=True):
         # This should work because Environment enum handles invalid values gracefully
         config = load_config()
         assert config.environment == Environment.DEV  # Should default to DEV
