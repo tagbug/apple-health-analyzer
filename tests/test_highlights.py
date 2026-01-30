@@ -216,6 +216,43 @@ class TestHighlightsGenerator:
     assert jetlag_issue.priority == "medium"
     assert "2.5小时" in jetlag_issue.message
 
+  def test_generate_correlation_insights(self, generator):
+    """测试关联洞察生成"""
+    correlation_data = {
+      "sleep_activity": {"correlation": 0.8, "insight": "强正相关"},
+      "hr_stress": {"correlation": 0.5, "insight": "中等相关"},
+      "other": {"correlation": -0.2},  # 无 insight 文本，低相关
+    }
+
+    insights = generator._generate_correlation_insights(correlation_data)
+
+    assert len(insights) == 3
+    
+    # 检查高相关性
+    high_corr = next((i for i in insights if i.title == "睡眠与活动关联"), None)
+    assert high_corr is not None
+    assert high_corr.priority == "high"
+    assert high_corr.confidence == 0.9
+    assert high_corr.message == "强正相关"
+
+    # 检查中相关性
+    med_corr = next((i for i in insights if i.title == "心率与压力关联"), None)
+    assert med_corr is not None
+    assert med_corr.priority == "medium"
+    assert med_corr.confidence == 0.8
+
+    # 检查低相关性及默认文本
+    low_corr = next((i for i in insights if "other" in i.title), None)
+    assert low_corr is not None
+    assert low_corr.priority == "low"
+    assert low_corr.confidence == 0.6
+    assert "负相关" in low_corr.message
+
+  def test_generate_correlation_insights_empty(self, generator):
+    """测试关联洞察生成 - 空数据"""
+    insights = generator._generate_correlation_insights({})
+    assert len(insights) == 0
+
   def test_rank_and_filter_insights(self, generator):
     """测试洞察排序和过滤"""
     insights = [
