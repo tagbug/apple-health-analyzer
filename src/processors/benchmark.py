@@ -7,8 +7,9 @@
 import os
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Dict, List
+from typing import Any
 
 import psutil
 from rich.console import Console
@@ -67,8 +68,8 @@ class BenchmarkRunner:
     self.output_dir = output_dir if output_dir is not None else Path("output")
     self.output_dir.mkdir(exist_ok=True)
     self.timeout_seconds = timeout_seconds
-    self.sample_records: List[Any] = []
-    self.results: List[BenchmarkResult] = []
+    self.sample_records: list[Any] = []
+    self.results: list[BenchmarkResult] = []
     self.start_time = time.time()
 
   def get_memory_usage(self) -> float:
@@ -103,7 +104,7 @@ class BenchmarkRunner:
 
   def load_sample_data(
     self, limit: int = 10000
-  ) -> tuple[List[Any], Dict[str, Any]]:
+  ) -> tuple[list[Any], dict[str, Any]]:
     """从XML文件开头加载指定数量的样本数据，并返回解析性能指标"""
     logger.info(f"从XML文件开头加载前{limit}条数据作为测试样本...")
 
@@ -188,8 +189,8 @@ class BenchmarkRunner:
     return result
 
   def benchmark_data_cleaning(
-    self, sample_records: List[Any]
-  ) -> Dict[str, Any]:
+    self, sample_records: list[Any]
+  ) -> dict[str, Any]:
     """测试数据清洗性能"""
     start_time = time.time()
     start_mem = self.get_memory_usage()
@@ -214,8 +215,8 @@ class BenchmarkRunner:
     }
 
   def benchmark_statistical_analysis(
-    self, sample_records: List[Any]
-  ) -> Dict[str, Any]:
+    self, sample_records: list[Any]
+  ) -> dict[str, Any]:
     """测试统计分析性能"""
     start_time = time.time()
     start_mem = self.get_memory_usage()
@@ -236,8 +237,8 @@ class BenchmarkRunner:
     }
 
   def benchmark_report_generation(
-    self, sample_records: List[Any]
-  ) -> Dict[str, Any]:
+    self, sample_records: list[Any]
+  ) -> dict[str, Any]:
     """测试报告生成性能"""
     start_time = time.time()
     start_mem = self.get_memory_usage()
@@ -258,7 +259,7 @@ class BenchmarkRunner:
       "memory_delta_mb": end_mem - start_mem,
     }
 
-  def benchmark_data_export(self, sample_records: List[Any]) -> Dict[str, Any]:
+  def benchmark_data_export(self, sample_records: list[Any]) -> dict[str, Any]:
     """测试数据导出性能"""
     start_time = time.time()
     start_mem = self.get_memory_usage()
@@ -281,7 +282,7 @@ class BenchmarkRunner:
       "file_size_mb": output_path.stat().st_size / 1024 / 1024,
     }
 
-  def run_all_benchmarks(self) -> List[BenchmarkResult]:
+  def run_all_benchmarks(self) -> list[BenchmarkResult]:
     """运行所有基准测试"""
     logger.info("=== 开始完整性能基准测试 ===")
 

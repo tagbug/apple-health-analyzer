@@ -1,6 +1,7 @@
 """Data conversion module - converts health records to DataFrame format for visualization"""
 
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 import pandas as pd
 

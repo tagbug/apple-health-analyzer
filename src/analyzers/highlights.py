@@ -398,7 +398,7 @@ class HighlightsGenerator:
     for key, data in correlation_data.items():
       correlation_value = data.get("correlation", 0.0)
       insight_text = data.get("insight", "")
-      
+
       # 根据相关性强度确定优先级
       abs_corr = abs(correlation_value)
       if abs_corr >= 0.7:
@@ -410,7 +410,7 @@ class HighlightsGenerator:
       else:
         priority = "low"
         confidence = 0.6
-        
+
       # 生成标题
       if key == "sleep_activity":
         title = "睡眠与活动关联"
@@ -418,7 +418,7 @@ class HighlightsGenerator:
         title = "心率与压力关联"
       else:
         title = f"健康指标关联 ({key})"
-        
+
       # 如果没有预设的洞察文本，生成默认文本
       if not insight_text:
         direction = "正相关" if correlation_value > 0 else "负相关"

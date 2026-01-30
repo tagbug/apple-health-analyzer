@@ -4,9 +4,10 @@ Provides advanced analysis capabilities for comprehensive health assessment,
 including sleep quality analysis, activity patterns, and health correlations.
 """
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Mapping, Sequence, Union
+from typing import Any
 
 import numpy as np
 
@@ -98,7 +99,7 @@ class ComprehensiveHealthReport:
   lifestyle_optimization: list[str] | None = None
 
   # Data quality and coverage
-  data_completeness_score: Union[float, np.floating] = 0.0
+  data_completeness_score: float | np.floating = 0.0
   analysis_confidence: float = 0.0
 
 

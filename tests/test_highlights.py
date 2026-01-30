@@ -227,7 +227,7 @@ class TestHighlightsGenerator:
     insights = generator._generate_correlation_insights(correlation_data)
 
     assert len(insights) == 3
-    
+
     # 检查高相关性
     high_corr = next((i for i in insights if i.title == "睡眠与活动关联"), None)
     assert high_corr is not None

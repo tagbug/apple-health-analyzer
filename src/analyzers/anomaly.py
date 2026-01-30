@@ -1,8 +1,9 @@
 """异常检测模块 - 提供多种异常检测算法"""
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal, Sequence, TypedDict
+from typing import Literal, TypedDict
 
 import numpy as np
 import pandas as pd

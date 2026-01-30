@@ -6,11 +6,11 @@ memory-efficient operations, and optimized algorithms.
 
 import multiprocessing
 from collections import defaultdict
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Sequence
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -429,7 +429,7 @@ class PerformanceMonitor:
       return
 
     self.logger.info("=== Performance Summary ===")
-    for operation, times in self.metrics.items():
+    for operation, _times in self.metrics.items():
       stats = self.get_operation_stats(operation)
       self.logger.info(
         f"{operation}: {stats['count']} runs, "

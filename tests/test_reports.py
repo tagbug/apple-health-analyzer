@@ -1,7 +1,7 @@
 """Unit tests for report generation functionality."""
 
-import time
 import tempfile
+import time
 from pathlib import Path
 from unittest.mock import Mock, patch
 

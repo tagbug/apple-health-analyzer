@@ -4,8 +4,8 @@ Provides type-safe interfaces for different categories of health records,
 enabling polymorphic behavior and better type checking.
 """
 
-from typing import Protocol, runtime_checkable
 from datetime import datetime
+from typing import Protocol, runtime_checkable
 
 
 @runtime_checkable

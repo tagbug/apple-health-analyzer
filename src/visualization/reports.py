@@ -743,26 +743,26 @@ class ReportGenerator:
             --light-bg: #f5f5f5;
             --card-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }}
-        
+
         * {{
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }}
-        
+
         body {{
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             line-height: 1.6;
             color: #333;
             background-color: var(--light-bg);
         }}
-        
+
         .container {{
             max-width: 1200px;
             margin: 0 auto;
             padding: 20px;
         }}
-        
+
         header {{
             background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
             color: white;
@@ -772,17 +772,17 @@ class ReportGenerator:
             margin-bottom: 30px;
             box-shadow: var(--card-shadow);
         }}
-        
+
         header h1 {{
             font-size: 2.5em;
             margin-bottom: 10px;
         }}
-        
+
         header .subtitle {{
             font-size: 1.1em;
             opacity: 0.9;
         }}
-        
+
         .section {{
             background: white;
             padding: 30px;
@@ -790,7 +790,7 @@ class ReportGenerator:
             border-radius: 8px;
             box-shadow: var(--card-shadow);
         }}
-        
+
         .section h2 {{
             color: var(--primary-color);
             font-size: 1.8em;
@@ -798,52 +798,52 @@ class ReportGenerator:
             padding-bottom: 10px;
             border-bottom: 2px solid var(--primary-color);
         }}
-        
+
         .section h3 {{
             color: var(--secondary-color);
             font-size: 1.4em;
             margin-top: 20px;
             margin-bottom: 15px;
         }}
-        
+
         .metric-grid {{
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
             gap: 20px;
             margin: 20px 0;
         }}
-        
+
         .metric-card {{
             background: var(--light-bg);
             padding: 20px;
             border-radius: 8px;
             border-left: 4px solid var(--primary-color);
         }}
-        
+
         .metric-card.warning {{
             border-left-color: var(--warning-color);
         }}
-        
+
         .metric-card.danger {{
             border-left-color: var(--danger-color);
         }}
-        
+
         .metric-label {{
             font-size: 0.9em;
             color: #666;
             margin-bottom: 5px;
         }}
-        
+
         .metric-value {{
             font-size: 2em;
             font-weight: bold;
             color: var(--primary-color);
         }}
-        
+
         .insight-list {{
             list-style: none;
         }}
-        
+
         .insight-item {{
             background: var(--light-bg);
             padding: 15px;
@@ -851,62 +851,62 @@ class ReportGenerator:
             border-radius: 8px;
             border-left: 4px solid var(--secondary-color);
         }}
-        
+
         .insight-item.high {{
             border-left-color: var(--danger-color);
         }}
-        
+
         .insight-item.medium {{
             border-left-color: var(--warning-color);
         }}
-        
+
         .insight-item.low {{
             border-left-color: var(--primary-color);
         }}
-        
+
         .insight-title {{
             font-weight: bold;
             font-size: 1.1em;
             margin-bottom: 8px;
         }}
-        
+
         .insight-message {{
             color: #666;
         }}
-        
+
         .recommendations {{
             background: #e8f5e9;
             padding: 20px;
             border-radius: 8px;
             border-left: 4px solid var(--primary-color);
         }}
-        
+
         .recommendations ol {{
             margin-left: 20px;
             margin-top: 10px;
         }}
-        
+
         .recommendations li {{
             margin-bottom: 10px;
         }}
-        
+
         footer {{
             text-align: center;
             padding: 20px;
             color: #666;
             font-size: 0.9em;
         }}
-        
+
         .chart-container {{
             margin: 30px 0;
             text-align: center;
         }}
-        
+
         @media (max-width: 768px) {{
             .metric-grid {{
                 grid-template-columns: 1fr;
             }}
-            
+
             header h1 {{
                 font-size: 1.8em;
             }}

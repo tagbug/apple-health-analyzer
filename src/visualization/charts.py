@@ -222,8 +222,8 @@ class ChartGenerator:
           y=data["value"],
           mode="markers+lines",
           name="静息心率",
-          marker=dict(size=6, color=HEALTH_COLORS["primary"], opacity=0.7),
-          line=dict(color=HEALTH_COLORS["primary"], width=2),
+          marker={"size": 6, "color": HEALTH_COLORS["primary"], "opacity": 0.7},
+          line={"color": HEALTH_COLORS["primary"], "width": 2},
         )
       )
 
@@ -236,11 +236,11 @@ class ChartGenerator:
             y=ma_7,
             mode="lines",
             name="7天移动平均",
-            line=dict(
-              color=HEALTH_COLORS["secondary"],
-              width=2,
-              dash="dash",
-            ),
+            line={
+              "color": HEALTH_COLORS["secondary"],
+              "width": 2,
+              "dash": "dash",
+            },
           )
         )
 
@@ -314,8 +314,8 @@ class ChartGenerator:
           y=data["value"],
           mode="lines+markers",
           name="SDNN",
-          line=dict(color=HEALTH_COLORS["info"], width=2),
-          marker=dict(size=4),
+          line={"color": HEALTH_COLORS["info"], "width": 2},
+          marker={"size": 4},
         ),
         row=1,
         col=1,
@@ -330,11 +330,11 @@ class ChartGenerator:
             y=ma,
             mode="lines",
             name="7天平均",
-            line=dict(
-              color=HEALTH_COLORS["secondary"],
-              width=2,
-              dash="dash",
-            ),
+            line={
+              "color": HEALTH_COLORS["secondary"],
+              "width": 2,
+              "dash": "dash",
+            },
           ),
           row=1,
           col=1,
@@ -418,7 +418,7 @@ class ChartGenerator:
           x=["周一", "周二", "周三", "周四", "周五", "周六", "周日"],
           y=pivot.index,
           colorscale="RdYlGn_r",  # 红-黄-绿（反向）
-          colorbar=dict(title="平均心率<br>(bpm)"),
+          colorbar={"title": "平均心率<br>(bpm)"},
           hovertemplate="<b>第%{y}周 %{x}</b><br>"
           + "平均心率: %{z:.0f} bpm<br>"
           + "<extra></extra>",
@@ -509,7 +509,7 @@ class ChartGenerator:
           y=normal_dist,
           mode="lines",
           name="正态分布",
-          line=dict(color=HEALTH_COLORS["secondary"], width=2, dash="dash"),
+          line={"color": HEALTH_COLORS["secondary"], "width": 2, "dash": "dash"},
         ),
         row=1,
         col=1,
@@ -615,15 +615,15 @@ class ChartGenerator:
           go.Pie(
             labels=list(zone_counts.keys()),
             values=list(zone_counts.values()),
-            marker=dict(
-              colors=[
+            marker={
+              "colors": [
                 HEALTH_COLORS["success"],
                 HEALTH_COLORS["primary"],
                 HEALTH_COLORS["info"],
                 HEALTH_COLORS["warning"],
                 HEALTH_COLORS["danger"],
               ]
-            ),
+            },
             hovertemplate="<b>%{label}</b><br>"
             + "记录数: %{value}<br>"
             + "占比: %{percent}<br>"
@@ -738,10 +738,10 @@ class ChartGenerator:
             x=[row["start_date"], row["end_date"]],
             y=[idx, idx],
             mode="lines",
-            line=dict(
-              color=stage_colors.get(stage, HEALTH_COLORS["neutral"]),
-              width=20,
-            ),
+            line={
+              "color": stage_colors.get(stage, HEALTH_COLORS["neutral"]),
+              "width": 20,
+            },
             name=stage,
             showlegend=False,
             hovertemplate=f"<b>{stage}</b><br>"
@@ -802,8 +802,8 @@ class ChartGenerator:
           y=data["total_duration"] / 60,  # 转换为小时
           mode="lines+markers",
           name="睡眠时长",
-          line=dict(color=HEALTH_COLORS["primary"], width=2),
-          marker=dict(size=6),
+          line={"color": HEALTH_COLORS["primary"], "width": 2},
+          marker={"size": 6},
         ),
         secondary_y=False,
       )
@@ -816,8 +816,8 @@ class ChartGenerator:
             y=data["efficiency"] * 100,  # 转换为百分比
             mode="lines+markers",
             name="睡眠效率",
-            line=dict(color=HEALTH_COLORS["secondary"], width=2),
-            marker=dict(size=6),
+            line={"color": HEALTH_COLORS["secondary"], "width": 2},
+            marker={"size": 6},
           ),
           secondary_y=True,
         )
@@ -895,12 +895,12 @@ class ChartGenerator:
           go.Pie(
             labels=stage_durations.index,
             values=stage_durations.values,
-            marker=dict(
-              colors=[
+            marker={
+              "colors": [
                 colors.get(stage, HEALTH_COLORS["neutral"])
                 for stage in stage_durations.index
               ]
-            ),
+            },
             hovertemplate="<b>%{label}</b><br>"
             + "时长: %{value:.1f} 小时<br>"
             + "占比: %{percent}<br>"
@@ -963,8 +963,8 @@ class ChartGenerator:
             y=bedtime_hours,
             mode="markers+lines",
             name="入睡时间",
-            marker=dict(size=6, color=HEALTH_COLORS["primary"]),
-            line=dict(color=HEALTH_COLORS["primary"], width=1.5),
+            marker={"size": 6, "color": HEALTH_COLORS["primary"]},
+            line={"color": HEALTH_COLORS["primary"], "width": 1.5},
           )
         )
 
@@ -980,8 +980,8 @@ class ChartGenerator:
             y=wake_hours,
             mode="markers+lines",
             name="起床时间",
-            marker=dict(size=6, color=HEALTH_COLORS["secondary"]),
-            line=dict(color=HEALTH_COLORS["secondary"], width=1.5),
+            marker={"size": 6, "color": HEALTH_COLORS["secondary"]},
+            line={"color": HEALTH_COLORS["secondary"], "width": 1.5},
           )
         )
 
@@ -1204,7 +1204,7 @@ class ChartGenerator:
         )
 
         fig.update_polars(
-          radialaxis=dict(range=[0, 1], showticklabels=False),
+          radialaxis={"range": [0, 1], "showticklabels": False},
           row=1,
           col=2,
         )
@@ -1314,7 +1314,7 @@ class ChartGenerator:
           y=metrics,
           colorscale="RdBu",
           zmid=0,
-          colorbar=dict(title="相关系数"),
+          colorbar={"title": "相关系数"},
           hovertemplate="<b>%{x} vs %{y}</b><br>"
           + "相关系数: %{z:.2f}<br>"
           + "<extra></extra>",
@@ -1377,8 +1377,8 @@ class ChartGenerator:
             y=values,
             mode="lines+markers",
             name=metric_name,
-            line=dict(color=color, width=2),
-            marker=dict(size=6, color=color),
+            line={"color": color, "width": 2},
+            marker={"size": 6, "color": color},
           )
         )
 
@@ -1447,7 +1447,7 @@ class ChartGenerator:
           x=hours,
           y=weekdays,
           colorscale="Viridis",
-          colorbar=dict(title="活动水平"),
+          colorbar={"title": "活动水平"},
           hovertemplate="<b>%{y} %{x}</b><br>"
           + "活动水平: %{z:.2f}<br>"
           + "<extra></extra>",
@@ -1537,10 +1537,10 @@ class ChartGenerator:
 
       fig.update_layout(
         title=title,
-        polar=dict(
-          radialaxis=dict(range=[0, 1], showticklabels=False),
-          angularaxis=dict(showticklabels=True),
-        ),
+        polar={
+          "radialaxis": {"range": [0, 1], "showticklabels": False},
+          "angularaxis": {"showticklabels": True},
+        },
         width=self.width,
         height=self.height,
         template=PLOTLY_TEMPLATE,
@@ -1600,8 +1600,8 @@ class ChartGenerator:
             y=cat_data["value"],
             mode="lines+markers",
             name=category,
-            line=dict(color=color, width=2),
-            marker=dict(size=6, color=color),
+            line={"color": color, "width": 2},
+            marker={"size": 6, "color": color},
             hovertemplate="<b>%{fullData.name}</b><br>"
             + "日期: %{x}<br>"
             + "值: %{y:.2f}<br>"
