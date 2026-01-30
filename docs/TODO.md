@@ -37,9 +37,9 @@
 - [x] Produce `docs/PHASE-5-TESTS.md`.
 
 ## Stage 6: Systemic Testing
-- [ ] Run full test suite.
-- [ ] Fix failing tests or report blockers.
-- [ ] Produce `docs/PHASE-6-VERIFICATION.md`.
+- [x] Run full test suite with coverage.
+- [x] Fix failing tests or report blockers.
+- [x] Produce `docs/PHASE-6-VERIFICATION.md`.
 
 ## Stage 7: Finalization
 - [ ] Produce `docs/FINAL-REPORT.md`.

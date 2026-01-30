@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 # Add src directory to Python path.
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from src.analyzers.highlights import HighlightsGenerator
 from src.analyzers.statistical import StatisticalAnalyzer
@@ -20,7 +20,7 @@ from src.visualization.reports import ReportGenerator
 @pytest.fixture
 def sample_xml_path():
   """Get XML path for integration tests."""
-  xml_path = Path(__file__).parent.parent / "example" / "example.xml"
+  xml_path = Path(__file__).resolve().parents[2] / "example" / "example.xml"
   if not xml_path.exists():
     pytest.fail(
       f"Test data file missing: {xml_path}\n"
@@ -33,16 +33,16 @@ def sample_xml_path():
 @pytest.fixture
 def output_dir():
   """Create output directory."""
-  output_path = Path(__file__).parent.parent / "output" / "test"
-  output_path.mkdir(exist_ok=True)
+  output_path = Path(__file__).resolve().parents[2] / "output" / "test"
+  output_path.mkdir(parents=True, exist_ok=True)
   return output_path
 
 
 @pytest.fixture
 def reports_dir():
   """Create reports directory."""
-  reports_path = Path(__file__).parent.parent / "output" / "test" / "reports"
-  reports_path.mkdir(exist_ok=True)
+  reports_path = Path(__file__).resolve().parents[2] / "output" / "test" / "reports"
+  reports_path.mkdir(parents=True, exist_ok=True)
   return reports_path
 
 
