@@ -236,13 +236,21 @@ class TestBenchmarkRunner:
       assert "throughput_records_per_sec" in result
       assert "memory_delta_mb" in result
 
-  @patch("src.processors.benchmark.DataExporter")
-  def test_benchmark_data_export(self, mock_exporter_class):
+  def test_benchmark_data_export(self):
     """Test data export benchmark."""
-    mock_exporter = MagicMock()
-    mock_exporter_class.return_value = mock_exporter
+    # Create mock records that can be converted to DataFrame
+    from unittest.mock import MagicMock
 
-    sample_records = [{"type": "test"}] * 100
+    mock_record = MagicMock()
+    mock_record.model_dump.return_value = {
+      "type": "HKQuantityTypeIdentifierHeartRate",
+      "value": 70.0,
+      "unit": "count/min",
+      "start_date": "2023-01-01T10:00:00Z",
+      "end_date": "2023-01-01T10:01:00Z",
+      "source_name": "Test Source",
+    }
+    sample_records = [mock_record] * 10
 
     with tempfile.TemporaryDirectory() as temp_dir:
       xml_path = Path(temp_dir) / "test.xml"
@@ -251,11 +259,16 @@ class TestBenchmarkRunner:
       runner = BenchmarkRunner(xml_path)
       result = runner.benchmark_data_export(sample_records)
 
-      assert result["records_processed"] == 100
+      assert result["records_processed"] == 10
       assert "throughput_records_per_sec" in result
       assert "memory_delta_mb" in result
       assert "output_file" in result
       assert "file_size_mb" in result
+
+      # Check that output file was actually created
+      output_file = Path(result["output_file"])
+      assert output_file.exists()
+      assert output_file.stat().st_size > 0
 
   @patch("src.processors.benchmark.StreamingXMLParser")
   def test_run_all_benchmarks(self, mock_parser_class):
@@ -280,6 +293,9 @@ class TestBenchmarkRunner:
     """Test running module with timeout - success case."""
 
     def test_func():
+      import time
+
+      time.sleep(0.01)  # Small delay to ensure measurable time
       return {"records_processed": 100, "throughput_records_per_sec": 1000.0}
 
     module = BenchmarkModule("test", test_func)
@@ -292,7 +308,7 @@ class TestBenchmarkRunner:
       result = runner.run_module_with_timeout(module)
 
       assert result.status == "completed"
-      assert result.time_seconds > 0
+      assert result.time_seconds >= 0.01  # Should be at least the sleep time
       assert result.records_processed == 100
       assert result.throughput_records_per_sec == 1000.0
 

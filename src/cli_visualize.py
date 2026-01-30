@@ -21,7 +21,7 @@ logger = get_logger(__name__)
 
 
 @click.command()
-@click.argument("xml_path", type=click.Path(exists=True))
+@click.argument("xml_path", type=click.Path())
 @click.option("--output", "-o", type=click.Path(), help="Output directory")
 @click.option(
   "--format",
@@ -61,9 +61,16 @@ def report(
       # Generate both HTML and Markdown formats\n
       health-analyzer report export.xml --format both --age 30 --gender male
   """
+  # Validate input file exists
+  xml_file = Path(xml_path)
+  if not xml_file.exists():
+    logger.error(f"XML file not found: {xml_file}")
+    console.print(f"[bold red]Error:[/bold red] XML file not found: {xml_file}")
+    sys.exit(2)
+
   try:
-    xml_file = Path(xml_path)
     output_dir = Path(output) if output else get_config().output_dir / "reports"
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     console.print(
       f"[bold blue]Generating health report:[/bold blue] {xml_file}"
@@ -76,22 +83,26 @@ def report(
     with console.status("[bold green]Parsing records..."):
       parser = StreamingXMLParser(xml_file)
 
-      # Parse heart rate data
-      hr_types = [
+      # Define all record types needed for report generation
+      all_types = [
         "HKQuantityTypeIdentifierHeartRate",
         "HKQuantityTypeIdentifierRestingHeartRate",
         "HKQuantityTypeIdentifierHeartRateVariabilitySDNN",
         "HKQuantityTypeIdentifierVO2Max",
+        "HKCategoryTypeIdentifierSleepAnalysis",
       ]
-      all_hr_records = list(parser.parse_records(record_types=hr_types))
 
-      # Categorize heart rate records
+      # Parse all records in a single pass
+      all_records = list(parser.parse_records(record_types=all_types))
+
+      # Categorize records by type
       hr_records = []
       resting_hr_records = []
       hrv_records = []
       vo2_max_records = []
+      sleep_records = []
 
-      for record in all_hr_records:
+      for record in all_records:
         record_type = getattr(record, "type", "")
         if record_type == "HKQuantityTypeIdentifierHeartRate":
           hr_records.append(record)
@@ -101,14 +112,8 @@ def report(
           hrv_records.append(record)
         elif record_type == "HKQuantityTypeIdentifierVO2Max":
           vo2_max_records.append(record)
-
-      # Parse sleep data
-      parser2 = StreamingXMLParser(xml_file)
-      sleep_records = list(
-        parser2.parse_records(
-          record_types=["HKCategoryTypeIdentifierSleepAnalysis"]
-        )
-      )
+        elif record_type == "HKCategoryTypeIdentifierSleepAnalysis":
+          sleep_records.append(record)
 
     console.print(
       f"[green]✓ Parsing completed: {len(hr_records)} heart rate records, {len(sleep_records)} sleep records[/green]"
@@ -182,9 +187,16 @@ def report(
     # Summary
     console.print("\n[bold green]✅ Report generation successful![/bold green]")
     console.print("\n[bold]Generated files:[/bold]")
+
+    # Display file information with robust error handling
     for file_path in report_files:
-      size_mb = file_path.stat().st_size / (1024 * 1024)
-      console.print(f"  • {file_path.name} ({size_mb:.2f} MB)")
+      try:
+        size_mb = file_path.stat().st_size / (1024 * 1024)
+        console.print(f"  • {file_path.name} ({size_mb:.2f} MB)")
+      except (FileNotFoundError, OSError) as e:
+        # Report file might not exist or be inaccessible
+        logger.warning(f"Could not get file size for {file_path}: {e}")
+        console.print(f"  • {file_path.name} (size unknown)")
 
   except Exception as e:
     logger.error(f"Report generation failed: {e}")
@@ -193,7 +205,7 @@ def report(
 
 
 @click.command()
-@click.argument("xml_path", type=click.Path(exists=True))
+@click.argument("xml_path", type=click.Path())
 @click.option("--output", "-o", type=click.Path(), help="Output directory")
 @click.option(
   "--charts",
@@ -291,17 +303,26 @@ def visualize(
     hr_data = {}
     sleep_data = {}
 
+    # Define all record types needed for visualization
+    all_types = []
     if need_hr:
-      with console.status("[bold green]Parsing heart rate data..."):
-        hr_types = [
+      all_types.extend(
+        [
           "HKQuantityTypeIdentifierHeartRate",
           "HKQuantityTypeIdentifierRestingHeartRate",
           "HKQuantityTypeIdentifierHeartRateVariabilitySDNN",
         ]
-        records = list(parser.parse_records(record_types=hr_types))
+      )
+    if need_sleep:
+      all_types.append("HKCategoryTypeIdentifierSleepAnalysis")
 
-        # Categorize
-        for record in records:
+    # Parse all records in a single pass if any data is needed
+    if all_types:
+      with console.status("[bold green]Parsing health data..."):
+        all_records = list(parser.parse_records(record_types=all_types))
+
+        # Categorize records by type
+        for record in all_records:
           record_type = getattr(record, "type", "")
           if record_type == "HKQuantityTypeIdentifierHeartRate":
             hr_data.setdefault("heart_rate", []).append(record)
@@ -311,25 +332,22 @@ def visualize(
             record_type == "HKQuantityTypeIdentifierHeartRateVariabilitySDNN"
           ):
             hr_data.setdefault("hrv", []).append(record)
+          elif record_type == "HKCategoryTypeIdentifierSleepAnalysis":
+            sleep_data.setdefault("sleep_records", []).append(record)
 
-      console.print("[green]✓ Heart rate data parsing completed[/green]")
+      console.print("[green]✓ Data parsing completed[/green]")
 
-    if need_sleep:
-      with console.status("[bold green]Parsing sleep data..."):
-        parser2 = StreamingXMLParser(xml_file)
-        sleep_records = list(
-          parser2.parse_records(
-            record_types=["HKCategoryTypeIdentifierSleepAnalysis"]
-          )
-        )
-
+    # Process sleep data if needed
+    if need_sleep and "sleep_records" in sleep_data:
+      with console.status("[bold green]Processing sleep sessions..."):
         # Parse sleep sessions
         sleep_analyzer = SleepAnalyzer()
-        sleep_sessions = sleep_analyzer._parse_sleep_sessions(sleep_records)  # type: ignore
+        sleep_sessions = sleep_analyzer._parse_sleep_sessions(  # type: ignore
+          sleep_data["sleep_records"]
+        )
 
-        sleep_data["sleep_records"] = sleep_records
         sleep_data["sleep_sessions"] = sleep_sessions
-      console.print("[green]✓ Sleep data parsing completed[/green]")
+      console.print("[green]✓ Sleep data processing completed[/green]")
 
     # Generate charts
     console.print("\n[bold]Generating charts...[/bold]")
@@ -759,6 +777,10 @@ Output format: {"Interactive HTML" if interactive else "Static PNG"}
         "[yellow]Possible reasons: insufficient data or unsupported chart types[/yellow]"
       )
 
+  except FileNotFoundError:
+    logger.error("XML file not found")
+    console.print("[bold red]Error:[/bold red] XML file not found")
+    sys.exit(2)
   except Exception as e:
     logger.error(f"Chart generation failed: {e}")
     console.print(f"[bold red]Error:[/bold red] {e}")

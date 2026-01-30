@@ -162,6 +162,9 @@ def _get_memory_usage() -> float:
   except ImportError:
     # psutil not available
     return 0.0
+  except Exception:
+    # Any other error (e.g., psutil not working)
+    return 0.0
 
 
 class ProgressLogger:
