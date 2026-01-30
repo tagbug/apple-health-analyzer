@@ -258,8 +258,14 @@ def visualize(
       # Generate static PNG charts\n
       health-analyzer visualize export.xml --static
   """
+  # Validate input file exists
+  xml_file = Path(xml_path)
+  if not xml_file.exists():
+    logger.error(f"XML file not found: {xml_file}")
+    console.print(f"[bold red]Error:[/bold red] XML file not found: {xml_file}")
+    sys.exit(2)
+
   try:
-    xml_file = Path(xml_path)
     output_dir = Path(output) if output else get_config().output_dir / "charts"
     output_dir.mkdir(parents=True, exist_ok=True)
 

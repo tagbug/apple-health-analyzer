@@ -103,22 +103,26 @@ class TestConfig:
       tmp_path = Path(tmp_file.name)
 
     try:
-      config = Config(
-        export_xml_path=tmp_path,
-        environment=Environment.PROD,
-        debug=False,
-        output_dir=Path("/custom/output"),
-        apple_watch_priority=5,
-        log_level="DEBUG",
-        batch_size=500,
-      )
+      # Use a temporary directory for output_dir to avoid permission issues
+      with tempfile.TemporaryDirectory() as temp_dir:
+        custom_output = Path(temp_dir) / "custom_output"
 
-      assert config.environment == Environment.PROD
-      assert config.debug is False
-      assert config.output_dir == Path("/custom/output")
-      assert config.apple_watch_priority == 5
-      assert config.log_level == "DEBUG"
-      assert config.batch_size == 500
+        config = Config(
+          export_xml_path=tmp_path,
+          environment=Environment.PROD,
+          debug=False,
+          output_dir=custom_output,
+          apple_watch_priority=5,
+          log_level="DEBUG",
+          batch_size=500,
+        )
+
+        assert config.environment == Environment.PROD
+        assert config.debug is False
+        assert config.output_dir == custom_output
+        assert config.apple_watch_priority == 5
+        assert config.log_level == "DEBUG"
+        assert config.batch_size == 500
     finally:
       tmp_path.unlink(missing_ok=True)
 
@@ -391,20 +395,32 @@ class TestLoadConfig:
   )
   def test_load_config_custom_paths(self):
     """Test loading config with custom paths."""
-    # Create the required XML file
-    xml_path = Path("/custom/path.xml")
-    xml_path.parent.mkdir(parents=True, exist_ok=True)
-    xml_path.write_text("<xml>test</xml>")
+    # Use temporary directory instead of hardcoded paths to avoid permission issues
+    with tempfile.TemporaryDirectory() as temp_dir:
+      xml_path = Path(temp_dir) / "custom" / "path.xml"
+      xml_path.parent.mkdir(parents=True, exist_ok=True)
+      xml_path.write_text("<xml>test</xml>")
 
-    try:
-      config = load_config()
+      output_dir = Path(temp_dir) / "custom_output"
+      log_file = Path(temp_dir) / "test.log"
 
-      assert config.export_xml_path == Path("/custom/path.xml")
-      assert config.output_dir == Path("/custom/output")
-      assert config.apple_watch_priority == 5
-      assert config.log_file == Path("/tmp/test.log")
-    finally:
-      xml_path.unlink(missing_ok=True)
+      # Override environment variables to use temp paths
+      with patch.dict(
+        os.environ,
+        {
+          "EXPORT_XML_PATH": str(xml_path),
+          "OUTPUT_DIR": str(output_dir),
+          "APPLE_WATCH_PRIORITY": "5",
+          "LOG_FILE": str(log_file),
+        },
+        clear=True,
+      ):
+        config = load_config()
+
+        assert config.export_xml_path == xml_path
+        assert config.output_dir == output_dir
+        assert config.apple_watch_priority == 5
+        assert config.log_file == log_file
 
 
 class TestGetConfig:
