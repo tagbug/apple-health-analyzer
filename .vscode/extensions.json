@@ -1,0 +1,21 @@
+{
+  "recommendations": [
+    "ms-python.python",
+    "ms-python.pylance",
+    "ms-python.black-formatter",
+    "ms-python.isort",
+    "ms-python.pytest-adapter",
+    "ms-python.debugpy",
+    "charliermarsh.ruff",
+    "ms-vscode.vscode-json",
+    "redhat.vscode-yaml",
+    "ms-vscode-remote.remote-containers",
+    "github.copilot",
+    "github.copilot-chat"
+  ],
+  "unwantedRecommendations": [
+    "ms-python.autopep8",
+    "ms-python.flake8",
+    "ms-python.mypy-type-checker"
+  ]
+}
