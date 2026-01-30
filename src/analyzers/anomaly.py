@@ -617,15 +617,19 @@ class AnomalyDetector:
     recommendations = []
 
     if anomaly_rate > 0.1:  # Anomaly rate exceeds 10%.
-      recommendations.append("⚠️ 异常率较高，建议检查数据质量或调整检测阈值")
+      recommendations.append(
+        "⚠️ Anomaly rate is high; review data quality or adjust thresholds."
+      )
 
     if anomaly_rate < 0.001:  # Anomaly rate is very low.
-      recommendations.append("ℹ️ 检测到的异常较少，可能阈值设置过高")
+      recommendations.append("ℹ️ Few anomalies detected; thresholds may be too strict.")
 
     # Analyze severity distribution.
     high_severity = sum(1 for a in anomalies if a.severity == "high")
     if high_severity > len(anomalies) * 0.3:
-      recommendations.append("🚨 高严重程度异常较多，建议重点关注")
+      recommendations.append(
+        "🚨 High-severity anomalies are frequent; prioritize investigation."
+      )
 
     # Analyze time distribution.
     if anomalies:
@@ -635,7 +639,9 @@ class AnomalyDetector:
       hour_counts = time_dist.get("by_hour", {})
       max_hour_count = max(hour_counts.values()) if hour_counts else 0
       if max_hour_count > len(anomalies) * 0.5:
-        recommendations.append("📊 异常主要集中在特定小时，可能是正常模式")
+        recommendations.append(
+          "📊 Anomalies cluster at specific hours; this may reflect normal patterns."
+        )
 
     return recommendations
 

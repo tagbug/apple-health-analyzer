@@ -1,4 +1,4 @@
-"""统计分析模块 - 提供多维度统计分析功能"""
+"""Statistical analysis module with multi-dimensional metrics."""
 
 from dataclasses import dataclass
 from datetime import datetime
@@ -15,42 +15,42 @@ logger = get_logger(__name__)
 
 @dataclass
 class StatisticsReport:
-  """统计报告数据类"""
+  """Statistics report data model."""
 
   record_type: str
   time_interval: str
   total_records: int
   date_range: tuple[datetime, datetime]
 
-  # 基础统计
+  # Basic statistics
   min_value: float
   max_value: float
   mean_value: float
   median_value: float
   std_deviation: float
 
-  # 分位数
+  # Percentiles
   percentile_25: float
   percentile_75: float
   percentile_95: float
 
-  # 数据质量
+  # Data quality
   data_quality_score: float
   missing_values: int
 
-  # 时间分布
+  # Time distribution
   records_per_day: float
   active_days: int
   total_days: int
 
-  # 趋势指标
+  # Trend metrics
   trend_slope: float | None = None
   trend_r_squared: float | None = None
 
 
 @dataclass
 class TrendAnalysis:
-  """趋势分析结果"""
+  """Trend analysis result."""
 
   method: str
   slope: float
@@ -62,10 +62,10 @@ class TrendAnalysis:
 
 
 class StatisticalAnalyzer:
-  """统计分析核心类"""
+  """Core statistical analyzer."""
 
   def __init__(self):
-    """初始化统计分析器"""
+    """Initialize the statistical analyzer."""
     logger.info("StatisticalAnalyzer initialized")
 
   def aggregate_by_interval(
@@ -73,15 +73,14 @@ class StatisticalAnalyzer:
     records: list[HealthRecord],
     interval: Literal["hour", "day", "week", "month", "6month", "year"],
   ) -> pd.DataFrame:
-    """
-    按时间区间聚合数据
+    """Aggregate records by time interval.
 
     Args:
-        records: 健康记录列表
-        interval: 时间区间 ("hour", "day", "week", "month", "6month", "year")
+        records: Health record list.
+        interval: Time interval ("hour", "day", "week", "month", "6month", "year").
 
     Returns:
-        聚合后的DataFrame，包含时间区间和统计值
+        Aggregated DataFrame with interval boundaries and metrics.
     """
     if not records:
       logger.warning("No records provided for aggregation")
@@ -89,10 +88,10 @@ class StatisticalAnalyzer:
 
     logger.info(f"Aggregating {len(records)} records by {interval} interval")
 
-    # 转换为DataFrame
+    # Convert to DataFrame.
     df = self._records_to_dataframe(records)
 
-    # 根据区间类型设置频率
+    # Map interval to pandas frequency.
     freq_map = {
       "hour": "h",
       "day": "D",
@@ -104,18 +103,16 @@ class StatisticalAnalyzer:
 
     freq = freq_map.get(interval, "D")
 
-    # 按时间区间聚合
+    # Aggregate by time interval.
     try:
-      # 按时间分组并计算统计值
+      # Group by time and compute aggregates.
       grouped = df.groupby(pd.Grouper(key="start_date", freq=freq))
 
       aggregated = (
-        grouped["value"]
-        .agg(["count", "min", "max", "mean", "median", "std"])
-        .round(4)
+        grouped["value"].agg(["count", "min", "max", "mean", "median", "std"]).round(4)
       )
 
-      # 重命名列
+      # Rename columns.
       aggregated.columns = [
         "record_count",
         "min_value",
@@ -125,28 +122,28 @@ class StatisticalAnalyzer:
         "std_deviation",
       ]
 
-      # 添加时间区间标识
+      # Add interval boundaries.
       aggregated["interval_start"] = aggregated.index
-      # 计算区间结束时间 - 分离复杂操作避免类型错误
+      # Compute interval end times, keeping types safe.
       try:
         if freq == "ME":
-          # 月份比较复杂，使用下一个月的第一天减去1秒
+          # Month end: next month start minus one second.
           aggregated["interval_end"] = aggregated.index + pd.offsets.MonthEnd(1)
-          aggregated["interval_end"] = aggregated[
-            "interval_end"
-          ] - pd.Timedelta(seconds=1)
+          aggregated["interval_end"] = aggregated["interval_end"] - pd.Timedelta(
+            seconds=1
+          )
         elif freq == "6ME":
           aggregated["interval_end"] = aggregated.index + pd.offsets.MonthEnd(6)
-          aggregated["interval_end"] = aggregated[
-            "interval_end"
-          ] - pd.Timedelta(seconds=1)
+          aggregated["interval_end"] = aggregated["interval_end"] - pd.Timedelta(
+            seconds=1
+          )
         elif freq == "YE":
           aggregated["interval_end"] = aggregated.index + pd.offsets.YearEnd(1)
-          aggregated["interval_end"] = aggregated[
-            "interval_end"
-          ] - pd.Timedelta(seconds=1)
+          aggregated["interval_end"] = aggregated["interval_end"] - pd.Timedelta(
+            seconds=1
+          )
         else:
-          # 对于其他情况，直接计算delta
+          # Other intervals use fixed deltas.
           if freq == "h":
             delta = pd.Timedelta(hours=1) - pd.Timedelta(seconds=1)
           elif freq == "D":
@@ -159,10 +156,10 @@ class StatisticalAnalyzer:
           aggregated["interval_end"] = aggregated.index + delta
 
       except Exception:
-        # 如果计算失败，至少设置interval_end为index
+        # Fall back to index if end-time calculation fails.
         aggregated["interval_end"] = aggregated.index
 
-      # 重新排序列
+      # Reorder columns.
       cols = [
         "interval_start",
         "interval_end",
@@ -185,15 +182,14 @@ class StatisticalAnalyzer:
   def calculate_statistics(
     self, data: pd.DataFrame, value_column: str = "value"
   ) -> StatisticsReport | None:
-    """
-    计算详细统计指标
+    """Calculate detailed statistics.
 
     Args:
-        data: 包含数值的DataFrame
-        value_column: 数值列名
+        data: DataFrame with numeric values.
+        value_column: Column name for values.
 
     Returns:
-        统计报告对象
+        Statistics report object.
     """
     if data.empty or value_column not in data.columns:
       logger.warning(
@@ -209,19 +205,19 @@ class StatisticalAnalyzer:
       logger.warning("No valid values found for statistics calculation")
       return None
 
-    # 基础统计
+    # Basic statistics
     min_val = float(values.min())
     max_val = float(values.max())
     mean_val = float(values.mean())
     median_val = float(values.median())
     std_val = float(values.std()) if len(values) > 1 else 0.0
 
-    # 分位数
+    # Percentiles
     p25 = float(values.quantile(0.25))
     p75 = float(values.quantile(0.75))
     p95 = float(values.quantile(0.95))
 
-    # 时间分布分析
+    # Time distribution analysis
     if "start_date" in data.columns:
       date_range = (data["start_date"].min(), data["start_date"].max())
       total_days = (date_range[1] - date_range[0]).days + 1
@@ -233,14 +229,14 @@ class StatisticalAnalyzer:
       active_days = 1
       records_per_day = len(data)
 
-    # 确定记录类型 (从第一条记录推断)
+    # Infer record type from the first row.
     record_type = "Unknown"
     if hasattr(data, "record_type") and not data.empty:
       record_type = getattr(data.iloc[0], "record_type", "Unknown")
     elif len(data) > 0 and hasattr(data.iloc[0], "type"):
       record_type = data.iloc[0].type
 
-    # 数据质量评分 (多维度评估)
+    # Data quality score (multi-factor).
     data_quality = self._calculate_data_quality_score(values, data, record_type)
 
     return StatisticsReport(
@@ -271,33 +267,28 @@ class StatisticalAnalyzer:
     method: Literal["linear", "polynomial", "moving_average"] = "linear",
     window: int = 7,
   ) -> TrendAnalysis | None:
-    """
-    分析数据趋势
+    """Analyze trends in time-series data.
 
     Args:
-        data: 时间序列数据
-        time_column: 时间列名
-        value_column: 数值列名
-        method: 趋势分析方法
-        window: 移动平均窗口大小 (仅用于moving_average方法)
+        data: Time-series DataFrame.
+        time_column: Timestamp column name.
+        value_column: Value column name.
+        method: Trend analysis method.
+        window: Moving average window size (moving_average only).
 
     Returns:
-        趋势分析结果
+        Trend analysis result.
     """
     if (
-      data.empty
-      or time_column not in data.columns
-      or value_column not in data.columns
+      data.empty or time_column not in data.columns or value_column not in data.columns
     ):
       logger.warning("Insufficient data for trend analysis")
       return None
 
-    logger.info(
-      f"Analyzing trend using {method} method for {len(data)} records"
-    )
+    logger.info(f"Analyzing trend using {method} method for {len(data)} records")
 
     try:
-      # 准备数据
+      # Prepare data.
       df = data.copy()
       df = df.dropna(subset=[time_column, value_column])
       df = df.sort_values(time_column)
@@ -306,11 +297,11 @@ class StatisticalAnalyzer:
         logger.warning("Need at least 3 data points for trend analysis")
         return None
 
-      # 转换为数值时间戳并归一化 - 确保类型安全
+      # Convert to numeric timestamps and normalize.
       df["timestamp"] = (
         pd.to_datetime(df[time_column]).astype(int) / 10**9
-      )  # 秒级时间戳
-      # 归一化时间戳以避免数值问题
+      )  # Seconds since epoch.
+      # Normalize to avoid numeric issues.
       df["timestamp"] = df["timestamp"] - df["timestamp"].min()
       X = np.asarray(df["timestamp"].values, dtype=np.float64).reshape(-1, 1)
       y = np.asarray(df[value_column].values, dtype=np.float64)
@@ -336,16 +327,15 @@ class StatisticalAnalyzer:
     | None = None,
     output_format: Literal["dict", "dataframe"] = "dict",
   ) -> dict[str, Any] | pd.DataFrame:
-    """
-    生成完整的统计分析报告
+    """Generate a full statistical analysis report.
 
     Args:
-        records: 健康记录列表
-        intervals: 要分析的时间区间列表
-        output_format: 输出格式
+        records: Health record list.
+        intervals: Time intervals to analyze.
+        output_format: Output format.
 
     Returns:
-        统计分析报告
+        Statistical analysis report.
     """
     if not records:
       logger.warning("No records provided for report generation")
@@ -366,9 +356,7 @@ class StatisticalAnalyzer:
         aggregated_data = self.aggregate_by_interval(records, interval)
         if not aggregated_data.empty:
           stats = self.calculate_statistics(aggregated_data, "mean_value")
-          trend = self.analyze_trend(
-            aggregated_data, "interval_start", "mean_value"
-          )
+          trend = self.analyze_trend(aggregated_data, "interval_start", "mean_value")
 
           interval_analyses = report["interval_analyses"]
           if isinstance(interval_analyses, dict):
@@ -382,21 +370,21 @@ class StatisticalAnalyzer:
         continue
 
     if output_format == "dataframe":
-      # 转换为DataFrame格式 (简化版)
+      # Convert to DataFrame format (simplified).
       return self._report_to_dataframe(report)
     else:
       return report
 
   def _records_to_dataframe(self, records: list[HealthRecord]) -> pd.DataFrame:
-    """将健康记录转换为DataFrame"""
+    """Convert health records to a DataFrame."""
     data = []
     for record in records:
-      # 获取数值 (只处理有数值的记录)
+      # Extract numeric values when present.
       value = None
-      # 检查是否是QuantityRecord或CategoryRecord子类，这些类有value属性
+      # Quantity/Category records expose a value field.
       if isinstance(record, (QuantityRecord, CategoryRecord)):
         value = record.value
-        # 确保value是数值类型，如果是字符串则跳过
+        # Ensure value is numeric; skip string values.
         if isinstance(value, str):
           value = None
         elif value is not None:
@@ -418,44 +406,40 @@ class StatisticalAnalyzer:
       )
 
     df = pd.DataFrame(data)
-    # 确保数值列的类型正确
+    # Ensure numeric column types.
     if "value" in df.columns:
       df["value"] = pd.to_numeric(df["value"], errors="coerce")
 
     return df
 
-  def _linear_trend_analysis(
-    self, X: np.ndarray, y: np.ndarray
-  ) -> TrendAnalysis:
-    """线性趋势分析 - 使用 numpy.polyfit 避免 scipy 类型问题"""
-    # 使用 numpy.polyfit 进行线性回归（degree=1）
+  def _linear_trend_analysis(self, X: np.ndarray, y: np.ndarray) -> TrendAnalysis:
+    """Linear trend analysis using numpy.polyfit."""
+    # Use numpy.polyfit for linear regression (degree=1).
     coeffs = np.polyfit(X.flatten(), y, 1)
     slope = float(coeffs[0])
     intercept = float(coeffs[1])
 
-    # 计算 R² 值
+    # Compute R-squared.
     y_pred = slope * X.flatten() + intercept
     ss_res = np.sum((y - y_pred) ** 2)
     ss_tot = np.sum((y - np.mean(y)) ** 2)
     r_squared = 1 - (ss_res / ss_tot) if ss_tot != 0 else 0.0
 
-    # 计算 p-value (使用 t 统计量)
+    # Compute p-value using t-statistics.
     n = len(y)
-    dof = n - 2  # 自由度
+    dof = n - 2  # Degrees of freedom.
     if dof > 0:
       se = np.sqrt(ss_res / dof)
-      t_stat = abs(slope) / (
-        se / np.sqrt(np.sum((X.flatten() - X.mean()) ** 2))
-      )
+      t_stat = abs(slope) / (se / np.sqrt(np.sum((X.flatten() - X.mean()) ** 2)))
       from scipy import stats
 
       p_value = float(2 * (1 - stats.t.cdf(abs(t_stat), dof)))
     else:
       p_value = 1.0
 
-    # 确定趋势方向
-    # 阈值 0.00001 相当于每天变化约 0.864 个单位（对于秒级时间戳）
-    # 这对于心率数据来说是合适的（每天变化 1 bpm 左右）
+    # Determine trend direction.
+    # Threshold 0.00001 ~= 0.864 units/day for second-level timestamps.
+    # This aligns with ~1 bpm/day changes for heart rate data.
     if abs(slope) < 0.00001:
       direction = "stable"
     elif slope > 0:
@@ -463,7 +447,7 @@ class StatisticalAnalyzer:
     else:
       direction = "decreasing"
 
-    # 计算置信水平 (基于p值)
+    # Compute confidence level from p-value.
     confidence = (1 - p_value) * 100
 
     return TrendAnalysis(
@@ -479,26 +463,26 @@ class StatisticalAnalyzer:
   def _polynomial_trend_analysis(
     self, X: np.ndarray, y: np.ndarray, degree: int = 2
   ) -> TrendAnalysis | None:
-    """多项式趋势分析"""
+    """Polynomial trend analysis."""
     try:
-      # 使用numpy进行多项式拟合
+      # Polynomial fit using numpy.
       coeffs = np.polyfit(X.flatten(), y, degree)
       poly = np.poly1d(coeffs)
 
-      # 计算R²值
+      # Compute R-squared.
       y_pred = poly(X.flatten())
       ss_res = np.sum((y - y_pred) ** 2)
       ss_tot = np.sum((y - np.mean(y)) ** 2)
       r_squared = 1 - (ss_res / ss_tot) if ss_tot != 0 else 0
 
-      # 简化：只返回线性趋势的主要信息
+      # Simplified output with linear components.
       return TrendAnalysis(
         method="polynomial",
-        slope=float(coeffs[-2]),  # 一次项系数作为slope
-        intercept=float(coeffs[-1]),  # 常数项
+        slope=float(coeffs[-2]),  # Linear term as slope.
+        intercept=float(coeffs[-1]),  # Constant term.
         r_squared=float(r_squared),
-        p_value=0.0,  # 多项式拟合不计算p值
-        trend_direction="stable",  # 需要更复杂的分析
+        p_value=0.0,  # Polynomial fit does not compute p-values.
+        trend_direction="stable",  # Requires more complex analysis.
         confidence_level=round(r_squared * 100, 2),
       )
     except Exception as e:
@@ -508,21 +492,21 @@ class StatisticalAnalyzer:
   def _moving_average_trend_analysis(
     self, data: pd.DataFrame, value_column: str, window: int
   ) -> TrendAnalysis | None:
-    """移动平均趋势分析"""
+    """Moving average trend analysis."""
     try:
-      # 计算移动平均
+      # Compute moving average.
       ma = data[value_column].rolling(window=window, center=True).mean()
 
-      # 计算移动平均的趋势
+      # Compute trend of the moving average.
       valid_ma = ma.dropna()
       if len(valid_ma) < 3:
         return None
 
-      # 使用移动平均的差分来判断趋势
+      # Use moving average deltas to infer trend.
       diff = valid_ma.diff().dropna()
       avg_change = float(diff.mean())
 
-      # 确定趋势方向
+      # Determine trend direction.
       if abs(avg_change) < 0.001:
         direction = "stable"
       elif avg_change > 0:
@@ -530,17 +514,17 @@ class StatisticalAnalyzer:
       else:
         direction = "decreasing"
 
-      # 计算R² (简化版)
+      # Compute R-squared (simplified).
       std_val = float(data[value_column].std())
       r_squared = min(0.5, abs(avg_change) / (std_val + 0.001))
 
-      # 获取intercept
+      # Calculate intercept.
       intercept = float(valid_ma.iloc[0])
 
       return TrendAnalysis(
         method="moving_average",
-        slope=avg_change,  # 已是float
-        intercept=intercept,  # 已是float
+        slope=avg_change,  # Already float.
+        intercept=intercept,  # Already float.
         r_squared=float(r_squared),
         p_value=0.0,
         trend_direction=direction,
@@ -553,23 +537,22 @@ class StatisticalAnalyzer:
   def _calculate_data_quality_score(
     self, values: pd.Series, data: pd.DataFrame, record_type: str = "Unknown"
   ) -> float:
-    """
-    多维度数据质量评分
+    """Compute data quality score from multiple factors.
 
-    考虑因素:
-    1. 数据完整性 (40%)
-    2. 数值合理性 (30%)
-    3. 数据一致性 (30%)
+    Factors:
+    1) Completeness (40%)
+    2) Reasonableness (30%)
+    3) Consistency (30%)
     """
 
-    # 空数据直接返回0
+    # Return 0 for empty data.
     if values.empty or data.empty:
       return 0.0
 
-    # 1. 完整性得分 (40%)
+    # 1) Completeness score (40%).
     completeness = len(values) / len(data) if len(data) > 0 else 0
 
-    # 2. 合理性得分 (30%) - 基于记录类型的合理范围
+    # 2) Reasonableness score (30%) based on type ranges.
     reasonable_ranges = {
       "HKQuantityTypeIdentifierHeartRate": (40, 200),
       "HKQuantityTypeIdentifierRestingHeartRate": (40, 100),
@@ -577,29 +560,29 @@ class StatisticalAnalyzer:
       "HKCategoryTypeIdentifierSleepAnalysis": (0, 3),
     }
 
-    # 获取合理范围 - 确保类型安全
+    # Get reasonable bounds with type safety.
     default_min = float(values.min()) if not values.empty else 0.0
     default_max = float(values.max()) if not values.empty else 100.0
     range_tuple = reasonable_ranges.get(record_type, (default_min, default_max))
     min_val, max_val = float(range_tuple[0]), float(range_tuple[1])
 
-    # 计算在合理范围内的数据比例
+    # Compute proportion within bounds.
     reasonable_mask = (values >= min_val) & (values <= max_val)
     reasonable_count = int(np.asarray(reasonable_mask.sum()))
     reasonability = reasonable_count / len(values) if len(values) > 0 else 0
 
-    # 3. 一致性得分 (30%) - 基于变异系数
-    # CV (变异系数) = std / mean，越小说明数据越一致
+    # 3) Consistency score (30%) based on coefficient of variation.
+    # CV = std / mean; lower indicates higher consistency.
     mean_val = float(np.asarray(values.mean()))
     if mean_val > 0:
       std_val = float(np.asarray(values.std()))
       cv = std_val / mean_val
-      # CV在0-1之间认为是好的，超过1则认为变异过大
+      # CV in [0,1] is acceptable; above 1 indicates high variance.
       consistency = max(0, min(1, 1 - cv / 2))
     else:
       consistency = 0.5
 
-    # 综合评分
+    # Weighted total score.
     quality = 0.4 * completeness + 0.3 * reasonability + 0.3 * consistency
 
     logger.debug(
@@ -610,18 +593,18 @@ class StatisticalAnalyzer:
     return quality
 
   def _calculate_normality_score(self, values: pd.Series) -> float:
-    """计算数据正态性评分 (0-1)"""
+    """Compute normality score (0-1)."""
     try:
-      # 对于小样本，正态性检验不可靠，直接返回中等评分
+      # For small samples, return a neutral score.
       if len(values) < 10:
         logger.debug(
           f"Small sample size ({len(values)}), returning default normality score"
         )
         return 0.5
 
-      # 对大数据集采样，避免计算成本过高
+      # Sample large datasets to limit cost.
       if len(values) > 5000:
-        # 随机采样5000个数据点进行正态性检验
+        # Sample 5,000 points for normality testing.
         sample = values.sample(n=5000, random_state=42)
         logger.debug(
           f"Large dataset detected ({len(values)} records), using sampling (n=5000)"
@@ -631,24 +614,24 @@ class StatisticalAnalyzer:
 
       from scipy import stats
 
-      # 确保sample是numpy数组
+      # Ensure sample is a numpy array.
       sample_array = np.asarray(sample.values, dtype=np.float64)
       stat, p_value = stats.shapiro(sample_array)
 
-      # p值越大，越接近正态分布
-      normality_score = min(1.0, float(p_value) * 2)  # 放大p值影响
+      # Higher p-values imply closer-to-normal distribution.
+      normality_score = min(1.0, float(p_value) * 2)  # Scale p-value impact.
 
       return normality_score
     except Exception as e:
       logger.warning(f"Normality test failed: {e}, returning default score")
-      # 如果检验失败，返回中等评分
+      # Fall back to neutral score on failure.
       return 0.5
 
   def _report_to_dataframe(self, report: dict[str, Any]) -> pd.DataFrame:
-    """将报告转换为DataFrame格式"""
+    """Convert a report to a DataFrame."""
     rows = []
 
-    # 总体统计
+    # Overall summary.
     if report.get("summary"):
       summary = report["summary"]
       rows.append(
@@ -664,7 +647,7 @@ class StatisticalAnalyzer:
         }
       )
 
-    # 区间统计
+    # Interval summaries.
     for interval, analysis in report.get("interval_analyses", {}).items():
       if analysis.get("statistics"):
         stats = analysis["statistics"]

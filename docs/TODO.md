@@ -20,10 +20,10 @@
 - [x] Produce `docs/PHASE-2-CLEANUP.md`.
 
 ## Stage 3: Comment Cleanup
-- [ ] Replace non-English comments with English.
-- [ ] Remove redundant comments.
-- [ ] Add detailed algorithm notes where needed.
-- [ ] Produce `docs/PHASE-3-COMMENTS.md`.
+- [x] Replace non-English comments with English.
+- [x] Remove redundant comments.
+- [x] Add detailed algorithm notes where needed.
+- [x] Produce `docs/PHASE-3-COMMENTS.md`.
 
 ## Stage 4: Refactor and Optimization
 - [ ] Minimize duplicate parsing passes.

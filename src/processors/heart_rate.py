@@ -5,7 +5,7 @@ Provides in-depth analysis of heart rate related data, including resting heart r
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, Literal, Sequence
 
 import pandas as pd
 
@@ -122,7 +122,7 @@ class HeartRateAnalyzer:
     self.age = age
     self.gender = gender
 
-    # 初始化分析组件
+    # Initialize analysis components.
     self.stat_analyzer = StatisticalAnalyzer()
     self.anomaly_detector = AnomalyDetector()
 
@@ -150,7 +150,7 @@ class HeartRateAnalyzer:
     """
     logger.info("Starting comprehensive heart rate analysis")
 
-    # 确定数据时间范围
+    # Determine data time range.
     all_records = (
       heart_rate_records
       + (resting_hr_records or [])
@@ -169,7 +169,7 @@ class HeartRateAnalyzer:
     data_range = self._calculate_data_range(all_records)
     analysis_date = datetime.now()
 
-    # 分析各个指标
+    # Analyze metrics.
     resting_hr_analysis = None
     if resting_hr_records:
       resting_hr_analysis = self.analyze_resting_heart_rate(resting_hr_records)
@@ -180,24 +180,18 @@ class HeartRateAnalyzer:
 
     cardio_fitness = None
     if vo2_max_records:
-      # 过滤出QuantityRecord类型的记录
-      quantity_records = [
-        r for r in vo2_max_records if isinstance(r, QuantityRecord)
-      ]
+      # Filter QuantityRecord entries.
+      quantity_records = [r for r in vo2_max_records if isinstance(r, QuantityRecord)]
       cardio_fitness = self.analyze_cardio_fitness(quantity_records)
 
-    # 统计分析（基于基础心率数据）
-    daily_stats = self.stat_analyzer.aggregate_by_interval(
-      heart_rate_records, "day"
-    )
-    weekly_stats = self.stat_analyzer.aggregate_by_interval(
-      heart_rate_records, "week"
-    )
+    # Statistical analysis (based on base heart rate data).
+    daily_stats = self.stat_analyzer.aggregate_by_interval(heart_rate_records, "day")
+    weekly_stats = self.stat_analyzer.aggregate_by_interval(heart_rate_records, "week")
     monthly_stats = self.stat_analyzer.aggregate_by_interval(
       heart_rate_records, "month"
     )
 
-    # 异常检测
+    # Anomaly detection.
     anomalies = self.anomaly_detector.detect_anomalies(
       heart_rate_records, ["zscore", "iqr"]
     )
@@ -205,7 +199,7 @@ class HeartRateAnalyzer:
       anomalies, len(heart_rate_records)
     )
 
-    # 趋势分析
+    # Trend analysis.
     trends = {}
     if not daily_stats.empty:
       hr_trend = self.stat_analyzer.analyze_trend(
@@ -214,7 +208,7 @@ class HeartRateAnalyzer:
       if hr_trend:
         trends["heart_rate"] = hr_trend
 
-    # 生成Highlights和建议
+    # Generate highlights and recommendations.
     highlights = self._generate_highlights(
       resting_hr_analysis, hrv_analysis, cardio_fitness, trends, anomalies
     )
@@ -222,7 +216,7 @@ class HeartRateAnalyzer:
       resting_hr_analysis, hrv_analysis, cardio_fitness, anomalies
     )
 
-    # 数据质量评估
+    # Data quality assessment.
     data_quality = self._assess_data_quality(heart_rate_records)
 
     report = HeartRateAnalysisReport(
@@ -262,51 +256,45 @@ class HeartRateAnalyzer:
 
     logger.info(f"Analyzing resting heart rate from {len(records)} records")
 
-    # 转换为DataFrame
+    # Convert to DataFrame.
     df = self._records_to_dataframe(records)
 
     if df.empty or "value" not in df.columns:
       return None
 
-    # 计算当前值（最近30天的平均）
-    recent_data = df[
-      df["start_date"] >= df["start_date"].max() - pd.Timedelta(days=30)
-    ]
+    # Calculate current value (average of last 30 days).
+    recent_data = df[df["start_date"] >= df["start_date"].max() - pd.Timedelta(days=30)]
     current_value = (
-      recent_data["value"].mean()
-      if not recent_data.empty
-      else df["value"].mean()
+      recent_data["value"].mean() if not recent_data.empty else df["value"].mean()
     )
 
-    # 计算基线值（最早30天的平均）
+    # Calculate baseline value (average of earliest 30 days).
     baseline_data = df[
       df["start_date"] <= df["start_date"].min() + pd.Timedelta(days=30)
     ]
     baseline_value = (
-      baseline_data["value"].mean()
-      if not baseline_data.empty
-      else df["value"].mean()
+      baseline_data["value"].mean() if not baseline_data.empty else df["value"].mean()
     )
 
-    # 计算变化
+    # Calculate change.
     change_from_baseline = current_value - baseline_value
 
-    # 确定趋势方向
-    if abs(change_from_baseline) < 1:  # 变化小于1 bpm认为是稳定
+    # Determine trend direction.
+    if abs(change_from_baseline) < 1:  # Change below 1 bpm is stable.
       trend_direction = "stable"
     elif change_from_baseline < 0:
-      trend_direction = "decreasing"  # 降低是好的
+      trend_direction = "decreasing"  # Decrease is favorable.
     else:
-      trend_direction = "increasing"  # 升高可能需要关注
+      trend_direction = "increasing"  # Increase may need attention.
 
-    # 年龄调整百分位数（如果有年龄信息）
+    # Age-adjusted percentile (when age is available).
     age_adjusted_percentile = None
     if self.age:
       age_adjusted_percentile = self._calculate_age_adjusted_percentile(
         current_value, self.age
       )
 
-    # 健康评级
+    # Health rating.
     health_rating = self._rate_resting_hr_health(current_value, self.age)
 
     return RestingHRAnalysis(
@@ -332,48 +320,42 @@ class HeartRateAnalyzer:
 
     logger.info(f"Analyzing HRV from {len(records)} records")
 
-    # 转换为DataFrame
+    # Convert to DataFrame.
     df = self._records_to_dataframe(records)
 
     if df.empty or "value" not in df.columns:
       return None
 
-    # 计算当前值（最近30天的平均）
-    recent_data = df[
-      df["start_date"] >= df["start_date"].max() - pd.Timedelta(days=30)
-    ]
+    # Calculate current value (average of last 30 days).
+    recent_data = df[df["start_date"] >= df["start_date"].max() - pd.Timedelta(days=30)]
     current_sdnn = (
-      recent_data["value"].mean()
-      if not recent_data.empty
-      else df["value"].mean()
+      recent_data["value"].mean() if not recent_data.empty else df["value"].mean()
     )
 
-    # 计算基线值
+    # Calculate baseline value.
     baseline_data = df[
       df["start_date"] <= df["start_date"].min() + pd.Timedelta(days=30)
     ]
     baseline_sdnn = (
-      baseline_data["value"].mean()
-      if not baseline_data.empty
-      else df["value"].mean()
+      baseline_data["value"].mean() if not baseline_data.empty else df["value"].mean()
     )
 
-    # 计算变化
+    # Calculate change.
     change_from_baseline = current_sdnn - baseline_sdnn
 
-    # 评估压力水平（基于SDNN值）
+    # Assess stress level (based on SDNN).
     stress_level = self._assess_stress_level(current_sdnn)
 
-    # 评估恢复状态
+    # Assess recovery status.
     recovery_status = self._assess_recovery_status(current_sdnn)
 
-    # 确定趋势方向
-    if abs(change_from_baseline) < 2:  # SDNN变化小于2ms认为是稳定
+    # Determine trend direction.
+    if abs(change_from_baseline) < 2:  # SDNN change below 2ms is stable.
       trend_direction = "stable"
     elif change_from_baseline > 0:
-      trend_direction = "improving"  # HRV增加是好的
+      trend_direction = "improving"  # HRV increase is favorable.
     else:
-      trend_direction = "declining"  # HRV降低需要关注
+      trend_direction = "declining"  # HRV decline needs attention.
 
     return HRVAnalysis(
       current_sdnn=round(float(current_sdnn), 1),
@@ -401,31 +383,29 @@ class HeartRateAnalyzer:
 
     logger.info(f"Analyzing cardio fitness from {len(records)} VO2Max records")
 
-    # 转换为DataFrame
+    # Convert to DataFrame.
     df = self._records_to_dataframe(records)  # type: ignore
 
     if df.empty or "value" not in df.columns:
       return None
 
-    # 获取当前VO2Max值（最新记录）
-    current_vo2_max = df["value"].iloc[-1]  # 假设记录按时间排序
+    # Get current VO2Max value (latest record).
+    current_vo2_max = df["value"].iloc[-1]  # Assume records are time-sorted.
 
-    # 年龄和性别调整的评级
-    age_adjusted_rating = self._rate_vo2_max(
-      current_vo2_max, self.age, self.gender
-    )
+    # Age- and gender-adjusted rating.
+    age_adjusted_rating = self._rate_vo2_max(current_vo2_max, self.age, self.gender)
 
-    # 计算百分位数
+    # Calculate percentile.
     fitness_percentile = self._calculate_vo2_max_percentile(
       current_vo2_max, self.age, self.gender
     )
 
-    # 评估改善潜力
+    # Assess improvement potential.
     improvement_potential = self._calculate_improvement_potential(
       current_vo2_max, self.age, self.gender
     )
 
-    # 生成训练建议
+    # Generate training recommendations.
     training_recommendations = self._generate_training_recommendations(
       current_vo2_max, self.age, self.gender, age_adjusted_rating
     )
@@ -441,7 +421,7 @@ class HeartRateAnalyzer:
   def _calculate_data_range(
     self, records: list[HealthRecord]
   ) -> tuple[datetime, datetime]:
-    """计算数据时间范围"""
+    """Compute the data time range."""
     if not records:
       now = datetime.now()
       return (now, now)
@@ -456,11 +436,11 @@ class HeartRateAnalyzer:
 
     return (start_date, end_date)
 
-  def _records_to_dataframe(self, records: list[HealthRecord]) -> pd.DataFrame:
-    """将健康记录转换为DataFrame"""
+  def _records_to_dataframe(self, records: Sequence[HealthRecord]) -> pd.DataFrame:
+    """Convert health records into a DataFrame."""
     data = []
     for record in records:
-      # 获取数值
+      # Read value.
       value = None
       if isinstance(record, (QuantityRecord)):
         value = record.value
@@ -478,12 +458,10 @@ class HeartRateAnalyzer:
 
     return pd.DataFrame(data)
 
-  def _calculate_age_adjusted_percentile(
-    self, resting_hr: float, age: int
-  ) -> float:
-    """计算年龄调整的静息心率百分位数"""
-    # 基于年龄的正常静息心率范围（简化模型）
-    # 实际应该使用更精确的百分位数表
+  def _calculate_age_adjusted_percentile(self, resting_hr: float, age: int) -> float:
+    """Calculate age-adjusted resting heart rate percentile."""
+    # Age-based normal resting HR range (simplified model).
+    # A more precise percentile table should be used in production.
     if age < 30:
       normal_range = (50, 80)
     elif age < 50:
@@ -492,22 +470,19 @@ class HeartRateAnalyzer:
       normal_range = (60, 90)
 
     if resting_hr <= normal_range[0]:
-      return 25.0  # 较低的百分位数
+      return 25.0  # Lower percentile.
     elif resting_hr >= normal_range[1]:
-      return 75.0  # 较高的百分位数
+      return 75.0  # Higher percentile.
     else:
-      # 线性插值
+      # Linear interpolation.
       return (
-        25
-        + (resting_hr - normal_range[0])
-        / (normal_range[1] - normal_range[0])
-        * 50
+        25 + (resting_hr - normal_range[0]) / (normal_range[1] - normal_range[0]) * 50
       )
 
   def _rate_resting_hr_health(
     self, resting_hr: float, age: int | None
   ) -> Literal["excellent", "good", "fair", "poor"]:
-    """评估静息心率健康水平"""
+    """Assess resting heart rate health level."""
     if age and age < 30:
       if resting_hr < 60:
         return "excellent"
@@ -530,7 +505,7 @@ class HeartRateAnalyzer:
   def _assess_stress_level(
     self, sdnn: float
   ) -> Literal["low", "moderate", "high", "very_high"]:
-    """评估压力水平（基于SDNN）"""
+    """Assess stress level (based on SDNN)."""
     if sdnn >= 50:
       return "low"
     elif sdnn >= 30:
@@ -543,7 +518,7 @@ class HeartRateAnalyzer:
   def _assess_recovery_status(
     self, sdnn: float
   ) -> Literal["excellent", "good", "fair", "poor"]:
-    """评估恢复状态（基于SDNN）"""
+    """Assess recovery status (based on SDNN)."""
     if sdnn >= 60:
       return "excellent"
     elif sdnn >= 40:
@@ -556,8 +531,8 @@ class HeartRateAnalyzer:
   def _rate_vo2_max(
     self, vo2_max: float, age: int, gender: str
   ) -> Literal["superior", "excellent", "good", "fair", "poor"]:
-    """评级VO2Max水平"""
-    # 简化的VO2Max评级表（ml/kg/min）
+    """Rate VO2Max level."""
+    # Simplified VO2Max rating table (ml/kg/min).
     if gender == "male":
       if age < 30:
         thresholds = {"superior": 50, "excellent": 45, "good": 40, "fair": 35}
@@ -587,9 +562,9 @@ class HeartRateAnalyzer:
   def _calculate_vo2_max_percentile(
     self, vo2_max: float, age: int, gender: str
   ) -> float:
-    """计算VO2Max百分位数（简化计算）"""
-    # 这是一个简化的百分位数计算
-    # 实际应该使用更精确的分布数据
+    """Calculate VO2Max percentile (simplified)."""
+    # Simplified percentile calculation.
+    # A more accurate distribution should be used in production.
     rating = self._rate_vo2_max(vo2_max, age, gender)
 
     rating_to_percentile = {
@@ -605,23 +580,23 @@ class HeartRateAnalyzer:
   def _calculate_improvement_potential(
     self, vo2_max: float, age: int, gender: str
   ) -> float:
-    """计算改善潜力（0-100）"""
+    """Calculate improvement potential (0-100)."""
     current_rating = self._rate_vo2_max(vo2_max, age, gender)
 
-    # 计算到下一个等级的差距
+    # Distance to the next rating level.
     rating_order = ["poor", "fair", "good", "excellent", "superior"]
     current_index = rating_order.index(current_rating)
 
     if current_index >= len(rating_order) - 1:
-      return 0.0  # 已经是最高等级
+      return 0.0  # Already at the highest level.
 
-    # 简化的改善潜力计算
+    # Simplified improvement potential calculation.
     return (len(rating_order) - 1 - current_index) * 25
 
   def _generate_training_recommendations(
     self, vo2_max: float, age: int, gender: str, rating: str
   ) -> list[str]:
-    """生成训练建议"""
+    """Generate training recommendations."""
     recommendations = []
 
     if rating in ["poor", "fair"]:
@@ -659,10 +634,10 @@ class HeartRateAnalyzer:
     trends: dict[str, Any],
     anomalies: list[Any],
   ) -> list[str]:
-    """生成Highlights"""
+    """Generate highlights."""
     highlights = []
 
-    # 静息心率Highlights
+    # Resting heart rate highlights.
     if resting_hr:
       if resting_hr.trend_direction == "decreasing":
         highlights.append(
@@ -694,7 +669,7 @@ class HeartRateAnalyzer:
       elif hrv.stress_level in ["high", "very_high"]:
         highlights.append("😰 检测到较高压力水平，建议放松")
 
-    # 心肺适能Highlights
+    # Cardio fitness highlights.
     if cardio:
       rating_desc = {
         "superior": "卓越",
@@ -707,13 +682,11 @@ class HeartRateAnalyzer:
         f"🏃 心肺适能评级：{rating_desc[cardio.age_adjusted_rating]}（VO2Max: {cardio.current_vo2_max:.1f}）"
       )
 
-    # 异常检测Highlights
+    # Anomaly highlights.
     if anomalies:
       anomaly_count = len(anomalies)
       if anomaly_count > 0:
-        highlights.append(
-          f"🔍 检测到{anomaly_count}个心率异常事件，建议查看详细报告"
-        )
+        highlights.append(f"🔍 检测到{anomaly_count}个心率异常事件，建议查看详细报告")
 
     return highlights
 
@@ -724,16 +697,14 @@ class HeartRateAnalyzer:
     cardio: CardioFitnessAnalysis | None,
     anomalies: list[Any],
   ) -> list[str]:
-    """生成建议"""
+    """Generate recommendations."""
     recommendations = []
 
-    # 基于静息心率的建议
+    # Recommendations based on resting heart rate.
     if resting_hr and resting_hr.health_rating == "poor":
-      recommendations.append(
-        "建议增加有氧运动，如快走、跑步或骑行，每周至少150分钟"
-      )
+      recommendations.append("建议增加有氧运动，如快走、跑步或骑行，每周至少150分钟")
 
-    # 基于HRV的建议
+    # Recommendations based on HRV.
     if hrv and hrv.stress_level in ["high", "very_high"]:
       recommendations.extend(
         [
@@ -743,15 +714,15 @@ class HeartRateAnalyzer:
         ]
       )
 
-    # 基于心肺适能的建议
+    # Recommendations based on cardio fitness.
     if cardio and cardio.training_recommendations:
-      recommendations.extend(cardio.training_recommendations[:2])  # 取前2条建议
+      recommendations.extend(cardio.training_recommendations[:2])  # Use first two.
 
-    # 基于异常的建议
-    if anomalies and len(anomalies) > 10:  # 异常较多
+    # Recommendations based on anomalies.
+    if anomalies and len(anomalies) > 10:  # Many anomalies.
       recommendations.append("心率异常较多，建议咨询心脏科医师进行检查")
 
-    # 通用建议
+    # General recommendations.
     if not recommendations:
       recommendations.append("保持规律运动和健康生活方式")
       recommendations.append("定期监测心率指标，关注身体变化")
@@ -759,24 +730,24 @@ class HeartRateAnalyzer:
     return recommendations
 
   def _assess_data_quality(self, records: list[HealthRecord]) -> float:
-    """评估数据质量"""
+    """Assess data quality."""
     if not records:
       return 0.0
 
-    # 简化的质量评估
-    # 可以扩展为更复杂的评估逻辑
+    # Simplified quality assessment.
+    # Can be extended with more advanced logic.
     df = self._records_to_dataframe(records)
 
     if df.empty:
       return 0.0
 
-    # 检查数据完整性
+    # Check data completeness.
     completeness = df["value"].notna().mean()
 
-    # 检查数值合理性（心率范围）
+    # Check value sanity (heart rate range).
     reasonable = ((df["value"] >= 40) & (df["value"] <= 200)).mean()
 
-    # 综合评分
+    # Combined score.
     quality_score = (completeness + reasonable) / 2
 
     return round(float(quality_score), 3)

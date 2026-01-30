@@ -91,8 +91,8 @@ class BenchmarkRunner:
     thread.join(self.timeout_seconds)
 
     if thread.is_alive():
-      logger.warning(f"测试超时 ({self.timeout_seconds}s)，强制停止")
-      raise TimeoutError(f"测试超时 ({self.timeout_seconds}s)")
+      logger.warning(f"Timeout ({self.timeout_seconds}s), stopping execution")
+      raise TimeoutError(f"Timeout ({self.timeout_seconds}s)")
 
     if exception[0]:
       raise exception[0]
@@ -101,7 +101,7 @@ class BenchmarkRunner:
 
   def load_sample_data(self, limit: int = 10000) -> tuple[list[Any], dict[str, Any]]:
     """Load a sample of records from XML and return parse metrics."""
-    logger.info(f"从XML文件开头加载前{limit}条数据作为测试样本...")
+    logger.info(f"Loading first {limit} XML records as benchmark sample...")
 
     sample_records = []
     parser = StreamingXMLParser(self.xml_path)
@@ -131,8 +131,11 @@ class BenchmarkRunner:
       "parse_time_seconds": parse_time,
     }
 
-    logger.info(f"已加载 {len(sample_records)} 条真实数据用于测试")
-    logger.info(f"XML解析性能: {parse_metrics['throughput_records_per_sec']:.0f} 条/秒")
+    logger.info(f"Loaded {len(sample_records)} records for benchmarking")
+    logger.info(
+      "XML parse throughput: "
+      f"{parse_metrics['throughput_records_per_sec']:.0f} records/sec"
+    )
 
     self.sample_records = sample_records
     return sample_records, parse_metrics
@@ -144,7 +147,7 @@ class BenchmarkRunner:
     result = BenchmarkResult(module.name)
 
     try:
-      logger.info(f"开始测试模块: {module.name}")
+      logger.info(f"Starting benchmark module: {module.name}")
 
       start_time = time.time()
       start_mem = self.get_memory_usage()
@@ -167,17 +170,19 @@ class BenchmarkRunner:
           "throughput_records_per_sec", 0.0
         )
 
-      logger.info(f"测试模块 {module.name} 完成: {result.time_seconds:.2f}s")
+      logger.info(
+        f"Benchmark module {module.name} completed: {result.time_seconds:.2f}s"
+      )
 
     except TimeoutError:
       result.status = "timeout"
       result.time_seconds = self.timeout_seconds
-      logger.warning(f"测试模块 {module.name} 超时")
+      logger.warning(f"Benchmark module {module.name} timed out")
 
     except Exception as e:
       result.status = "error"
       result.error_message = str(e)
-      logger.error(f"测试模块 {module.name} 出错: {e}")
+      logger.error(f"Benchmark module {module.name} failed: {e}")
 
     return result
 
@@ -271,33 +276,37 @@ class BenchmarkRunner:
 
   def run_all_benchmarks(self) -> list[BenchmarkResult]:
     """Run all benchmark modules."""
-    logger.info("=== 开始完整性能基准测试 ===")
+    logger.info("=== Starting full benchmark run ===")
 
     # 1. Load sample data and gather XML parse metrics.
     sample_records, xml_parse_metrics = self.load_sample_data(10000)
     if not sample_records:
-      logger.error("无法加载样本数据，测试终止")
+      logger.error("Failed to load sample data, aborting benchmarks")
       return []
 
     # 2. Define benchmark modules.
     modules = [
       BenchmarkModule(
-        "数据清洗", self.benchmark_data_cleaning, "测试数据去重和清洗性能"
+        "Data cleaning", self.benchmark_data_cleaning, "Benchmark deduplication"
       ),
       BenchmarkModule(
-        "统计分析", self.benchmark_statistical_analysis, "测试统计分析计算性能"
+        "Statistical analysis",
+        self.benchmark_statistical_analysis,
+        "Benchmark statistical calculations",
       ),
       BenchmarkModule(
-        "报告生成", self.benchmark_report_generation, "测试健康报告生成性能"
+        "Report generation",
+        self.benchmark_report_generation,
+        "Benchmark report generation",
       ),
-      BenchmarkModule("数据导出", self.benchmark_data_export, "测试数据导出到文件性能"),
+      BenchmarkModule("Data export", self.benchmark_data_export, "Benchmark exports"),
     ]
 
     # 3. Run all benchmark modules.
     results = []
 
     # Add XML parse results first (from load_sample_data).
-    xml_result = BenchmarkResult("XML 解析")
+    xml_result = BenchmarkResult("XML parsing")
     xml_result.status = "completed"
     xml_result.time_seconds = xml_parse_metrics["parse_time_seconds"]
     xml_result.memory_mb = xml_parse_metrics["memory_delta_mb"]
@@ -318,17 +327,17 @@ class BenchmarkRunner:
     completed_count = sum(1 for r in results if r.status == "completed")
     total_time = time.time() - self.start_time
 
-    logger.info("=== 性能基准测试完成 ===")
-    logger.info(f"总测试时间: {total_time:.2f} 秒")
-    logger.info(f"样本数据量: {len(sample_records)} 条记录")
-    logger.info(f"完成模块: {completed_count}/{len(results)}")
+    logger.info("=== Benchmark run completed ===")
+    logger.info(f"Total time: {total_time:.2f} seconds")
+    logger.info(f"Sample size: {len(sample_records)} records")
+    logger.info(f"Modules completed: {completed_count}/{len(results)}")
 
     return results
 
   def print_report(self):
     """Print the benchmark report."""
     if not self.results:
-      logger.error("没有可用的基准测试结果，请先运行 run_all_benchmarks()")
+      logger.error("No benchmark results available; run run_all_benchmarks() first")
       return
 
     console = Console()
@@ -336,38 +345,42 @@ class BenchmarkRunner:
     completed_count = sum(1 for r in self.results if r.status == "completed")
 
     # Title panel.
-    title = Text("🍎 Apple Health Analyzer - 性能基准测试报告", style="bold blue")
+    title = Text("🍎 Apple Health Analyzer - Benchmark Report", style="bold blue")
     console.print(Panel(title, border_style="blue", padding=(1, 2)))
 
     # Summary table.
     info_table = Table(show_header=True, header_style="bold cyan", box=None)
-    info_table.add_column("指标", style="dim", width=10)
-    info_table.add_column("数值", style="green")
+    info_table.add_column("Metric", style="dim", width=14)
+    info_table.add_column("Value", style="green")
 
-    info_table.add_row("测试开始时间", time.strftime("%Y-%m-%d %H:%M:%S"))
-    info_table.add_row("总测试时间", f"{total_time:.2f} 秒")
-    info_table.add_row("样本数据量", f"{len(self.sample_records):,} 条记录")
-    info_table.add_row("超时设置", f"{self.timeout_seconds} 秒")
-    info_table.add_row("完成模块", f"{completed_count}/{len(self.results)}")
+    info_table.add_row("Start time", time.strftime("%Y-%m-%d %H:%M:%S"))
+    info_table.add_row("Total time", f"{total_time:.2f} seconds")
+    info_table.add_row("Sample size", f"{len(self.sample_records):,} records")
+    info_table.add_row("Timeout", f"{self.timeout_seconds} seconds")
+    info_table.add_row("Modules completed", f"{completed_count}/{len(self.results)}")
 
     console.print(info_table)
     console.print()
 
     # Performance table.
     perf_table = Table(
-      title="🔍 各模块性能指标",
+      title="🔍 Module Performance",
       title_style="bold yellow",
       show_header=True,
       header_style="bold magenta",
       border_style="blue",
     )
 
-    perf_table.add_column("模块名称", style="cyan", min_width=12)
-    perf_table.add_column("状态", style="green", min_width=6, justify="center")
-    perf_table.add_column("时间(秒)", style="yellow", min_width=10, justify="right")
-    perf_table.add_column("记录数", style="blue", min_width=10, justify="right")
-    perf_table.add_column("吞吐量(条/秒)", style="red", min_width=15, justify="right")
-    perf_table.add_column("内存增量(MB)", style="purple", min_width=12, justify="right")
+    perf_table.add_column("Module", style="cyan", min_width=12)
+    perf_table.add_column("Status", style="green", min_width=6, justify="center")
+    perf_table.add_column("Time (s)", style="yellow", min_width=10, justify="right")
+    perf_table.add_column("Records", style="blue", min_width=10, justify="right")
+    perf_table.add_column(
+      "Throughput (records/s)", style="red", min_width=18, justify="right"
+    )
+    perf_table.add_column(
+      "Memory delta (MB)", style="purple", min_width=14, justify="right"
+    )
 
     for result in self.results:
       # Status icons and colors.
@@ -381,12 +394,12 @@ class BenchmarkRunner:
 
       # Format throughput to avoid extreme values.
       throughput = result.throughput_records_per_sec
-      if throughput > 1000000:  # 如果吞吐量超过100万，显示为"瞬时"
-        throughput_str = Text("瞬时", style="bold green")
+      if throughput > 1000000:  # Display "Instant" for extreme throughput.
+        throughput_str = Text("Instant", style="bold green")
       else:
         throughput_str = f"{throughput:,.0f}"
 
-      # 内存增量颜色（正数红色表示增加，负数绿色表示减少）
+      # Color memory delta (red for growth, green for drop).
       memory_color = "red" if result.memory_mb > 0 else "green"
       memory_str = f"{result.memory_mb:+.2f}"
 
@@ -403,7 +416,7 @@ class BenchmarkRunner:
 
     # Bottleneck analysis.
     if completed_count > 0:
-      console.print("\n💡 [bold cyan]性能瓶颈分析:[/bold cyan]")
+      console.print("\n💡 [bold cyan]Bottleneck analysis:[/bold cyan]")
 
       # Find the slowest module.
       sorted_by_time = sorted(
@@ -414,7 +427,8 @@ class BenchmarkRunner:
       if sorted_by_time:
         slowest = sorted_by_time[0]
         console.print(
-          f"  ⚠️  [red]{slowest.module_name}[/red]模块耗时最长（[bold]{slowest.time_seconds:.2f}秒[/bold]）"
+          f"  ⚠️  [red]{slowest.module_name}[/red] is slowest "
+          f"([bold]{slowest.time_seconds:.2f}s[/bold])"
         )
 
       # Find the lowest throughput module.
@@ -427,7 +441,8 @@ class BenchmarkRunner:
       ):
         lowest_throughput = sorted_by_throughput[0]
         console.print(
-          f"  ⚠️  [red]{lowest_throughput.module_name}[/red]模块吞吐量最低（[bold]{lowest_throughput.throughput_records_per_sec:,.0f}条/秒[/bold]）"
+          f"  ⚠️  [red]{lowest_throughput.module_name}[/red] has lowest throughput "
+          f"([bold]{lowest_throughput.throughput_records_per_sec:,.0f} records/s[/bold])"
         )
 
       # Find the highest memory usage module.
@@ -440,12 +455,13 @@ class BenchmarkRunner:
         highest_memory = sorted_by_memory[0]
         memory_color = "red" if highest_memory.memory_mb > 0 else "green"
         console.print(
-          f"  ⚠️  [red]{highest_memory.module_name}[/red]模块内存占用最高（[bold {memory_color}]{highest_memory.memory_mb:.1f} MB[/bold {memory_color}]）"
+          f"  ⚠️  [red]{highest_memory.module_name}[/red] has highest memory delta "
+          f"([bold {memory_color}]{highest_memory.memory_mb:.1f} MB[/bold {memory_color}])"
         )
 
     # Completion timestamp.
     console.print(
-      f"\n✅ [green]测试完成时间: {time.strftime('%Y-%m-%d %H:%M:%S')}[/green]"
+      f"\n✅ [green]Completed at: {time.strftime('%Y-%m-%d %H:%M:%S')}[/green]"
     )
 
 
@@ -453,7 +469,7 @@ def run_benchmark(xml_path: str, output_dir: str | None = None, timeout: int = 3
   """Convenience runner for performance benchmarks."""
   xml_path_obj = Path(xml_path)
   if not xml_path_obj.exists():
-    raise FileNotFoundError(f"XML文件不存在: {xml_path}")
+    raise FileNotFoundError(f"XML file not found: {xml_path}")
 
   output_dir_obj = Path(output_dir) if output_dir else None
 

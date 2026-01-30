@@ -9,7 +9,7 @@ from datetime import (
   datetime,
   timedelta,
 )
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import pandas as pd
 
@@ -38,21 +38,21 @@ class SleepSession:
   session_id: str
   start_date: datetime
   end_date: datetime
-  total_duration: float  # 总时长（分钟）
-  sleep_duration: float  # 实际睡眠时长（分钟）
-  awake_duration: float  # 觉醒时长（分钟）
-  efficiency: float  # 睡眠效率（0-1）
+  total_duration: float  # Total duration (minutes)
+  sleep_duration: float  # Actual sleep duration (minutes)
+  awake_duration: float  # Awake duration (minutes)
+  efficiency: float  # Sleep efficiency (0-1)
 
-  # 睡眠指标
-  sleep_latency: float = 0  # 入睡潜伏期（分钟）
-  wake_after_onset: float = 0  # 睡眠后觉醒时长（分钟）
-  awakenings_count: int = 0  # 觉醒次数
+  # Sleep metrics
+  sleep_latency: float = 0  # Sleep latency (minutes)
+  wake_after_onset: float = 0  # Wake after sleep onset (minutes)
+  awakenings_count: int = 0  # Number of awakenings
 
-  # 睡眠阶段分布
-  core_sleep: float = 0  # 核心睡眠时长（分钟）
-  deep_sleep: float = 0  # 深睡眠时长（分钟）
-  rem_sleep: float = 0  # REM睡眠时长（分钟）
-  light_sleep: float = 0  # 浅睡眠时长（分钟）
+  # Sleep stage distribution
+  core_sleep: float = 0  # Core sleep duration (minutes)
+  deep_sleep: float = 0  # Deep sleep duration (minutes)
+  rem_sleep: float = 0  # REM sleep duration (minutes)
+  light_sleep: float = 0  # Light sleep duration (minutes)
 
 
 @dataclass
@@ -142,7 +142,7 @@ class SleepAnalyzer:
 
   def __init__(self):
     """Initialize sleep analyzer"""
-    # 初始化分析组件
+    # Initialize analysis components.
     self.stat_analyzer = StatisticalAnalyzer()
     self.anomaly_detector = AnomalyDetector()
 
@@ -174,7 +174,7 @@ class SleepAnalyzer:
     data_range = self._calculate_data_range(sleep_records)
     analysis_date = datetime.now()
 
-    # 解析睡眠会话
+    # Parse sleep sessions.
     sleep_sessions = self._parse_sleep_sessions(sleep_records)
 
     if not sleep_sessions:
@@ -184,34 +184,32 @@ class SleepAnalyzer:
         data_range=data_range,
       )
 
-    # 分析睡眠质量
+    # Analyze sleep quality.
     quality_metrics = self.analyze_sleep_quality(sleep_sessions)
 
-    # 分析睡眠模式
+    # Analyze sleep patterns.
     pattern_analysis = self.analyze_sleep_patterns(sleep_sessions)
 
-    # 睡眠-心率关联分析
+    # Sleep-heart rate correlation analysis.
     hr_correlation = None
     if heart_rate_records:
       hr_correlation = self.analyze_sleep_hr_correlation(
         sleep_sessions, heart_rate_records
       )
 
-    # 生成汇总数据
+    # Generate summary data.
     daily_summary = self._generate_daily_summary(sleep_sessions)
     weekly_summary = self._generate_weekly_summary(sleep_sessions)
 
-    # 异常检测（基于睡眠时长和效率）
+    # Anomaly detection (based on duration and efficiency).
     anomalies = self._detect_sleep_anomalies(sleep_sessions)
     anomaly_report = {
       "total_sessions": len(sleep_sessions),
       "anomalies_detected": len(anomalies),
-      "anomaly_rate": len(anomalies) / len(sleep_sessions)
-      if sleep_sessions
-      else 0,
+      "anomaly_rate": len(anomalies) / len(sleep_sessions) if sleep_sessions else 0,
     }
 
-    # 趋势分析
+    # Trend analysis.
     trends = {}
     if not daily_summary.empty:
       duration_trend = self.stat_analyzer.analyze_trend(
@@ -226,7 +224,7 @@ class SleepAnalyzer:
       if efficiency_trend:
         trends["efficiency"] = efficiency_trend
 
-    # 生成Highlights和建议
+    # Generate highlights and recommendations.
     highlights = self._generate_highlights(
       quality_metrics, pattern_analysis, hr_correlation, trends, anomalies
     )
@@ -234,7 +232,7 @@ class SleepAnalyzer:
       quality_metrics, pattern_analysis, hr_correlation, anomalies
     )
 
-    # 数据质量评估
+    # Data quality assessment.
     data_quality = self._assess_data_quality(sleep_records)
 
     report = SleepAnalysisReport(
@@ -258,19 +256,14 @@ class SleepAnalyzer:
     logger.info("Comprehensive sleep analysis completed")
     return report
 
-  def _parse_sleep_sessions(
-    self, records: list[HealthRecord]
-  ) -> list[SleepSession]:
-    """解析睡眠会话
-
-    将原始睡眠记录解析为结构化的睡眠会话
-    """
+  def _parse_sleep_sessions(self, records: list[HealthRecord]) -> list[SleepSession]:
+    """Parse sleep sessions from raw sleep records."""
     logger.info(f"Parsing {len(records)} sleep records into sessions")
 
-    # 按日期分组记录
+    # Group records by date.
     records_by_date = {}
     for record in records:
-      # 确保start_date是datetime对象
+      # Ensure start_date is a datetime object.
       if isinstance(record.start_date, datetime):
         date_key = record.start_date.date()
         if date_key not in records_by_date:
@@ -294,8 +287,8 @@ class SleepAnalyzer:
   def _parse_single_sleep_session(
     self, date: date, records: list[HealthRecord]
   ) -> SleepSession | None:
-    """解析单次睡眠会话"""
-    # 过滤出睡眠分析记录
+    """Parse a single sleep session."""
+    # Filter sleep analysis records.
     sleep_records = [
       r for r in records if r.type == "HKCategoryTypeIdentifierSleepAnalysis"
     ]
@@ -303,14 +296,14 @@ class SleepAnalyzer:
     if not sleep_records:
       return None
 
-    # 按时间排序
+    # Sort by time.
     sleep_records.sort(key=lambda r: r.start_date)
 
-    # 识别独立的睡眠会话
-    # Apple Health通常将连续的睡眠记录分组为会话
-    # 我们需要找到主要的睡眠会话（通常是最长的连续睡眠期）
+    # Identify distinct sleep sessions.
+    # Apple Health groups continuous sleep records into sessions.
+    # We pick the main session (typically the longest continuous period).
 
-    # 首先，识别"InBed"记录，这些定义了睡眠会话的边界
+    # First, identify "InBed" records that define session boundaries.
     in_bed_records = [
       r
       for r in sleep_records
@@ -320,14 +313,14 @@ class SleepAnalyzer:
     ]
 
     if in_bed_records:
-      # 如果有InBed记录，使用它们来定义会话边界
-      # 通常一个睡眠会话对应一个InBed记录
+      # Use InBed records to define session boundaries.
+      # Typically one InBed record corresponds to one session.
       main_bed_record = max(
         in_bed_records,
         key=lambda r: (r.end_date - r.start_date).total_seconds(),
       )
       session_start = main_bed_record.start_date
-      # 使用所有记录的最大结束时间作为会话结束
+      # Use the latest end time as the session end.
       session_end = max(r.end_date for r in sleep_records)
       session_records = [
         r
@@ -335,17 +328,17 @@ class SleepAnalyzer:
         if r.start_date >= session_start and r.end_date <= session_end
       ]
     else:
-      # 如果没有明确的InBed记录，尝试通过时间间隔识别会话
-      # 将间隔超过2小时的记录分为不同会话
+      # If no InBed records exist, split sessions by time gaps.
+      # Gaps over 2 hours are treated as separate sessions.
       sessions = []
       current_session = [sleep_records[0]]
 
       for i in range(1, len(sleep_records)):
         prev_end = sleep_records[i - 1].end_date
         curr_start = sleep_records[i].start_date
-        gap = (curr_start - prev_end).total_seconds() / 3600  # 小时
+        gap = (curr_start - prev_end).total_seconds() / 3600  # Hours.
 
-        if gap > 2:  # 超过2小时间隔，认为是不同会话
+        if gap > 2:  # Gaps over 2 hours are separate sessions.
           sessions.append(current_session)
           current_session = [sleep_records[i]]
         else:
@@ -353,13 +346,11 @@ class SleepAnalyzer:
 
       sessions.append(current_session)
 
-      # 选择最长的会话（通常是主要的夜间睡眠）
+      # Pick the longest session (typically main nighttime sleep).
       if sessions:
         main_session = max(
           sessions,
-          key=lambda s: sum(
-            (r.end_date - r.start_date).total_seconds() for r in s
-          ),
+          key=lambda s: sum((r.end_date - r.start_date).total_seconds() for r in s),
         )
         session_records = main_session
         session_start = min(r.start_date for r in session_records)
@@ -369,15 +360,15 @@ class SleepAnalyzer:
         session_start = min(r.start_date for r in sleep_records)
         session_end = max(r.end_date for r in sleep_records)
 
-    # 计算总时长（在床时间）
+    # Compute total duration (time in bed).
     total_duration = (session_end - session_start).total_seconds() / 60
 
-    # 调试输出
+    # Debug output.
     logger.debug(
       f"Session time range: {session_start} to {session_end}, total_duration={total_duration:.1f}min, records={len(session_records)}"
     )
 
-    # 解析睡眠阶段
+    # Parse sleep stages.
     stages = []
     sleep_duration = 0
     awake_duration = 0
@@ -386,11 +377,9 @@ class SleepAnalyzer:
     rem_sleep = 0
     light_sleep = 0
 
-    # 调试：记录前几个记录的详细信息
-    logger.debug(
-      f"Debugging sleep records for {date} (total: {len(sleep_records)}):"
-    )
-    for i, record in enumerate(sleep_records[:3]):  # 只显示前3个
+    # Debug: log the first few records.
+    logger.debug(f"Debugging sleep records for {date} (total: {len(sleep_records)}):")
+    for i, record in enumerate(sleep_records[:3]):  # Show only the first 3.
       logger.debug(
         f"  Record {i}: type={record.type}, value={getattr(record, 'value', 'N/A')}, "
         f"start={record.start_date}, end={record.end_date}"
@@ -401,19 +390,19 @@ class SleepAnalyzer:
         stage_type = record.value
         duration = (record.end_date - record.start_date).total_seconds() / 60
 
-        # 调试：记录stage_type的类型和值
+        # Debug: log stage_type type and value.
         if len(sleep_records) <= 10:
           logger.debug(
             f"  Processing stage: raw_value={stage_type} (type: {type(stage_type)})"
           )
 
-        # Apple Health的睡眠阶段是字符串格式，需要转换
-        # 从调试日志看，实际格式是：
+        # Apple Health stages are string values that need mapping.
+        # From logs, formats look like:
         # HKCategoryValueSleepAnalysisAsleepCore -> Core
         # HKCategoryValueSleepAnalysisAsleepDeep -> Deep
         # HKCategoryValueSleepAnalysisAwake -> Awake
         # HKCategoryValueSleepAnalysisAsleepREM -> REM
-        # HKCategoryValueSleepAnalysisAsleepUnspecified -> Asleep (或其他)
+        # HKCategoryValueSleepAnalysisAsleepUnspecified -> Asleep (or others)
         if isinstance(stage_type, str):
           if stage_type == "HKCategoryValueSleepAnalysisInBed":
             stage_type = "InBed"
@@ -426,42 +415,43 @@ class SleepAnalyzer:
           elif stage_type == "HKCategoryValueSleepAnalysisAsleepREM":
             stage_type = "REM"
           elif stage_type == "HKCategoryValueSleepAnalysisAsleepUnspecified":
-            stage_type = "Asleep"  # 归类为一般睡眠
-          # 如果是其他未知格式，尝试提取最后一部分
+            stage_type = "Asleep"  # Default to general sleep.
+          # For unknown formats, try to extract the suffix.
           elif stage_type.startswith("HKCategoryValueSleepAnalysisAsleep"):
-            # 提取"Asleep"后的部分，如"AsleepLight" -> "Light"
-            suffix = stage_type.replace(
-              "HKCategoryValueSleepAnalysisAsleep", ""
-            )
+            # Extract suffix after "Asleep", e.g. "AsleepLight" -> "Light".
+            suffix = stage_type.replace("HKCategoryValueSleepAnalysisAsleep", "")
             if suffix:
               stage_type = suffix
             else:
               stage_type = "Asleep"
           elif stage_type.startswith("HKCategoryValueSleepAnalysis"):
             stage_type = stage_type.replace("HKCategoryValueSleepAnalysis", "")
-          # 保持其他字符串不变
+          # Preserve other strings.
         else:
-          # 其他类型，转换为字符串
+          # For other types, convert to string.
           stage_type = str(stage_type)
 
         if len(sleep_records) <= 10:
           logger.debug(f"  Mapped stage: {stage_type}")
 
-        # 类型检查：确保stage_type是有效的睡眠阶段
+        # Type check: ensure stage_type is a valid stage.
         if stage_type in ["InBed", "Asleep", "Awake", "Core", "Deep", "REM"]:
           stages.append(
             SleepStage(
-              stage=stage_type,  # type: ignore
+              stage=cast(
+                Literal["InBed", "Asleep", "Awake", "Core", "Deep", "REM"],
+                stage_type,
+              ),
               start_date=record.start_date,
               end_date=record.end_date,
               duration_minutes=duration,
             )
           )
 
-        # 修正睡眠时长计算逻辑：
-        # - "Asleep" 是通用睡眠阶段，可能与具体阶段重叠
-        # - "Core"、"Deep"、"REM" 是具体睡眠阶段
-        # - 优先使用具体阶段，如果没有具体阶段则使用"Asleep"
+        # Sleep duration calculation:
+        # - "Asleep" is generic and may overlap with specific stages.
+        # - "Core", "Deep", "REM" are specific stages.
+        # - Prefer specific stages; fall back to "Asleep" when needed.
         if stage_type in ["Core", "Deep", "REM"]:
           sleep_duration += duration
           if stage_type == "Core":
@@ -471,27 +461,27 @@ class SleepAnalyzer:
           elif stage_type == "REM":
             rem_sleep += duration
         elif stage_type == "Asleep":
-          # 只有当没有具体睡眠阶段时，才使用"Asleep"作为浅睡眠
-          # 这里简化处理：如果"Asleep"与其他具体阶段不重叠，则计入浅睡眠
+          # Use "Asleep" for light sleep only when no specific stages exist.
+          # Simplified: count as light sleep if not overlapping.
           light_sleep += duration
           sleep_duration += duration
         elif stage_type == "Awake":
           awake_duration += duration
         elif stage_type == "InBed":
-          # InBed是总的在床时间，不计入睡眠时长，但用于计算效率
+          # InBed is total time in bed, not counted in sleep duration.
           pass
 
-    # 调试输出
+    # Debug output.
     if len(sleep_records) <= 10:
       logger.debug(
         f"Session summary for {date}: total_duration={total_duration:.1f}min, "
         f"sleep_duration={sleep_duration:.1f}min, stages_count={len(stages)}"
       )
 
-    # 计算睡眠效率
+    # Compute sleep efficiency.
     efficiency = sleep_duration / total_duration if total_duration > 0 else 0
 
-    # 计算入睡潜伏期（从上床到第一次入睡的时间）
+    # Compute sleep latency (time from bed to first sleep).
     sleep_latency = 0
     if stages:
       first_asleep = next(
@@ -499,11 +489,9 @@ class SleepAnalyzer:
         None,
       )
       if first_asleep:
-        sleep_latency = (
-          first_asleep.start_date - session_start
-        ).total_seconds() / 60
+        sleep_latency = (first_asleep.start_date - session_start).total_seconds() / 60
 
-    # 计算觉醒次数和时长
+    # Compute awakenings and awake duration.
     awake_stages = [s for s in stages if s.stage == "Awake"]
     awakenings_count = len(awake_stages)
     wake_after_onset = sum(s.duration_minutes for s in awake_stages)
@@ -549,16 +537,16 @@ class SleepAnalyzer:
 
     logger.info(f"Analyzing sleep quality from {len(sleep_sessions)} sessions")
 
-    # 基础指标
+    # Basic metrics.
     durations = [s.total_duration for s in sleep_sessions]
     efficiencies = [s.efficiency for s in sleep_sessions]
     latencies = [s.sleep_latency for s in sleep_sessions]
 
-    average_duration = sum(durations) / len(durations) / 60  # 转换为小时
+    average_duration = sum(durations) / len(durations) / 60  # Convert to hours.
     average_efficiency = sum(efficiencies) / len(efficiencies)
     average_latency = sum(latencies) / len(latencies)
 
-    # 规律性评分（基于变异系数CV = std/mean，越小越一致）
+    # Consistency scores (coefficient of variation: std/mean).
     duration_series = pd.Series(durations)
     efficiency_series = pd.Series(efficiencies)
     latency_series = pd.Series(latencies)
@@ -579,7 +567,7 @@ class SleepAnalyzer:
       else float("inf")
     )
 
-    # CV在0-1之间认为是好的，超过1则认为变异过大
+    # CV in 0-1 is acceptable; >1 indicates high variability.
     duration_consistency = max(0, min(1, 1 - duration_cv))
     efficiency_consistency = max(0, min(1, 1 - efficiency_cv))
     latency_consistency = max(0, min(1, 1 - latency_cv))
@@ -588,7 +576,7 @@ class SleepAnalyzer:
       duration_consistency + efficiency_consistency + latency_consistency
     ) / 3
 
-    # 睡眠阶段占比（基于有阶段数据的会话）
+    # Stage percentages (sessions with stage data only).
     sessions_with_stages = [
       s
       for s in sleep_sessions
@@ -624,13 +612,13 @@ class SleepAnalyzer:
         light_sleep_percentage
       ) = 0
 
-    # 综合质量评分（0-100）
-    # 基于时长（25%）、效率（25%）、规律性（25%）、阶段分布（25%）
-    duration_score = min(100, average_duration / 8 * 100)  # 8小时为满分
+    # Overall quality score (0-100).
+    # Based on duration (25%), efficiency (25%), consistency (25%), stages (25%).
+    duration_score = min(100, average_duration / 8 * 100)  # 8 hours is full score.
     efficiency_score = average_efficiency * 100
     consistency_score_100 = consistency_score * 100
 
-    # 睡眠阶段评分（基于深睡眠和REM占比）
+    # Stage score based on deep sleep and REM percentages.
     stage_score = (
       deep_sleep_percentage * 40
       + rem_sleep_percentage * 30
@@ -660,13 +648,13 @@ class SleepAnalyzer:
   def analyze_sleep_patterns(
     self, sleep_sessions: list[SleepSession]
   ) -> SleepPatternAnalysis:
-    """分析睡眠模式
+    """Analyze sleep patterns.
 
     Args:
-        sleep_sessions: 睡眠会话列表
+        sleep_sessions: List of sleep sessions.
 
     Returns:
-        睡眠模式分析结果
+        Sleep pattern analysis results.
     """
     if not sleep_sessions:
       return SleepPatternAnalysis(
@@ -680,7 +668,7 @@ class SleepAnalyzer:
 
     logger.info(f"Analyzing sleep patterns from {len(sleep_sessions)} sessions")
 
-    # 提取就寝和起床时间
+    # Extract bedtimes and wake times.
     bedtimes = []
     waketimes = []
     weekdays_data = []
@@ -693,8 +681,8 @@ class SleepAnalyzer:
       bedtimes.append(bedtime)
       waketimes.append(waketime)
 
-      # 区分周末和工作日
-      if session.start_date.weekday() < 5:  # 周一到周五
+      # Separate weekdays and weekends.
+      if session.start_date.weekday() < 5:  # Monday to Friday.
         weekdays_data.append(
           {
             "bedtime": bedtime,
@@ -703,7 +691,7 @@ class SleepAnalyzer:
             "efficiency": session.efficiency,
           }
         )
-      else:  # 周六、周日
+      else:  # Saturday and Sunday.
         weekends_data.append(
           {
             "bedtime": bedtime,
@@ -713,18 +701,16 @@ class SleepAnalyzer:
           }
         )
 
-    # 计算规律性
+    # Compute consistency.
     bedtime_consistency = (
       1 - (pd.Series(bedtimes).std() / 6) if bedtimes else 0
-    )  # 6小时范围
-    waketime_consistency = (
-      1 - (pd.Series(waketimes).std() / 6) if waketimes else 0
-    )
+    )  # 6-hour range.
+    waketime_consistency = 1 - (pd.Series(waketimes).std() / 6) if waketimes else 0
 
     bedtime_consistency = max(0, min(1, bedtime_consistency))
     waketime_consistency = max(0, min(1, waketime_consistency))
 
-    # 周末vs工作日对比
+    # Weekend vs weekday comparison.
     weekday_vs_weekend = {}
 
     if weekdays_data and weekends_data:
@@ -733,24 +719,21 @@ class SleepAnalyzer:
 
       weekday_vs_weekend = {
         "bedtime_difference": weekend_avg["bedtime"] - weekday_avg["bedtime"],
-        "waketime_difference": weekend_avg["waketime"]
-        - weekday_avg["waketime"],
-        "duration_difference": (
-          weekend_avg["duration"] - weekday_avg["duration"]
-        )
-        / 60,  # 小时
+        "waketime_difference": weekend_avg["waketime"] - weekday_avg["waketime"],
+        "duration_difference": (weekend_avg["duration"] - weekday_avg["duration"])
+        / 60,  # Hours.
         "social_jetlag": abs(
           weekend_avg["bedtime"] - weekday_avg["bedtime"]
-        ),  # 社会时差
+        ),  # Social jetlag.
       }
 
-    # 季节性模式（简化版）
+    # Seasonal patterns (simplified).
     seasonal_patterns = self._analyze_seasonal_patterns(sleep_sessions)
 
-    # 趋势分析（基于最近的数据）
-    recent_sessions = sorted(
-      sleep_sessions, key=lambda s: s.start_date, reverse=True
-    )[:30]  # 最近30天
+    # Trend analysis (based on recent data).
+    recent_sessions = sorted(sleep_sessions, key=lambda s: s.start_date, reverse=True)[
+      :30
+    ]  # Most recent 30 days.
 
     if len(recent_sessions) >= 7:
       recent_durations = [s.total_duration for s in recent_sessions[:7]]
@@ -772,15 +755,15 @@ class SleepAnalyzer:
     else:
       duration_trend = "stable"
 
-    # 效率趋势
+    # Efficiency trend.
     if len(recent_sessions) >= 7:
       recent_efficiency = [s.efficiency for s in recent_sessions[:7]]
       older_efficiency = [s.efficiency for s in recent_sessions[7:14]]
 
       if older_efficiency:
-        efficiency_change = sum(recent_efficiency) / len(
-          recent_efficiency
-        ) - sum(older_efficiency) / len(older_efficiency)
+        efficiency_change = sum(recent_efficiency) / len(recent_efficiency) - sum(
+          older_efficiency
+        ) / len(older_efficiency)
         efficiency_trend = (
           "improving"
           if efficiency_change > 0.05
@@ -807,27 +790,25 @@ class SleepAnalyzer:
     sleep_sessions: list[SleepSession],
     heart_rate_records: list[HealthRecord],
   ) -> SleepHeartRateCorrelation | None:
-    """分析睡眠-心率关联
+    """Analyze sleep-heart rate correlation.
 
     Args:
-        sleep_sessions: 睡眠会话列表
-        heart_rate_records: 心率记录列表
+        sleep_sessions: List of sleep sessions.
+        heart_rate_records: List of heart rate records.
 
     Returns:
-        睡眠-心率关联分析结果
+        Sleep-heart rate correlation results.
     """
     if not sleep_sessions or not heart_rate_records:
       return None
 
     logger.info("Analyzing sleep-heart rate correlation")
 
-    # 将心率记录转换为DataFrame
+    # Convert heart rate records to a DataFrame.
     hr_data = []
     for r in heart_rate_records:
-      # 检查是否是QuantityRecord或CategoryRecord子类，这些类有value属性
-      if isinstance(r, (QuantityRecord, CategoryRecord)) and hasattr(
-        r, "start_date"
-      ):
+      # Check for QuantityRecord or CategoryRecord with value attributes.
+      if isinstance(r, (QuantityRecord, CategoryRecord)) and hasattr(r, "start_date"):
         hr_data.append(
           {
             "timestamp": r.start_date,
@@ -843,11 +824,11 @@ class SleepAnalyzer:
     if hr_df.empty:
       return None
 
-    # 计算每个睡眠会话的心率指标
+    # Compute heart rate metrics per sleep session.
     sleep_hr_metrics = []
 
     for session in sleep_sessions:
-      # 获取该睡眠会话期间的心率数据
+      # Get heart rate data during this session.
       session_hr = hr_df[
         (hr_df["timestamp"] >= session.start_date)
         & (hr_df["timestamp"] <= session.end_date)
@@ -858,8 +839,8 @@ class SleepAnalyzer:
         hr_std = session_hr["value"].std()
         min_hr = session_hr["value"].min()
 
-        # 计算入睡时心率下降效率
-        # 入睡前1小时的平均心率 vs 入睡后1小时的平均心率
+        # Calculate heart rate drop efficiency around sleep onset.
+        # Compare 1 hour before vs 1 hour after sleep start.
         pre_sleep_hr = hr_df[
           (hr_df["timestamp"] >= session.start_date - timedelta(hours=1))
           & (hr_df["timestamp"] < session.start_date)
@@ -889,18 +870,16 @@ class SleepAnalyzer:
     if not sleep_hr_metrics:
       return None
 
-    # 计算平均指标
-    avg_sleep_hr = sum(m["avg_hr"] for m in sleep_hr_metrics) / len(
-      sleep_hr_metrics
-    )
+    # Compute averaged metrics.
+    avg_sleep_hr = sum(m["avg_hr"] for m in sleep_hr_metrics) / len(sleep_hr_metrics)
     hr_variability = sum(m["hr_variability"] for m in sleep_hr_metrics) / len(
       sleep_hr_metrics
     )
-    hr_drop_efficiency = sum(
-      m["hr_drop_efficiency"] for m in sleep_hr_metrics
-    ) / len(sleep_hr_metrics)
+    hr_drop_efficiency = sum(m["hr_drop_efficiency"] for m in sleep_hr_metrics) / len(
+      sleep_hr_metrics
+    )
 
-    # 恢复质量评分（基于心率变异性和下降效率）
+    # Recovery quality score (based on HR variability and drop efficiency).
     recovery_quality = (hr_variability * 0.4 + hr_drop_efficiency * 0.6) * 100
     recovery_quality = max(0, min(100, recovery_quality))
 
@@ -911,14 +890,12 @@ class SleepAnalyzer:
       recovery_quality=round(recovery_quality, 1),
     )
 
-  def _generate_daily_summary(
-    self, sleep_sessions: list[SleepSession]
-  ) -> pd.DataFrame:
-    """生成每日睡眠汇总"""
+  def _generate_daily_summary(self, sleep_sessions: list[SleepSession]) -> pd.DataFrame:
+    """Generate daily sleep summary."""
     if not sleep_sessions:
       return pd.DataFrame()
 
-    # 按日期分组
+    # Group by date.
     daily_data = {}
     for session in sleep_sessions:
       date = session.start_date.date()
@@ -926,10 +903,10 @@ class SleepAnalyzer:
         daily_data[date] = []
       daily_data[date].append(session)
 
-    # 为每一天创建汇总
+    # Create per-day summary rows.
     summary_rows = []
     for date, sessions in daily_data.items():
-      # 如果一天有多个会话，取最长的
+      # If multiple sessions in a day, pick the longest.
       main_session = max(sessions, key=lambda s: s.total_duration)
 
       summary_rows.append(
@@ -950,13 +927,13 @@ class SleepAnalyzer:
   def _generate_weekly_summary(
     self, sleep_sessions: list[SleepSession]
   ) -> pd.DataFrame:
-    """生成每周睡眠汇总"""
+    """Generate weekly sleep summary."""
     daily_df = self._generate_daily_summary(sleep_sessions)
 
     if daily_df.empty:
       return pd.DataFrame()
 
-    # 按周聚合
+    # Aggregate by week.
     daily_df["week"] = pd.to_datetime(daily_df["date"]).dt.to_period("W")
 
     weekly_summary = (
@@ -975,7 +952,7 @@ class SleepAnalyzer:
       .round(2)
     )
 
-    # 重新整理列名
+    # Normalize column names.
     weekly_summary.columns = [
       "days_recorded",
       "avg_duration",
@@ -992,14 +969,12 @@ class SleepAnalyzer:
 
     return weekly_summary
 
-  def _detect_sleep_anomalies(
-    self, sleep_sessions: list[SleepSession]
-  ) -> list[Any]:
-    """检测睡眠异常"""
+  def _detect_sleep_anomalies(self, sleep_sessions: list[SleepSession]) -> list[Any]:
+    """Detect sleep anomalies."""
     if not sleep_sessions:
       return []
 
-    # 转换为DataFrame用于异常检测
+    # Convert to a DataFrame for anomaly detection.
     df = pd.DataFrame(
       [
         {
@@ -1012,11 +987,11 @@ class SleepAnalyzer:
       ]
     )
 
-    # 检测异常的睡眠时长和效率
+    # Detect duration and efficiency anomalies.
     anomalies = []
 
-    # 由于AnomalyDetector期望HealthRecord对象，我们直接使用统计方法
-    # 时长异常检测
+    # AnomalyDetector expects HealthRecord objects; use stats directly.
+    # Duration anomaly detection.
     duration_values = df["total_duration"].dropna()
     if len(duration_values) >= 3:
       duration_mean = duration_values.mean()
@@ -1025,7 +1000,7 @@ class SleepAnalyzer:
         for _, row in df.iterrows():
           if pd.notna(row["total_duration"]):
             z_score = abs(row["total_duration"] - duration_mean) / duration_std
-            if z_score > 3.0:  # 使用3倍标准差作为阈值
+            if z_score > 3.0:  # Use 3-sigma threshold.
               anomalies.append(
                 {
                   "timestamp": row["start_date"],
@@ -1042,7 +1017,7 @@ class SleepAnalyzer:
                 }
               )
 
-    # 效率异常检测
+    # Efficiency anomaly detection.
     efficiency_values = df["efficiency"].dropna()
     if len(efficiency_values) >= 3:
       efficiency_mean = efficiency_values.mean()
@@ -1051,11 +1026,11 @@ class SleepAnalyzer:
         for _, row in df.iterrows():
           if pd.notna(row["efficiency"]):
             z_score = abs(row["efficiency"] - efficiency_mean) / efficiency_std
-            if z_score > 3.0:  # 使用3倍标准差作为阈值
+            if z_score > 3.0:  # Use 3-sigma threshold.
               anomalies.append(
                 {
                   "timestamp": row["start_date"],
-                  "value": row["efficiency"] * 100,  # 转换为百分比
+                  "value": row["efficiency"] * 100,  # Convert to percentage.
                   "expected_value": efficiency_mean * 100,
                   "deviation": z_score,
                   "severity": "high"
@@ -1073,11 +1048,11 @@ class SleepAnalyzer:
   def _analyze_seasonal_patterns(
     self, sleep_sessions: list[SleepSession]
   ) -> dict[str, Any]:
-    """分析季节性模式（简化版）"""
+    """Analyze seasonal patterns (simplified)."""
     if len(sleep_sessions) < 10:
       return {}
 
-    # 按月份分组
+    # Group by month.
     monthly_data = {}
     for session in sleep_sessions:
       month = session.start_date.month
@@ -1085,10 +1060,10 @@ class SleepAnalyzer:
         monthly_data[month] = []
       monthly_data[month].append(session.total_duration)
 
-    # 计算每月平均
+    # Compute monthly averages.
     seasonal_patterns = {}
     for month, durations in monthly_data.items():
-      if len(durations) >= 3:  # 至少3天数据
+      if len(durations) >= 3:  # At least 3 days of data.
         seasonal_patterns[f"month_{month}"] = {
           "avg_duration": sum(durations) / len(durations),
           "count": len(durations),
@@ -1099,7 +1074,7 @@ class SleepAnalyzer:
   def _calculate_data_range(
     self, records: list[HealthRecord]
   ) -> tuple[datetime, datetime]:
-    """计算数据时间范围"""
+    """Compute data time range."""
     if not records:
       now = datetime.now()
       return (now, now)
@@ -1122,33 +1097,29 @@ class SleepAnalyzer:
     trends: dict[str, Any],
     anomalies: list[Any],
   ) -> list[str]:
-    """生成Highlights"""
+    """Generate highlights."""
     highlights = []
 
-    # 睡眠质量Highlights
+    # Sleep quality highlights.
     if quality:
       duration_hours = quality.average_duration
       if duration_hours >= 7:
         highlights.append(f"😴 平均睡眠时长{duration_hours:.1f}小时，睡眠充足")
       elif duration_hours < 6:
-        highlights.append(
-          f"⚠️ 平均睡眠时长仅{duration_hours:.1f}小时，建议增加睡眠时间"
-        )
+        highlights.append(f"⚠️ 平均睡眠时长仅{duration_hours:.1f}小时，建议增加睡眠时间")
 
       efficiency_pct = quality.average_efficiency * 100
       if efficiency_pct >= 85:
         highlights.append(f"💤 睡眠效率{efficiency_pct:.0f}%，睡眠质量良好")
       else:
-        highlights.append(
-          f"⚠️ 睡眠效率仅{efficiency_pct:.0f}%，可能存在睡眠问题"
-        )
+        highlights.append(f"⚠️ 睡眠效率仅{efficiency_pct:.0f}%，可能存在睡眠问题")
 
       if quality.consistency_score >= 0.7:
         highlights.append("📅 睡眠规律性良好，有助于身体恢复")
       else:
         highlights.append("⏰ 睡眠时间不规律，建议调整作息时间")
 
-    # 睡眠模式Highlights
+    # Sleep pattern highlights.
     if patterns:
       if patterns.bedtime_consistency >= 0.8:
         highlights.append("🌙 就寝时间很规律")
@@ -1158,14 +1129,14 @@ class SleepAnalyzer:
       if patterns.weekday_vs_weekend.get("social_jetlag", 0) > 2:
         highlights.append("⚠️ 工作日和周末作息差异较大，可能影响生物钟")
 
-    # 睡眠-心率关联Highlights
+    # Sleep-heart rate highlights.
     if hr_corr:
       if hr_corr.recovery_quality >= 80:
         highlights.append("💚 睡眠期间心率恢复良好，身体恢复状态佳")
       elif hr_corr.recovery_quality < 60:
         highlights.append("⚠️ 睡眠期间心率恢复不佳，建议关注压力管理")
 
-    # 趋势Highlights
+    # Trend highlights.
     if trends:
       duration_trend_obj = trends.get("duration")
       if duration_trend_obj and hasattr(duration_trend_obj, "trend_direction"):
@@ -1175,7 +1146,7 @@ class SleepAnalyzer:
         elif duration_trend == "decreasing":
           highlights.append("📉 睡眠时长呈下降趋势")
 
-    # 异常检测Highlights
+    # Anomaly highlights.
     if anomalies:
       anomaly_count = len(anomalies)
       if anomaly_count > 0:
@@ -1190,10 +1161,10 @@ class SleepAnalyzer:
     hr_corr: SleepHeartRateCorrelation | None,
     anomalies: list[Any],
   ) -> list[str]:
-    """生成建议"""
+    """Generate recommendations."""
     recommendations = []
 
-    # 基于睡眠质量的建议
+    # Recommendations based on sleep quality.
     if quality:
       if quality.average_duration < 7:
         recommendations.append("建议每天保证7-9小时的睡眠时间")
@@ -1204,9 +1175,9 @@ class SleepAnalyzer:
       if quality.average_latency > 30:
         recommendations.append("建立睡前放松 routine，避免使用电子设备")
 
-    # 基于睡眠模式的建议
+    # Recommendations based on sleep patterns.
     if patterns:
-      # 计算综合一致性评分
+      # Compute overall consistency score.
       overall_consistency = (
         patterns.bedtime_consistency + patterns.waketime_consistency
       ) / 2
@@ -1217,11 +1188,11 @@ class SleepAnalyzer:
       if social_jetlag > 2:
         recommendations.append("减少周末和工作日的作息差异，维持生物钟稳定")
 
-    # 基于心率关联的建议
+    # Recommendations based on heart rate correlation.
     if hr_corr and hr_corr.recovery_quality < 70:
       recommendations.append("睡前避免剧烈运动和咖啡因，保持放松状态")
 
-    # 通用建议
+    # General recommendations.
     if not recommendations:
       recommendations.extend(
         [
@@ -1234,36 +1205,32 @@ class SleepAnalyzer:
     return recommendations
 
   def _assess_data_quality(self, records: list[HealthRecord]) -> float:
-    """评估数据质量"""
+    """Assess data quality."""
     if not records:
       return 0.0
 
-    # 检查记录完整性
+    # Check record completeness.
     total_records = len(records)
     sleep_analysis_records = sum(
       1 for r in records if r.type == "HKCategoryTypeIdentifierSleepAnalysis"
     )
 
-    # 睡眠分析记录占比
-    completeness = (
-      sleep_analysis_records / total_records if total_records > 0 else 0
-    )
+    # Proportion of sleep analysis records.
+    completeness = sleep_analysis_records / total_records if total_records > 0 else 0
 
-    # 检查时间连续性（是否有规律的记录）
+    # Check temporal continuity (regular logging).
     if records:
       dates = sorted({r.start_date.date() for r in records})
       if len(dates) > 1:
-        date_diffs = [
-          (dates[i + 1] - dates[i]).days for i in range(len(dates) - 1)
-        ]
+        date_diffs = [(dates[i + 1] - dates[i]).days for i in range(len(dates) - 1)]
         avg_gap = sum(date_diffs) / len(date_diffs)
-        continuity = max(0, 1 - avg_gap / 7)  # 7天为满分
+        continuity = max(0, 1 - avg_gap / 7)  # 7 days is full score.
       else:
         continuity = 0.5
     else:
       continuity = 0
 
-    # 综合评分
+    # Combined score.
     quality_score = (completeness + continuity) / 2
 
     return round(float(quality_score), 3)
