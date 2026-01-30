@@ -177,9 +177,58 @@ class TestConfigValidation:
 
   def test_validate_output_dir_not_writable(self):
     """Test validation fails for non-writable output directory."""
-    # This is hard to test on Windows, so we'll skip this test
-    # On Unix systems, we could create a directory and remove write permissions
-    pytest.skip("Output directory write test not applicable on Windows")
+    import os
+    import stat
+
+    # Create a temporary file for the required export_xml_path
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".xml") as tmp_file:
+      tmp_path = Path(tmp_file.name)
+
+    try:
+      if os.name == "posix":  # Unix-like systems (Linux, macOS)
+        # Create a directory and remove write permissions
+        with tempfile.TemporaryDirectory() as tmp_dir:
+          output_dir = Path(tmp_dir) / "readonly_output"
+          output_dir.mkdir()
+
+          # Remove write permissions
+          output_dir.chmod(stat.S_IRUSR | stat.S_IXUSR)  # Read and execute only
+
+          try:
+            with pytest.raises(
+              ValueError, match="Output directory is not writable"
+            ):
+              Config(export_xml_path=tmp_path, output_dir=output_dir)
+          finally:
+            # Restore permissions for cleanup
+            try:
+              output_dir.chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
+            except OSError:
+              pass  # Ignore if we can't restore permissions
+
+      else:  # Windows and other systems
+        # On Windows, we can't easily create a read-only directory that affects the current user
+        # Instead, we'll mock the write test to fail
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+          output_dir = Path(tmp_dir) / "mock_readonly_output"
+          output_dir.mkdir()
+
+          # Mock the write test to raise an exception
+          with (
+            patch("pathlib.Path.mkdir"),
+            patch.object(
+              Path, "write_text", side_effect=OSError("Permission denied")
+            ),
+          ):
+            with pytest.raises(
+              ValueError, match="Output directory is not writable"
+            ):
+              Config(export_xml_path=tmp_path, output_dir=output_dir)
+
+    finally:
+      tmp_path.unlink(missing_ok=True)
 
   def test_validate_log_level_valid(self):
     """Test validation of valid log levels."""
