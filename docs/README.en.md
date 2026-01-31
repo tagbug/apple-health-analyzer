@@ -2,12 +2,15 @@
 
 Apple Health data analysis tooling for heart-rate and sleep insights.
 
+Language: English | `docs/README.zh.md` (Chinese)
+
 ## Core Features
 - **Streaming parser** for Apple Health XML exports.
 - **Heart rate analysis** with trends, anomaly signals, and HRV evaluation.
 - **Sleep analysis** with quality scoring and stage summaries.
 - **Data export** to CSV or JSON.
 - **Visual reports** with interactive or static charts.
+- **i18n output** for CLI, logs, reports, and charts (English/Chinese).
 
 ## Installation
 ### Using uv (recommended)
@@ -27,7 +30,7 @@ pip install -e .
 ## Quick Start
 ### Export Apple Health Data
 1. Open the Health app on iPhone.
-2. Tap your profile photo and choose “Export All Health Data”.
+2. Tap your profile photo and choose "Export All Health Data".
 3. Transfer `export.xml` into the repository (for example, `export_data`).
 
 ### Generate Sample Data
@@ -43,6 +46,17 @@ uv run python main.py report example/example.xml --age 30 --gender male
 uv run python main.py visualize example/example.xml -c all --interactive
 ```
 
+## Locale and i18n
+You can set the locale globally via `.env` or per-command with `--locale`.
+
+```bash
+# .env
+LOCALE=en
+
+# CLI override
+uv run python main.py --locale zh info example/example.xml
+```
+
 ## CLI Usage
 ```bash
 uv run python main.py [OPTIONS] COMMAND [ARGS]...
@@ -50,6 +64,7 @@ uv run python main.py [OPTIONS] COMMAND [ARGS]...
 Options:
   --config PATH    Configuration file path
   --verbose, -v    Enable verbose logging
+  --locale [en|zh] Output locale
   --version        Show version
   --help           Show help
 
@@ -90,6 +105,7 @@ uv run python main.py analyze export_data/export.xml --output ./analysis_results
 uv run python main.py report export_data/export.xml --age 30 --gender male
 uv run python main.py report export_data/export.xml --format markdown --age 30 --gender male
 uv run python main.py report export_data/export.xml --format both --age 30 --gender male
+uv run python main.py report export_data/export.xml --format html --age 30 --gender male --locale zh
 ```
 
 ### Generate Charts
@@ -120,6 +136,7 @@ LOG_LEVEL=INFO
 LOG_FILE=./logs/health_analyzer.log
 BATCH_SIZE=1000
 MEMORY_LIMIT_MB=500
+LOCALE=en
 ```
 
 ## Development
