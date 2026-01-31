@@ -16,14 +16,18 @@ from src.processors.validator import (
   ValidationResult,
   validate_health_data,
 )
+from src.i18n import Translator, resolve_locale
 
 
 class TestValidationResult:
   """Test ValidationResult class."""
 
+  def _result(self) -> ValidationResult:
+    return ValidationResult(Translator(resolve_locale()))
+
   def test_initialization(self):
     """Test result initialization."""
-    result = ValidationResult()
+    result = self._result()
 
     assert result.is_valid is True
     assert result.errors == []
@@ -35,7 +39,7 @@ class TestValidationResult:
 
   def test_add_error(self):
     """Test adding errors."""
-    result = ValidationResult()
+    result = self._result()
 
     result.add_error("Test error", "test_type")
 
@@ -48,7 +52,7 @@ class TestValidationResult:
 
   def test_add_warning(self):
     """Test adding warnings."""
-    result = ValidationResult()
+    result = self._result()
 
     result.add_warning("Test warning", "test_type")
 
@@ -60,7 +64,7 @@ class TestValidationResult:
 
   def test_add_outlier(self):
     """Test adding outliers."""
-    result = ValidationResult()
+    result = self._result()
 
     mock_record = MagicMock()
     mock_record.record_type = "test_type"
@@ -78,7 +82,7 @@ class TestValidationResult:
 
   def test_set_consistency_check(self):
     """Test setting consistency checks."""
-    result = ValidationResult()
+    result = self._result()
 
     result.set_consistency_check("test_check", True)
     assert result.consistency_checks["test_check"] is True
@@ -90,7 +94,7 @@ class TestValidationResult:
 
   def test_get_summary(self):
     """Test getting summary."""
-    result = ValidationResult()
+    result = self._result()
 
     result.add_error("Error 1", "type1")
     result.add_warning("Warning 1", "type2")
@@ -111,6 +115,9 @@ class TestValidationResult:
 
 class TestDataValidator:
   """Test DataValidator class."""
+
+  def _result(self) -> ValidationResult:
+    return ValidationResult(Translator(resolve_locale()))
 
   def test_initialization(self):
     """Test validator initialization."""
@@ -165,7 +172,7 @@ class TestDataValidator:
   def test_validate_basic_fields_missing_source(self):
     """Test validation of missing source name."""
     validator = DataValidator()
-    result = ValidationResult()
+    result = self._result()
 
     # Create record with missing source_name
     record = QuantityRecord(
@@ -183,12 +190,13 @@ class TestDataValidator:
     validator._validate_basic_fields(record, result)
 
     assert len(result.errors) > 0
-    assert any("source_name" in error for error in result.errors)
+    translator = Translator(resolve_locale())
+    assert translator.t("validation.error.missing_source") in result.errors
 
   def test_validate_basic_fields_invalid_dates(self):
     """Test validation of invalid dates."""
     validator = DataValidator()
-    result = ValidationResult()
+    result = self._result()
 
     # Create record with end_date before start_date
     # Note: Pydantic will prevent creation of invalid records, so we test the validation logic directly
@@ -208,17 +216,21 @@ class TestDataValidator:
       validator._validate_basic_fields(record, result)
     except Exception:
       # Expected: Pydantic validation prevents invalid date creation
-      result.add_error("end_date is before start_date", "date_validation")
+      translator = Translator(resolve_locale())
+      result.add_error(
+        translator.t("validation.error.end_before_start"), "date_validation"
+      )
 
     assert len(result.errors) > 0
-    assert any(
-      "end_date is before start_date" in error for error in result.errors
+    assert (
+      Translator(resolve_locale()).t("validation.error.end_before_start")
+      in result.errors
     )
 
   def test_validate_quantity_record_out_of_range(self):
     """Test validation of quantity records with out-of-range values."""
     validator = DataValidator()
-    result = ValidationResult()
+    result = self._result()
 
     # Create record with heart rate too high
     record = QuantityRecord(
@@ -236,12 +248,20 @@ class TestDataValidator:
     validator._validate_quantity_record(record, result)
 
     assert len(result.warnings) > 0
-    assert any("above maximum" in warning for warning in result.warnings)
+    translator = Translator(resolve_locale())
+    assert any(
+      warning.startswith(
+        translator.t(
+          "validation.warning.value_above_max", value=300, max=250, unit="count/min"
+        ).split(" ")[0]
+      )
+      for warning in result.warnings
+    )
 
   def test_validate_category_record_invalid_value(self):
     """Test validation of category records."""
     validator = DataValidator()
-    result = ValidationResult()
+    result = self._result()
 
     # Create category record with empty value
     record = CategoryRecord(
@@ -259,12 +279,13 @@ class TestDataValidator:
     validator._validate_category_record(record, result)
 
     assert len(result.errors) > 0
-    assert any("Empty category value" in error for error in result.errors)
+    translator = Translator(resolve_locale())
+    assert translator.t("validation.error.category_empty") in result.errors
 
   def test_validate_heart_rate_record_extreme_values(self):
     """Test validation of heart rate records with extreme values."""
     validator = DataValidator()
-    result = ValidationResult()
+    result = self._result()
 
     # Test physiologically impossible low value
     record_low = HeartRateRecord(
@@ -282,12 +303,18 @@ class TestDataValidator:
     validator._validate_heart_rate_record(record_low, result)
 
     assert len(result.errors) > 0
-    assert any("physiologically impossible" in error for error in result.errors)
+    translator = Translator(resolve_locale())
+    assert any(
+      error.startswith(
+        translator.t("validation.error.hr_impossible", value=10).split(" ")[0]
+      )
+      for error in result.errors
+    )
 
   def test_validate_sleep_record_invalid_stage(self):
     """Test validation of sleep records."""
     validator = DataValidator()
-    result = ValidationResult()
+    result = self._result()
 
     # Create sleep record with invalid stage
     record = SleepRecord(
@@ -305,12 +332,16 @@ class TestDataValidator:
     validator._validate_sleep_record(record, result)
 
     assert len(result.warnings) > 0
-    assert any("Unknown sleep stage" in warning for warning in result.warnings)
+    translator = Translator(resolve_locale())
+    assert (
+      translator.t("validation.warning.sleep_stage_unknown", value="InvalidStage")
+      in result.warnings
+    )
 
   def test_validate_workout_record_invalid_duration(self):
     """Test validation of workout records."""
     validator = DataValidator()
-    result = ValidationResult()
+    result = self._result()
 
     # Create workout record with negative duration
     record = WorkoutRecord(
@@ -327,12 +358,13 @@ class TestDataValidator:
     validator._validate_workout_record(record, result)
 
     assert len(result.errors) > 0
-    assert any("Invalid workout duration" in error for error in result.errors)
+    translator = Translator(resolve_locale())
+    assert translator.t("validation.error.workout_duration") in result.errors
 
   def test_validate_activity_summary_record_negative_values(self):
     """Test validation of activity summary records."""
     validator = DataValidator()
-    result = ValidationResult()
+    result = self._result()
 
     # Create activity summary with negative values
     record = ActivitySummaryRecord(
@@ -351,12 +383,16 @@ class TestDataValidator:
     validator._validate_activity_summary_record(record, result)
 
     assert len(result.errors) > 0
-    assert any("Negative value" in error for error in result.errors)
+    translator = Translator(resolve_locale())
+    assert (
+      translator.t("validation.error.activity_negative", field="move_calories")
+      in result.errors
+    )
 
   def test_detect_outliers_insufficient_data(self):
     """Test outlier detection with insufficient data."""
     validator = DataValidator()
-    result = ValidationResult()
+    result = self._result()
 
     # Only a few records (less than min_samples_for_stats)
     records = [
@@ -382,7 +418,7 @@ class TestDataValidator:
   def test_detect_outliers_with_data(self):
     """Test outlier detection with sufficient data."""
     validator = DataValidator()
-    result = ValidationResult()
+    result = ValidationResult(Translator(resolve_locale()))
 
     # Create records with one clear outlier
     records = [
@@ -422,7 +458,7 @@ class TestDataValidator:
   def test_perform_consistency_checks_duplicate_timestamps(self):
     """Test consistency checks for duplicate timestamps."""
     validator = DataValidator()
-    result = ValidationResult()
+    result = ValidationResult(Translator(resolve_locale()))
 
     records = [
       QuantityRecord(
@@ -457,7 +493,7 @@ class TestDataValidator:
   def test_validate_cross_record_consistency(self):
     """Test cross-record consistency validation."""
     validator = DataValidator()
-    result = ValidationResult()
+    result = ValidationResult(Translator(resolve_locale()))
 
     # Create records for the same day - heart rate and workout
     records = [

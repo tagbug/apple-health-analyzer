@@ -40,7 +40,7 @@ class TestHealthRecord:
     start_date = datetime.now(UTC)
     end_date = start_date.replace(hour=start_date.hour - 1)
 
-    with pytest.raises(ValueError, match="end_date cannot be before start_date"):
+    with pytest.raises(ValueError, match="validation.error.end_before_start"):
       HealthRecord(
         type="HKQuantityTypeIdentifierHeartRate",
         source_name="Apple Watch",
@@ -352,7 +352,7 @@ class TestRecordCreation:
 
     record, warnings = create_record_from_xml_element(invalid_element)
     assert record is None  # Should return None for invalid elements
-    assert warnings == ["Missing required field: type"]
+    assert warnings == ["parser.warning.missing_required_field:type"]
 
 
 class TestWorkoutRecord:

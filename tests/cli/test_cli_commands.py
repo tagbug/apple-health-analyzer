@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 from click.testing import CliRunner
 
 from src.cli import cli
+from src.i18n import Translator, resolve_locale
 
 
 def _sample_stats():
@@ -36,7 +37,10 @@ def test_parse_empty_file(tmp_path, monkeypatch):
   result = runner.invoke(cli, ["parse", str(xml_path)])
 
   assert result.exit_code == 1
-  assert "File is empty" in result.output
+  translator = Translator(resolve_locale())
+  message = translator.t("cli.parse.file_empty", path=xml_path)
+  assert message.split(": ", maxsplit=1)[0] in result.output
+  assert str(xml_path) in result.output
 
 
 @patch("src.cli._save_parsed_data")
@@ -108,7 +112,8 @@ def test_parse_no_records(mock_parser, tmp_path, monkeypatch):
   result = runner.invoke(cli, ["parse", str(xml_path)])
 
   assert result.exit_code == 1
-  assert "No records were parsed" in result.output
+  translator = Translator(resolve_locale())
+  assert translator.t("cli.parse.no_records") in result.output
 
 
 @patch("src.cli.StreamingXMLParser", side_effect=Exception("boom"))
@@ -123,7 +128,8 @@ def test_parse_parser_init_error(mock_parser, tmp_path, monkeypatch):
   result = runner.invoke(cli, ["parse", str(xml_path)])
 
   assert result.exit_code == 1
-  assert "Failed to initialize parser" in result.output
+  translator = Translator(resolve_locale())
+  assert translator.t("cli.parse.init_parser_failed", error="boom") in result.output
 
 
 @patch("src.cli.get_export_file_info")
@@ -149,7 +155,8 @@ def test_info_success(mock_file_info, tmp_path):
   result = runner.invoke(cli, ["info", str(xml_path)])
 
   assert result.exit_code == 0
-  assert "File Information" in result.output
+  translator = Translator(resolve_locale())
+  assert translator.t("cli.info.file_info_title") in result.output
 
 
 @patch("src.cli.get_export_file_info", return_value=None)
@@ -162,7 +169,8 @@ def test_info_missing_file_info(mock_file_info, tmp_path):
   result = runner.invoke(cli, ["info", str(xml_path)])
 
   assert result.exit_code == 0
-  assert "Failed to analyze file" in result.output
+  translator = Translator(resolve_locale())
+  assert translator.t("cli.info.failed_analysis") in result.output
 
 
 @patch("src.cli.ET.iterparse", side_effect=Exception("parse error"))
@@ -183,7 +191,8 @@ def test_info_parse_warning(mock_file_info, mock_iterparse, tmp_path):
   result = runner.invoke(cli, ["info", str(xml_path)])
 
   assert result.exit_code == 0
-  assert "Warning: Could not parse all records" in result.output
+  translator = Translator(resolve_locale())
+  assert translator.t("cli.info.partial_parse", error="parse error") in result.output
 
 
 def test_export_success(tmp_path, monkeypatch):
@@ -217,7 +226,8 @@ def test_export_success(tmp_path, monkeypatch):
   result = runner.invoke(cli, ["export", str(xml_path), "--output", str(output_dir)])
 
   assert result.exit_code == 0
-  assert "Export completed successfully" in result.output
+  translator = Translator(resolve_locale())
+  assert translator.t("cli.export.success") in result.output
 
 
 def test_export_no_records(tmp_path, monkeypatch):
@@ -247,7 +257,8 @@ def test_export_no_records(tmp_path, monkeypatch):
   result = runner.invoke(cli, ["export", str(xml_path)])
 
   assert result.exit_code == 1
-  assert "No records were exported" in result.output
+  translator = Translator(resolve_locale())
+  assert translator.t("cli.export.no_records") in result.output
 
 
 def test_export_error(tmp_path, monkeypatch):
@@ -277,7 +288,8 @@ def test_export_error(tmp_path, monkeypatch):
   result = runner.invoke(cli, ["export", str(xml_path)])
 
   assert result.exit_code == 1
-  assert "Error: boom" in result.output
+  translator = Translator(resolve_locale())
+  assert f"{translator.t('cli.common.error')}: boom" in result.output
 
 
 def test_analyze_requires_age_gender(tmp_path):
@@ -289,7 +301,8 @@ def test_analyze_requires_age_gender(tmp_path):
   result = runner.invoke(cli, ["analyze", str(xml_path), "--types", "cardio_fitness"])
 
   assert result.exit_code == 1
-  assert "Age and gender are required" in result.output
+  translator = Translator(resolve_locale())
+  assert translator.t("cli.analyze.age_gender_required") in result.output
 
 
 def test_analyze_invalid_date_range(tmp_path):
@@ -303,7 +316,8 @@ def test_analyze_invalid_date_range(tmp_path):
   )
 
   assert result.exit_code == 1
-  assert "Invalid date range format" in result.output
+  translator = Translator(resolve_locale())
+  assert translator.t("cli.analyze.invalid_date_range") in result.output
 
 
 @patch("src.cli._display_highlights")
@@ -411,4 +425,5 @@ def test_benchmark_error(mock_benchmark, tmp_path):
   result = runner.invoke(cli, ["benchmark", str(xml_path), "--output", str(tmp_path)])
 
   assert result.exit_code == 1
-  assert "Error: boom" in result.output
+  translator = Translator(resolve_locale())
+  assert f"{translator.t('cli.common.error')}: boom" in result.output

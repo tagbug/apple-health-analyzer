@@ -11,6 +11,7 @@ from src.analyzers.highlights import HealthHighlights
 from src.processors.heart_rate import HeartRateAnalysisReport
 from src.processors.sleep import SleepAnalysisReport
 from src.visualization.reports import ReportGenerator
+from src.i18n import Translator, resolve_locale
 
 
 class TestReportGenerator:
@@ -20,6 +21,11 @@ class TestReportGenerator:
   def report_generator(self):
     """Create ReportGenerator fixture."""
     return ReportGenerator()
+
+  @pytest.fixture
+  def zh_translator(self):
+    """Create Chinese translator fixture."""
+    return Translator(resolve_locale("zh"))
 
   @pytest.fixture
   def sample_heart_rate_report(self):
@@ -129,6 +135,7 @@ class TestReportGenerator:
         sleep_report=sample_sleep_report,
         highlights=sample_highlights,
         include_charts=False,  # Skip charts to simplify test.
+        locale="zh",
       )
 
       assert report_path.exists()
@@ -140,7 +147,8 @@ class TestReportGenerator:
       assert "执行摘要" in content
       assert "心率分析" in content
       assert "睡眠分析" in content
-      assert "关键发现与建议" in content
+      assert "关键发现" in content
+      assert 'lang="zh' in content
 
   def test_generate_markdown_report(
     self,
@@ -158,6 +166,7 @@ class TestReportGenerator:
         heart_rate_report=sample_heart_rate_report,
         sleep_report=sample_sleep_report,
         highlights=sample_highlights,
+        locale="zh",
       )
 
       assert report_path.exists()
@@ -229,6 +238,7 @@ class TestReportGenerator:
         report=mock_report,
         title="综合健康分析报告",
         include_charts=False,  # Skip charts to simplify test.
+        locale="zh",
       )
 
       assert report_path.exists()
@@ -266,6 +276,7 @@ class TestReportGenerator:
         report=mock_report,
         title="最小数据报告",
         include_charts=False,
+        locale="zh",
       )
 
       assert report_path.exists()
@@ -273,11 +284,11 @@ class TestReportGenerator:
       assert "最小数据报告" in content
       assert "75.0%" in content  # Wellness score.
 
-  def test_html_structure_creation(self, report_generator):
+  def test_html_structure_creation(self, report_generator, zh_translator):
     """Test HTML structure creation."""
     title = "测试报告"
 
-    html = report_generator._create_html_structure(title)
+    html = report_generator._create_html_structure(title, zh_translator)
 
     assert "<!DOCTYPE html>" in html
     assert title in html
@@ -290,10 +301,14 @@ class TestReportGenerator:
     sample_heart_rate_report,
     sample_sleep_report,
     sample_highlights,
+    zh_translator,
   ):
     """Test executive summary creation."""
     summary_html = report_generator._create_executive_summary(
-      sample_heart_rate_report, sample_sleep_report, sample_highlights
+      sample_heart_rate_report,
+      sample_sleep_report,
+      sample_highlights,
+      zh_translator,
     )
 
     assert "执行摘要" in summary_html
@@ -302,23 +317,27 @@ class TestReportGenerator:
     assert "30" in summary_html  # Sleep records.
 
   def test_heart_rate_section_creation(
-    self, report_generator, sample_heart_rate_report
+    self, report_generator, sample_heart_rate_report, zh_translator
   ):
     """Test heart rate section creation."""
     section_html = report_generator._create_heart_rate_section(
-      sample_heart_rate_report, include_charts=False
+      sample_heart_rate_report,
+      include_charts=False,
+      translator=zh_translator,
     )
 
-    assert "心率分析" in section_html
-    assert "数据概览" in section_html
-    assert "静息心率分析" in section_html
+    assert zh_translator.t("report.section.heart_rate") in section_html
+    assert zh_translator.t("report.section.data_overview") in section_html
+    assert zh_translator.t("report.section.resting_hr") in section_html
     assert "68 bpm" in section_html  # Current value.
     assert "EXCELLENT" in section_html  # Rating.
 
-  def test_sleep_section_creation(self, report_generator, sample_sleep_report):
+  def test_sleep_section_creation(
+    self, report_generator, sample_sleep_report, zh_translator
+  ):
     """Test sleep section creation."""
     section_html = report_generator._create_sleep_section(
-      sample_sleep_report, include_charts=False
+      sample_sleep_report, include_charts=False, translator=zh_translator
     )
 
     assert "睡眠分析" in section_html
@@ -327,37 +346,45 @@ class TestReportGenerator:
     assert "7.5" in section_html  # Average duration.
     assert "85%" in section_html  # Average efficiency.
 
-  def test_highlights_section_creation(self, report_generator, sample_highlights):
+  def test_highlights_section_creation(
+    self, report_generator, sample_highlights, zh_translator
+  ):
     """Test highlights section creation."""
-    section_html = report_generator._create_highlights_section(sample_highlights)
+    section_html = report_generator._create_highlights_section(
+      sample_highlights, zh_translator
+    )
 
-    assert "关键发现与建议" in section_html
+    assert zh_translator.t("report.section.key_findings") in section_html
     assert "insight-list" in section_html
     assert "心率改善趋势" in section_html
     assert "睡眠质量需要关注" in section_html
     assert "保持规律的运动习惯" in section_html
 
   def test_data_quality_section_creation(
-    self, report_generator, sample_heart_rate_report, sample_sleep_report
+    self,
+    report_generator,
+    sample_heart_rate_report,
+    sample_sleep_report,
+    zh_translator,
   ):
     """Test data quality section creation."""
     section_html = report_generator._create_data_quality_section(
-      sample_heart_rate_report, sample_sleep_report
+      sample_heart_rate_report, sample_sleep_report, zh_translator
     )
 
-    assert "数据质量信息" in section_html
-    assert "心率数据" in section_html
-    assert "睡眠数据" in section_html
+    assert zh_translator.t("report.section.data_quality_info") in section_html
+    assert zh_translator.t("report.section.heart_rate") in section_html
+    assert zh_translator.t("report.section.sleep") in section_html
 
-  def test_close_html_structure(self, report_generator):
+  def test_close_html_structure(self, report_generator, zh_translator):
     """Test HTML structure closing."""
-    closing_html = report_generator._close_html_structure()
+    closing_html = report_generator._close_html_structure(zh_translator)
 
     assert "</body>" in closing_html
     assert "</html>" in closing_html
     assert "footer" in closing_html
 
-  def test_comprehensive_summary_creation(self, report_generator):
+  def test_comprehensive_summary_creation(self, report_generator, zh_translator):
     """Test comprehensive summary creation."""
     mock_report = Mock()
     mock_report.overall_wellness_score = 0.88
@@ -367,7 +394,9 @@ class TestReportGenerator:
     mock_report.data_completeness_score = 0.92
     mock_report.analysis_confidence = 0.89
 
-    summary_html = report_generator._create_comprehensive_summary(mock_report)
+    summary_html = report_generator._create_comprehensive_summary(
+      mock_report, zh_translator
+    )
 
     assert "执行摘要" in summary_html
     assert "dashboard-grid" in summary_html
@@ -375,7 +404,7 @@ class TestReportGenerator:
     assert "92.0%" in summary_html  # Data completeness.
     assert "89.0%" in summary_html  # Confidence.
 
-  def test_detailed_analysis_sections_creation(self, report_generator):
+  def test_detailed_analysis_sections_creation(self, report_generator, zh_translator):
     """Test detailed analysis section creation."""
     mock_report = Mock()
 
@@ -395,14 +424,16 @@ class TestReportGenerator:
     mock_activity.activity_consistency_score = 0.78
     mock_report.activity_patterns = mock_activity
 
-    sections_html = report_generator._create_detailed_analysis_sections(mock_report, {})
+    sections_html = report_generator._create_detailed_analysis_sections(
+      mock_report, {}, zh_translator
+    )
 
     assert "睡眠质量分析" in sections_html
     assert "活动模式分析" in sections_html
     assert "7.8" in sections_html  # Sleep duration.
     assert "9,500" in sections_html  # Steps.
 
-  def test_recommendations_section_creation(self, report_generator):
+  def test_recommendations_section_creation(self, report_generator, zh_translator):
     """Test recommendations section creation."""
     mock_report = Mock()
 
@@ -424,7 +455,9 @@ class TestReportGenerator:
       "⚠️ 注意压力管理",
     ]
 
-    recommendations_html = report_generator._create_recommendations_section(mock_report)
+    recommendations_html = report_generator._create_recommendations_section(
+      mock_report, zh_translator
+    )
 
     assert "个性化建议" in recommendations_html
     assert "优先行动项目" in recommendations_html
@@ -469,6 +502,7 @@ class TestReportGenerator:
           report=mock_report,
           title="错误处理测试",
           include_charts=True,
+          locale="zh",
         )
 
         assert report_path.exists()

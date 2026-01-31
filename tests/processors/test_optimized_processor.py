@@ -25,9 +25,7 @@ class TestOptimizedDataFrame:
 
   def test_initialization_valid(self):
     """Test valid initialization."""
-    timestamps = np.array(
-      [np.datetime64("2024-01-01"), np.datetime64("2024-01-02")]
-    )
+    timestamps = np.array([np.datetime64("2024-01-01"), np.datetime64("2024-01-02")])
     values = np.array([70.0, 75.0])
     types = np.array(["HR", "HR"])
     sources = np.array(["Watch", "Watch"])
@@ -41,24 +39,18 @@ class TestOptimizedDataFrame:
 
   def test_initialization_invalid_lengths(self):
     """Test initialization with mismatched array lengths."""
-    timestamps = np.array(
-      [np.datetime64("2024-01-01"), np.datetime64("2024-01-02")]
-    )
+    timestamps = np.array([np.datetime64("2024-01-01"), np.datetime64("2024-01-02")])
     values = np.array([70.0])  # Different length
     types = np.array(["HR", "HR"])
     sources = np.array(["Watch", "Watch"])
     units = np.array(["bpm", "bpm"])
 
-    with pytest.raises(
-      ValueError, match="All arrays must have the same length"
-    ):
+    with pytest.raises(ValueError, match="optimized.error.array_length_mismatch"):
       OptimizedDataFrame(timestamps, values, types, sources, units)
 
   def test_to_pandas(self):
     """Test conversion to pandas DataFrame."""
-    timestamps = np.array(
-      [np.datetime64("2024-01-01"), np.datetime64("2024-01-02")]
-    )
+    timestamps = np.array([np.datetime64("2024-01-01"), np.datetime64("2024-01-02")])
     values = np.array([70.0, 75.0])
     types = np.array(["HR", "HR"])
     sources = np.array(["Watch", "Watch"])
@@ -154,9 +146,7 @@ class TestParallelProcessor:
     def process_func(chunk):
       return len(chunk)
 
-    results = processor.process_records_parallel(
-      records, process_func, chunk_size=10
-    )
+    results = processor.process_records_parallel(records, process_func, chunk_size=10)
 
     assert len(results) == 1  # Small dataset, no chunking
     assert results[0] == 5
@@ -200,9 +190,7 @@ class TestParallelProcessor:
     def process_func(chunk):
       return len(chunk)
 
-    results = processor.process_records_parallel(
-      records, process_func, chunk_size=10
-    )
+    results = processor.process_records_parallel(records, process_func, chunk_size=10)
 
     assert len(results) == 3  # 25 records / 10 chunk_size = 3 chunks
     assert results == ["result1", "result2", "result3"]
@@ -246,9 +234,7 @@ class TestParallelProcessor:
     def process_func(chunk):
       return len(chunk)
 
-    results = processor.process_records_parallel(
-      records, process_func, chunk_size=10
-    )
+    results = processor.process_records_parallel(records, process_func, chunk_size=10)
 
     assert len(results) == 2  # Two successful results (first and third chunks)
     assert results == ["result1", "result3"]

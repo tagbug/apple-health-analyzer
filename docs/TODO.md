@@ -16,11 +16,11 @@
 - [x] Update docs/TODO.md
 
 ## Phase 3 - Tests
-- [ ] Add unit tests for translator and key coverage
-- [ ] Add CLI/report i18n tests
+- [x] Add unit tests for translator and key coverage
+- [x] Add CLI/report i18n tests
 - [ ] Validate integration tests and coverage
-- [ ] Write docs/phase-3-tests.md
-- [ ] Update docs/TODO.md
+- [x] Write docs/phase-3-tests.md
+- [x] Update docs/TODO.md
 
 ## Phase 4 - Finalization
 - [ ] Write docs/final-report.md (optimizations + gaps)

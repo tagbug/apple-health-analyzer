@@ -9,6 +9,7 @@ from src.analyzers.highlights import (
   HealthInsight,
   HighlightsGenerator,
 )
+from src.i18n import Translator, resolve_locale
 from src.processors.heart_rate import (
   CardioFitnessAnalysis,
   HeartRateAnalysisReport,
@@ -98,7 +99,15 @@ class TestHighlightsGenerator:
     insights = generator._generate_heart_rate_insights(mock_heart_rate_report)
 
     # Should include resting HR improvement insight.
-    hr_improvement = next((i for i in insights if "静息心率改善" in i.title), None)
+    translator = Translator(resolve_locale())
+    hr_improvement = next(
+      (
+        i
+        for i in insights
+        if translator.t("highlights.heart_rate.resting_hr_improved.title") in i.title
+      ),
+      None,
+    )
     assert hr_improvement is not None
     assert hr_improvement.priority == "high"
     assert hr_improvement.category == "heart_rate"
@@ -111,10 +120,20 @@ class TestHighlightsGenerator:
     insights = generator._generate_heart_rate_insights(mock_heart_rate_report)
 
     # Should include HRV improvement insight.
-    hrv_improvement = next((i for i in insights if "心率变异性改善" in i.title), None)
+    translator = Translator(resolve_locale())
+    hrv_improvement = next(
+      (
+        i
+        for i in insights
+        if translator.t("highlights.heart_rate.hrv_improving.title") in i.title
+      ),
+      None,
+    )
     assert hrv_improvement is not None
     assert hrv_improvement.priority == "medium"
-    assert "压力" in hrv_improvement.message
+    assert translator.t("highlights.heart_rate.hrv_improving.message") in (
+      hrv_improvement.message
+    )
 
   def test_generate_heart_rate_insights_cardio_fitness(
     self, generator, mock_heart_rate_report
@@ -123,10 +142,25 @@ class TestHighlightsGenerator:
     insights = generator._generate_heart_rate_insights(mock_heart_rate_report)
 
     # Should include cardio fitness insight.
-    cardio = next((i for i in insights if "心肺适能评级" in i.title), None)
+    translator = Translator(resolve_locale())
+    cardio = next(
+      (
+        i
+        for i in insights
+        if translator.t("highlights.heart_rate.cardio_rating.title") in i.title
+      ),
+      None,
+    )
     assert cardio is not None
     assert cardio.priority == "medium"
-    assert "优秀" in cardio.message
+    assert (
+      translator.t(
+        "highlights.heart_rate.cardio_rating.message",
+        rating=translator.t("highlights.heart_rate.cardio_rating.excellent"),
+        vo2=42.0,
+      )
+      in cardio.message
+    )
 
   def test_generate_sleep_insights_duration_insufficient(self, generator):
     """Test sleep insights for insufficient duration."""
@@ -147,7 +181,15 @@ class TestHighlightsGenerator:
     insights = generator._generate_sleep_insights(sleep_report)
 
     # Should include insufficient duration insight.
-    duration_issue = next((i for i in insights if "睡眠时长不足" in i.title), None)
+    translator = Translator(resolve_locale())
+    duration_issue = next(
+      (
+        i
+        for i in insights
+        if translator.t("highlights.sleep.duration_low.title") in i.title
+      ),
+      None,
+    )
     assert duration_issue is not None
     assert duration_issue.priority == "high"
     assert "6.0" in duration_issue.message
@@ -171,7 +213,15 @@ class TestHighlightsGenerator:
     insights = generator._generate_sleep_insights(sleep_report)
 
     # Should include low efficiency insight.
-    efficiency_issue = next((i for i in insights if "睡眠效率低下" in i.title), None)
+    translator = Translator(resolve_locale())
+    efficiency_issue = next(
+      (
+        i
+        for i in insights
+        if translator.t("highlights.sleep.efficiency_low.title") in i.title
+      ),
+      None,
+    )
     assert efficiency_issue is not None
     assert efficiency_issue.priority == "high"
     assert "82.0%" in efficiency_issue.message
@@ -203,8 +253,14 @@ class TestHighlightsGenerator:
     insights = generator._generate_sleep_insights(sleep_report)
 
     # Should include social jetlag insight.
+    translator = Translator(resolve_locale())
     jetlag_issue = next(
-      (i for i in insights if "周末和工作日作息差异大" in i.title), None
+      (
+        i
+        for i in insights
+        if translator.t("highlights.sleep.social_jetlag_high.title") in i.title
+      ),
+      None,
     )
     assert jetlag_issue is not None
     assert jetlag_issue.priority == "medium"
@@ -223,24 +279,47 @@ class TestHighlightsGenerator:
     assert len(insights) == 3
 
     # High correlation.
-    high_corr = next((i for i in insights if i.title == "睡眠与活动关联"), None)
+    translator = Translator(resolve_locale())
+    high_corr = next(
+      (
+        i
+        for i in insights
+        if i.title == translator.t("highlights.correlation.sleep_activity.title")
+      ),
+      None,
+    )
     assert high_corr is not None
     assert high_corr.priority == "high"
     assert high_corr.confidence == 0.9
     assert high_corr.message == "Strong positive"
 
     # Medium correlation.
-    med_corr = next((i for i in insights if i.title == "心率与压力关联"), None)
+    med_corr = next(
+      (
+        i
+        for i in insights
+        if i.title == translator.t("highlights.correlation.hr_stress.title")
+      ),
+      None,
+    )
     assert med_corr is not None
     assert med_corr.priority == "medium"
     assert med_corr.confidence == 0.8
 
     # Low correlation with default text.
-    low_corr = next((i for i in insights if "other" in i.title), None)
+    low_corr = next(
+      (
+        i
+        for i in insights
+        if translator.t("highlights.correlation.default.title", metric="other")
+        in i.title
+      ),
+      None,
+    )
     assert low_corr is not None
     assert low_corr.priority == "low"
     assert low_corr.confidence == 0.6
-    assert "负相关" in low_corr.message
+    assert translator.t("highlights.correlation.direction.negative") in low_corr.message
 
   def test_generate_correlation_insights_empty(self, generator):
     """Test correlation insights with empty data."""
@@ -315,8 +394,13 @@ class TestHighlightsGenerator:
     recommendations = generator._generate_recommendations(insights)
 
     assert len(recommendations) > 0
-    assert any("睡眠" in rec for rec in recommendations)
-    assert any("睡前" in rec for rec in recommendations)
+    translator = Translator(resolve_locale())
+    default_recommendations = {
+      translator.t("highlights.recommendation.default_exercise"),
+      translator.t("highlights.recommendation.default_checkup"),
+      translator.t("highlights.recommendation.default_routine"),
+    }
+    assert any(rec in default_recommendations for rec in recommendations)
 
   def test_generate_recommendations_stress_issues(self, generator):
     """Test recommendations for stress issues."""
@@ -326,13 +410,18 @@ class TestHighlightsGenerator:
         priority="high",
         title="高压力水平",
         message="High stress",
+        details={"issue": "stress_high"},
       ),
     ]
 
     recommendations = generator._generate_recommendations(insights)
 
     assert len(recommendations) > 0
-    assert any("压力" in rec for rec in recommendations)
+    translator = Translator(resolve_locale())
+    assert any(
+      translator.t("highlights.recommendation.stress_management") in rec
+      for rec in recommendations
+    )
 
   def test_generate_comprehensive_highlights(
     self, generator, mock_heart_rate_report, mock_sleep_report
@@ -354,9 +443,19 @@ class TestHighlightsGenerator:
 
     # Check insight titles.
     insight_titles = [i.title for i in highlights.insights]
-    assert any("静息心率改善" in title for title in insight_titles)
-    assert any("心率变异性改善" in title for title in insight_titles)
-    assert any("心肺适能评级" in title for title in insight_titles)
+    translator = Translator(resolve_locale())
+    assert any(
+      translator.t("highlights.heart_rate.resting_hr_improved.title") in title
+      for title in insight_titles
+    )
+    assert any(
+      translator.t("highlights.heart_rate.hrv_improving.title") in title
+      for title in insight_titles
+    )
+    assert any(
+      translator.t("highlights.heart_rate.cardio_rating.title") in title
+      for title in insight_titles
+    )
 
   def test_generate_comprehensive_highlights_empty(self, generator):
     """Test comprehensive highlights with empty input."""

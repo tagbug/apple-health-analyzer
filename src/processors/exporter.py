@@ -22,9 +22,9 @@ logger = get_logger(__name__)
 class ExportManifest:
   """Export manifest containing metadata about exported files."""
 
-  def __init__(self, export_dir: Path, translator: Translator):
+  def __init__(self, export_dir: Path, translator: Translator | None = None):
     self.export_dir = export_dir
-    self.translator = translator
+    self.translator = translator or Translator(resolve_locale())
     self.manifest_path = export_dir / "manifest.json"
     self.manifest_data: dict[str, Any] = {
       "export_timestamp": pd.Timestamp.now().isoformat(),

@@ -129,7 +129,7 @@ class TestConfigValidation:
     """Test validation fails for nonexistent export XML path."""
     nonexistent_path = Path("/nonexistent/file.xml")
 
-    with pytest.raises(ValueError, match="Export XML file does not exist"):
+    with pytest.raises(ValueError, match="config.error.export_xml_not_found"):
       Config(export_xml_path=nonexistent_path)
 
   def test_validate_export_xml_path_not_file(self):
@@ -137,7 +137,7 @@ class TestConfigValidation:
     with tempfile.TemporaryDirectory() as tmp_dir:
       tmp_path = Path(tmp_dir)
 
-      with pytest.raises(ValueError, match="Export XML path is not a file"):
+      with pytest.raises(ValueError, match="config.error.export_xml_not_file"):
         Config(export_xml_path=tmp_path)
 
   def test_validate_output_dir_creation(self):
@@ -182,7 +182,7 @@ class TestConfigValidation:
           output_dir.chmod(stat.S_IRUSR | stat.S_IXUSR)  # Read and execute only
 
           try:
-            with pytest.raises(ValueError, match="Output directory is not writable"):
+            with pytest.raises(ValueError, match="config.error.output_not_writable"):
               Config(export_xml_path=tmp_path, output_dir=output_dir)
           finally:
             # Restore permissions for cleanup
@@ -205,7 +205,7 @@ class TestConfigValidation:
             patch("pathlib.Path.mkdir"),
             patch.object(Path, "write_text", side_effect=OSError("Permission denied")),
           ):
-            with pytest.raises(ValueError, match="Output directory is not writable"):
+            with pytest.raises(ValueError, match="config.error.output_not_writable"):
               Config(export_xml_path=tmp_path, output_dir=output_dir)
 
     finally:
@@ -228,7 +228,7 @@ class TestConfigValidation:
 
   def test_validate_log_level_invalid(self):
     """Test validation fails for invalid log level."""
-    with pytest.raises(ValueError, match="Invalid log level"):
+    with pytest.raises(ValueError, match="config.error.invalid_log_level"):
       # Create a temporary file for the required export_xml_path
       with tempfile.NamedTemporaryFile(delete=False, suffix=".xml") as tmp_file:
         tmp_path = Path(tmp_file.name)
@@ -539,7 +539,7 @@ class TestConfigErrorHandling:
   @patch.dict(os.environ, {"EXPORT_XML_PATH": "/nonexistent.xml"}, clear=True)
   def test_load_config_invalid_xml_path(self):
     """Test load_config with invalid XML path."""
-    with pytest.raises(ValueError, match="Export XML file does not exist"):
+    with pytest.raises(ValueError, match="config.error.export_xml_not_found"):
       load_config()
 
   @patch.dict(
@@ -555,7 +555,7 @@ class TestConfigErrorHandling:
     xml_path.write_text("<xml>test</xml>")
 
     try:
-      with pytest.raises(ValueError, match="Invalid log level"):
+      with pytest.raises(ValueError, match="config.error.invalid_log_level"):
         load_config()
     finally:
       xml_path.unlink(missing_ok=True)
