@@ -13,6 +13,7 @@ from ..analyzers.anomaly import AnomalyDetector, AnomalyReport
 from ..analyzers.statistical import StatisticalAnalyzer
 from ..core.data_models import HealthRecord, QuantityRecord
 from ..utils.logger import get_logger
+from ..i18n import Translator, resolve_locale
 from ..utils.type_conversion import safe_float
 
 logger = get_logger(__name__)
@@ -113,6 +114,7 @@ class HeartRateAnalyzer:
     self,
     age: int | None = None,
     gender: Literal["male", "female"] | None = None,
+    locale: str | None = None,
   ):
     """Initialize heart rate analyzer
 
@@ -122,12 +124,19 @@ class HeartRateAnalyzer:
     """
     self.age = age
     self.gender = gender
+    self.translator = Translator(resolve_locale(locale))
 
     # Initialize analysis components.
     self.stat_analyzer = StatisticalAnalyzer()
     self.anomaly_detector = AnomalyDetector()
 
-    logger.info(f"HeartRateAnalyzer initialized (age: {age}, gender: {gender})")
+    logger.info(
+      self.translator.t(
+        "log.heart_rate_analyzer.initialized",
+        age=age,
+        gender=gender,
+      )
+    )
 
   def analyze_comprehensive(
     self,
@@ -149,7 +158,7 @@ class HeartRateAnalyzer:
     Returns:
         Comprehensive analysis report
     """
-    logger.info("Starting comprehensive heart rate analysis")
+    logger.info(self.translator.t("log.heart_rate_analyzer.start_comprehensive"))
 
     # Determine data time range.
     all_records = (
@@ -161,7 +170,7 @@ class HeartRateAnalyzer:
     )
 
     if not all_records:
-      logger.warning("No heart rate records provided for analysis")
+      logger.warning(self.translator.t("log.heart_rate_analyzer.no_records"))
       return HeartRateAnalysisReport(
         analysis_date=datetime.now(),
         data_range=(datetime.now(), datetime.now()),
@@ -238,7 +247,7 @@ class HeartRateAnalyzer:
       record_count=len(heart_rate_records),
     )
 
-    logger.info("Comprehensive heart rate analysis completed")
+    logger.info(self.translator.t("log.heart_rate_analyzer.completed"))
     return report
 
   def analyze_resting_heart_rate(
@@ -255,7 +264,12 @@ class HeartRateAnalyzer:
     if not records:
       return None
 
-    logger.info(f"Analyzing resting heart rate from {len(records)} records")
+    logger.info(
+      self.translator.t(
+        "log.heart_rate_analyzer.analyzing_resting_hr",
+        count=len(records),
+      )
+    )
 
     # Convert to DataFrame.
     df = self._records_to_dataframe(records)
@@ -319,7 +333,12 @@ class HeartRateAnalyzer:
     if not records:
       return None
 
-    logger.info(f"Analyzing HRV from {len(records)} records")
+    logger.info(
+      self.translator.t(
+        "log.heart_rate_analyzer.analyzing_hrv",
+        count=len(records),
+      )
+    )
 
     # Convert to DataFrame.
     df = self._records_to_dataframe(records)
@@ -379,10 +398,17 @@ class HeartRateAnalyzer:
         Cardio fitness analysis results
     """
     if not records or not self.age or not self.gender:
-      logger.warning("VO2Max analysis requires age and gender information")
+      logger.warning(
+        self.translator.t("log.heart_rate_analyzer.vo2_requires_demographics")
+      )
       return None
 
-    logger.info(f"Analyzing cardio fitness from {len(records)} VO2Max records")
+    logger.info(
+      self.translator.t(
+        "log.heart_rate_analyzer.analyzing_vo2",
+        count=len(records),
+      )
+    )
 
     # Convert to DataFrame.
     df = self._records_to_dataframe(records)  # type: ignore
@@ -605,25 +631,25 @@ class HeartRateAnalyzer:
     if rating in ["poor", "fair"]:
       recommendations.extend(
         [
-          "建议每周进行3-4次有氧运动，每次30-45分钟",
-          "结合力量训练，每周2-3次",
-          "逐渐增加运动强度，避免过度疲劳",
+          self.translator.t("heart_rate.recommendation.aerobic_3_4"),
+          self.translator.t("heart_rate.recommendation.strength_2_3"),
+          self.translator.t("heart_rate.recommendation.increase_gradually"),
         ]
       )
     elif rating == "good":
       recommendations.extend(
         [
-          "保持当前训练强度，每周4-5次有氧运动",
-          "尝试间歇训练来提升心肺适能",
-          "定期监测VO2Max变化",
+          self.translator.t("heart_rate.recommendation.maintain_intensity"),
+          self.translator.t("heart_rate.recommendation.interval_training"),
+          self.translator.t("heart_rate.recommendation.monitor_vo2"),
         ]
       )
     elif rating in ["excellent", "superior"]:
       recommendations.extend(
         [
-          "维持高强度训练，考虑竞技运动",
-          "关注恢复和营养补充",
-          "可以尝试更高级的训练方法",
+          self.translator.t("heart_rate.recommendation.high_intensity"),
+          self.translator.t("heart_rate.recommendation.recovery_nutrition"),
+          self.translator.t("heart_rate.recommendation.advanced_methods"),
         ]
       )
 
@@ -644,52 +670,77 @@ class HeartRateAnalyzer:
     if resting_hr:
       if resting_hr.trend_direction == "decreasing":
         highlights.append(
-          f"🏆 静息心率下降{abs(resting_hr.change_from_baseline):.1f} bpm，健康状况改善"
+          self.translator.t(
+            "heart_rate.highlight.resting_hr_down",
+            change=abs(resting_hr.change_from_baseline),
+          )
         )
       elif resting_hr.trend_direction == "increasing":
         highlights.append(
-          f"⚠️ 静息心率上升{resting_hr.change_from_baseline:.1f} bpm，建议关注"
+          self.translator.t(
+            "heart_rate.highlight.resting_hr_up",
+            change=resting_hr.change_from_baseline,
+          )
         )
 
       if resting_hr.health_rating in ["excellent", "good"]:
         highlights.append(
-          f"💚 静息心率{resting_hr.current_value:.0f} bpm，处于{resting_hr.health_rating}水平"
+          self.translator.t(
+            "heart_rate.highlight.resting_hr_level",
+            value=resting_hr.current_value,
+            rating=resting_hr.health_rating,
+          )
         )
 
     # HRV Highlights
     if hrv:
       if hrv.trend_direction == "improving":
         highlights.append(
-          f"📈 HRV改善{abs(hrv.change_from_baseline):.1f} ms，恢复能力增强"
+          self.translator.t(
+            "heart_rate.highlight.hrv_improving",
+            change=abs(hrv.change_from_baseline),
+          )
         )
       elif hrv.trend_direction == "declining":
         highlights.append(
-          f"⚠️ HRV下降{abs(hrv.change_from_baseline):.1f} ms，建议管理压力"
+          self.translator.t(
+            "heart_rate.highlight.hrv_declining",
+            change=abs(hrv.change_from_baseline),
+          )
         )
 
       if hrv.stress_level == "low":
-        highlights.append("😌 压力水平较低，心率变异性良好")
+        highlights.append(self.translator.t("heart_rate.highlight.stress_low"))
       elif hrv.stress_level in ["high", "very_high"]:
-        highlights.append("😰 检测到较高压力水平，建议放松")
+        highlights.append(self.translator.t("heart_rate.highlight.stress_high"))
 
     # Cardio fitness highlights.
     if cardio:
       rating_desc = {
-        "superior": "卓越",
-        "excellent": "优秀",
-        "good": "良好",
-        "fair": "一般",
-        "poor": "需要改善",
+        "superior": self.translator.t("heart_rate.cardio_rating.superior"),
+        "excellent": self.translator.t("heart_rate.cardio_rating.excellent"),
+        "good": self.translator.t("heart_rate.cardio_rating.good"),
+        "fair": self.translator.t("heart_rate.cardio_rating.fair"),
+        "poor": self.translator.t("heart_rate.cardio_rating.poor"),
       }
       highlights.append(
-        f"🏃 心肺适能评级：{rating_desc[cardio.age_adjusted_rating]}（VO2Max: {cardio.current_vo2_max:.1f}）"
+        self.translator.t(
+          "heart_rate.highlight.cardio_rating",
+          rating=rating_desc[cardio.age_adjusted_rating],
+          vo2=cardio.current_vo2_max,
+        )
       )
 
     # Anomaly highlights.
     if anomalies:
       anomaly_count = len(anomalies)
       if anomaly_count > 0:
-        highlights.append(f"🔍 检测到{anomaly_count}个心率异常事件，建议查看详细报告")
+        highlights.append(
+          self.translator.t(
+            "heart_rate.highlight.anomalies",
+            count=anomaly_count,
+          )
+        )
 
     return highlights
 
@@ -705,15 +756,15 @@ class HeartRateAnalyzer:
 
     # Recommendations based on resting heart rate.
     if resting_hr and resting_hr.health_rating == "poor":
-      recommendations.append("建议增加有氧运动，如快走、跑步或骑行，每周至少150分钟")
+      recommendations.append(self.translator.t("heart_rate.recommendation.aerobic_150"))
 
     # Recommendations based on HRV.
     if hrv and hrv.stress_level in ["high", "very_high"]:
       recommendations.extend(
         [
-          "建议进行压力管理，如冥想、深呼吸或适量运动",
-          "保证充足睡眠，每晚7-9小时",
-          "考虑咨询专业医师了解健康状况",
+          self.translator.t("heart_rate.recommendation.stress_management"),
+          self.translator.t("heart_rate.recommendation.sleep_7_9"),
+          self.translator.t("heart_rate.recommendation.consult_doctor"),
         ]
       )
 
@@ -723,12 +774,18 @@ class HeartRateAnalyzer:
 
     # Recommendations based on anomalies.
     if anomalies and len(anomalies) > 10:  # Many anomalies.
-      recommendations.append("心率异常较多，建议咨询心脏科医师进行检查")
+      recommendations.append(
+        self.translator.t("heart_rate.recommendation.many_anomalies")
+      )
 
     # General recommendations.
     if not recommendations:
-      recommendations.append("保持规律运动和健康生活方式")
-      recommendations.append("定期监测心率指标，关注身体变化")
+      recommendations.append(
+        self.translator.t("heart_rate.recommendation.healthy_lifestyle")
+      )
+      recommendations.append(
+        self.translator.t("heart_rate.recommendation.monitor_metrics")
+      )
 
     return recommendations
 

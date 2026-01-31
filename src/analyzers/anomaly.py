@@ -9,8 +9,9 @@ import numpy as np
 import pandas as pd
 
 from ..core.data_models import CategoryRecord, HealthRecord, QuantityRecord
+from ..i18n import Translator, resolve_locale
 from ..utils.logger import get_logger
-from ..utils.type_conversion import safe_float
+from ..utils.type_conversion import numpy_to_python_scalar, safe_float
 
 logger = get_logger(__name__)
 
@@ -63,7 +64,7 @@ class AnomalyReport:
 class AnomalyDetector:
   """Core anomaly detection class."""
 
-  def __init__(self, config: AnomalyConfig | None = None):
+  def __init__(self, config: AnomalyConfig | None = None, locale: str | None = None):
     """Initialize the anomaly detector.
 
     Args:
@@ -85,7 +86,8 @@ class AnomalyDetector:
     if config:
       self.config.update(config)
 
-    logger.info("AnomalyDetector initialized")
+    self.translator = Translator(resolve_locale(locale))
+    logger.info(self.translator.t("log.anomaly_detector.initialized"))
 
   def detect_anomalies(
     self,
@@ -105,21 +107,25 @@ class AnomalyDetector:
         List of anomaly records.
     """
     if not records:
-      logger.warning("No records provided for anomaly detection")
+      logger.warning(self.translator.t("log.anomaly_detector.no_records"))
       return []
 
     if methods is None:
       methods = ["zscore", "iqr"]
 
     logger.info(
-      f"Detecting anomalies in {len(records)} records using methods: {methods}"
+      self.translator.t(
+        "log.anomaly_detector.detecting",
+        count=len(records),
+        methods=methods,
+      )
     )
 
     # Convert to DataFrame for vectorized operations.
     df = self._records_to_dataframe(records)
 
     if df.empty or "value" not in df.columns:
-      logger.warning("No valid data for anomaly detection")
+      logger.warning(self.translator.t("log.anomaly_detector.no_valid_data"))
       return []
 
     all_anomalies = []
@@ -136,20 +142,42 @@ class AnomalyDetector:
         elif method == "contextual":
           anomalies = self._detect_contextual(df, context)
         else:
-          logger.warning(f"Unknown detection method: {method}")
+          logger.warning(
+            self.translator.t(
+              "log.anomaly_detector.unknown_method",
+              method=method,
+            )
+          )
           continue
 
         all_anomalies.extend(anomalies)
-        logger.debug(f"Method {method} found {len(anomalies)} anomalies")
+        logger.debug(
+          self.translator.t(
+            "log.anomaly_detector.method_found",
+            method=method,
+            count=len(anomalies),
+          )
+        )
 
       except Exception as e:
-        logger.error(f"Error in {method} detection: {e}")
+        logger.error(
+          self.translator.t(
+            "log.anomaly_detector.method_error",
+            method=method,
+            error=e,
+          )
+        )
         continue
 
     # Deduplicate anomalies by timestamp (keep the most severe one).
     unique_anomalies = self._deduplicate_anomalies(all_anomalies)
 
-    logger.info(f"Total unique anomalies detected: {len(unique_anomalies)}")
+    logger.info(
+      self.translator.t(
+        "log.anomaly_detector.total_unique",
+        count=len(unique_anomalies),
+      )
+    )
     return unique_anomalies
 
   def generate_report(
@@ -337,14 +365,20 @@ class AnomalyDetector:
           AnomalyRecord(
             timestamp=row["start_date"],
             value=row["value"],
-            expected_value=safe_float(row["ma"]),
-            deviation=deviation / safe_float(row["ma_std"]),
+            expected_value=safe_float(numpy_to_python_scalar(row["ma"])),
+            deviation=deviation / safe_float(numpy_to_python_scalar(row["ma_std"])),
             severity=severity,
             method="moving_average",
             confidence=round(confidence, 3),
             context={
-              "moving_average": round(safe_float(row["ma"]), 2),
-              "ma_std": round(safe_float(row["ma_std"]), 2),
+              "moving_average": round(
+                safe_float(numpy_to_python_scalar(row["ma"])),
+                2,
+              ),
+              "ma_std": round(
+                safe_float(numpy_to_python_scalar(row["ma_std"])),
+                2,
+              ),
               "window": window,
             },
           )
@@ -365,7 +399,12 @@ class AnomalyDetector:
     elif context == "sleep_wake":
       return self._detect_sleep_wake_anomalies(df)
     else:
-      logger.warning(f"Unknown context type: {context}")
+      logger.warning(
+        self.translator.t(
+          "log.anomaly_detector.unknown_context",
+          context=context,
+        )
+      )
       return []
 
   def _detect_time_of_day_anomalies(self, df: pd.DataFrame) -> list[AnomalyRecord]:
@@ -398,8 +437,8 @@ class AnomalyDetector:
         confidence = min(1.0, z_score / 4.0)
 
         # Safely handle pandas scalar types.
-        mean_val_float = safe_float(mean_val)
-        std_val_float = safe_float(std_val)
+        mean_val_float = safe_float(numpy_to_python_scalar(mean_val))
+        std_val_float = safe_float(numpy_to_python_scalar(std_val))
 
         anomalies.append(
           AnomalyRecord(
@@ -463,7 +502,7 @@ class AnomalyDetector:
           AnomalyRecord(
             timestamp=row["start_date"],
             value=row["value"],
-            expected_value=safe_float(mean_val),
+            expected_value=safe_float(numpy_to_python_scalar(mean_val)),
             deviation=z_score,
             severity=severity,
             method="contextual_day_of_week",
@@ -471,8 +510,14 @@ class AnomalyDetector:
             context={
               "day_of_week": day,
               "day_name": day_names[day],
-              "daily_mean": round(safe_float(mean_val), 2),
-              "daily_std": round(safe_float(std_val), 2),
+              "daily_mean": round(
+                safe_float(numpy_to_python_scalar(mean_val)),
+                2,
+              ),
+              "daily_std": round(
+                safe_float(numpy_to_python_scalar(std_val)),
+                2,
+              ),
             },
           )
         )
@@ -515,15 +560,21 @@ class AnomalyDetector:
           AnomalyRecord(
             timestamp=row["start_date"],
             value=row["value"],
-            expected_value=safe_float(mean_val),
+            expected_value=safe_float(numpy_to_python_scalar(mean_val)),
             deviation=z_score,
             severity=severity,
             method="contextual_sleep_wake",
             confidence=round(confidence, 3),
             context={
               "is_sleep_hour": bool(is_sleep_hour),
-              "sleep_mean": round(safe_float(mean_val), 2),
-              "sleep_std": round(safe_float(std_val), 2),
+              "sleep_mean": round(
+                safe_float(numpy_to_python_scalar(mean_val)),
+                2,
+              ),
+              "sleep_std": round(
+                safe_float(numpy_to_python_scalar(std_val)),
+                2,
+              ),
             },
           )
         )
@@ -616,19 +667,15 @@ class AnomalyDetector:
     recommendations = []
 
     if anomaly_rate > 0.1:  # Anomaly rate exceeds 10%.
-      recommendations.append(
-        "⚠️ Anomaly rate is high; review data quality or adjust thresholds."
-      )
+      recommendations.append(self.translator.t("anomaly.recommendation.high_rate"))
 
     if anomaly_rate < 0.001:  # Anomaly rate is very low.
-      recommendations.append("ℹ️ Few anomalies detected; thresholds may be too strict.")
+      recommendations.append(self.translator.t("anomaly.recommendation.low_rate"))
 
     # Analyze severity distribution.
     high_severity = sum(1 for a in anomalies if a.severity == "high")
     if high_severity > len(anomalies) * 0.3:
-      recommendations.append(
-        "🚨 High-severity anomalies are frequent; prioritize investigation."
-      )
+      recommendations.append(self.translator.t("anomaly.recommendation.high_severity"))
 
     # Analyze time distribution.
     if anomalies:
@@ -638,9 +685,7 @@ class AnomalyDetector:
       hour_counts = time_dist.get("by_hour", {})
       max_hour_count = max(hour_counts.values()) if hour_counts else 0
       if max_hour_count > len(anomalies) * 0.5:
-        recommendations.append(
-          "📊 Anomalies cluster at specific hours; this may reflect normal patterns."
-        )
+        recommendations.append(self.translator.t("anomaly.recommendation.clustered"))
 
     return recommendations
 

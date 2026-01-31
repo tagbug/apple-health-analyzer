@@ -11,6 +11,7 @@ import pandas as pd
 from pydantic import BaseModel, Field
 
 from src.core.data_models import HealthRecord
+from src.i18n import Translator, resolve_locale
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -226,6 +227,7 @@ class DataCleaner:
     self,
     source_priority: dict[str, int] | None = None,
     default_window_seconds: int = 60,
+    locale: str | None = None,
   ):
     """Initialize the data cleaner.
 
@@ -237,7 +239,7 @@ class DataCleaner:
     self.source_priority = source_priority or {
       "🐙Watch": 3,  # Apple Watch highest priority
       "Apple Watch": 3,  # Alias
-      "小米运动健康": 2,  # Xiaomi Health
+      "Xiaomi Health": 2,  # Xiaomi Health
       "Xiaomi Health": 2,  # Alias
       "Xiaomi Home": 2,  # Alias
       "🐙Phone": 1,  # iPhone lowest priority
@@ -245,9 +247,13 @@ class DataCleaner:
     }
 
     self.default_window_seconds = default_window_seconds
+    self.translator = Translator(resolve_locale(locale))
     self._fast_dedup_threshold = 50000
     logger.info(
-      f"DataCleaner initialized with {len(self.source_priority)} source priorities"
+      self.translator.t(
+        "log.cleaner.initialized",
+        count=len(self.source_priority),
+      )
     )
 
   def deduplicate_by_time_window(
@@ -283,7 +289,11 @@ class DataCleaner:
     window = window_seconds or self.default_window_seconds
 
     logger.info(
-      f"Starting optimized deduplication with strategy '{strategy}', window {window}s"
+      self.translator.t(
+        "log.cleaner.dedup_start",
+        strategy=strategy,
+        window=window,
+      )
     )
 
     # Group records by record type.
@@ -296,14 +306,22 @@ class DataCleaner:
     duplicates_by_source = defaultdict(int)
 
     for record_type, type_records in records_by_type.items():
-      logger.debug(f"Processing {len(type_records)} records of type {record_type}")
+      logger.debug(
+        self.translator.t(
+          "log.cleaner.processing_type",
+          count=len(type_records),
+          record_type=record_type,
+        )
+      )
 
       if self._should_use_fast_dedup(len(type_records), strategy):
         logger.info(
-          "Using fast deduplication path for %s (%s records, strategy=%s)",
-          record_type,
-          len(type_records),
-          strategy,
+          self.translator.t(
+            "log.cleaner.fast_path",
+            record_type=record_type,
+            count=len(type_records),
+            strategy=strategy,
+          )
         )
         (
           fast_deduped,
@@ -444,9 +462,12 @@ class DataCleaner:
     )
 
     logger.info(
-      f"Deduplication completed: {result.original_count} -> "
-      f"{result.deduplicated_count} records "
-      f"({result.removed_duplicates} duplicates removed)"
+      self.translator.t(
+        "log.cleaner.dedup_completed",
+        original=result.original_count,
+        deduped=result.deduplicated_count,
+        duplicates=result.removed_duplicates,
+      )
     )
 
     return deduplicated_records, result
@@ -522,7 +543,12 @@ class DataCleaner:
     if not records or len(records) <= 1:
       return records
 
-    logger.info(f"Merging overlapping records, threshold: {merge_threshold_seconds}s")
+    logger.info(
+      self.translator.t(
+        "log.cleaner.merge_start",
+        threshold=merge_threshold_seconds,
+      )
+    )
 
     # Group by record type.
     records_by_type = defaultdict(list)
@@ -542,7 +568,13 @@ class DataCleaner:
       merged = self._merge_sorted_records(sorted_records, merge_threshold_seconds)
       merged_records.extend(merged)
 
-    logger.info(f"Merge completed: {len(records)} -> {len(merged_records)} records")
+    logger.info(
+      self.translator.t(
+        "log.cleaner.merge_completed",
+        original=len(records),
+        merged=len(merged_records),
+      )
+    )
     return merged_records
 
   def validate_data_quality(self, records: list[HealthRecord]) -> DataQualityReport:
@@ -565,7 +597,12 @@ class DataCleaner:
         quality_score=0.0,
       )
 
-    logger.info(f"Validating data quality for {len(records)} records")
+    logger.info(
+      self.translator.t(
+        "log.cleaner.quality_start",
+        count=len(records),
+      )
+    )
 
     total_records = len(records)
     valid_records = 0
@@ -643,8 +680,12 @@ class DataCleaner:
     )
 
     logger.info(
-      f"Quality validation completed: {valid_records}/{total_records} valid "
-      f"(score: {quality_score:.1f})"
+      self.translator.t(
+        "log.cleaner.quality_completed",
+        valid=valid_records,
+        total=total_records,
+        score=quality_score,
+      )
     )
 
     return report
@@ -678,7 +719,12 @@ class DataCleaner:
       return row_data.to_health_record()
 
     except Exception as e:
-      logger.error(f"Failed to reconstruct record: {e}")
+      logger.error(
+        self.translator.t(
+          "log.cleaner.reconstruct_failed",
+          error=e,
+        )
+      )
       return None
 
   def _should_merge_type(self, record_type: str) -> bool:

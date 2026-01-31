@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 
 from ..core.data_models import CategoryRecord, HealthRecord, QuantityRecord
+from ..i18n import Translator, resolve_locale
 from ..utils.logger import get_logger
 from ..utils.type_conversion import safe_float
 
@@ -65,9 +66,10 @@ class TrendAnalysis:
 class StatisticalAnalyzer:
   """Core statistical analyzer."""
 
-  def __init__(self):
+  def __init__(self, locale: str | None = None):
     """Initialize the statistical analyzer."""
-    logger.info("StatisticalAnalyzer initialized")
+    self.translator = Translator(resolve_locale(locale))
+    logger.info(self.translator.t("log.statistical_analyzer.initialized"))
 
   def aggregate_by_interval(
     self,
@@ -84,10 +86,18 @@ class StatisticalAnalyzer:
         Aggregated DataFrame with interval boundaries and metrics.
     """
     if not records:
-      logger.warning("No records provided for aggregation")
+      logger.warning(
+        self.translator.t("log.statistical_analyzer.no_records_aggregation")
+      )
       return pd.DataFrame()
 
-    logger.info(f"Aggregating {len(records)} records by {interval} interval")
+    logger.info(
+      self.translator.t(
+        "log.statistical_analyzer.aggregating",
+        count=len(records),
+        interval=interval,
+      )
+    )
 
     # Convert to DataFrame.
     df = self._records_to_dataframe(records)
@@ -173,11 +183,23 @@ class StatisticalAnalyzer:
       ]
       aggregated = aggregated[cols]
 
-      logger.info(f"Aggregated into {len(aggregated)} {interval} intervals")
+      logger.info(
+        self.translator.t(
+          "log.statistical_analyzer.aggregated",
+          count=len(aggregated),
+          interval=interval,
+        )
+      )
       return aggregated
 
     except Exception as e:
-      logger.error(f"Error aggregating data by {interval}: {e}")
+      logger.error(
+        self.translator.t(
+          "log.statistical_analyzer.aggregate_error",
+          interval=interval,
+          error=e,
+        )
+      )
       return pd.DataFrame()
 
   def calculate_statistics(
@@ -194,16 +216,24 @@ class StatisticalAnalyzer:
     """
     if data.empty or value_column not in data.columns:
       logger.warning(
-        f"No data or missing column '{value_column}' for statistics calculation"
+        self.translator.t(
+          "log.statistical_analyzer.no_data_for_stats",
+          column=value_column,
+        )
       )
       return None
 
-    logger.info(f"Calculating statistics for {len(data)} records")
+    logger.info(
+      self.translator.t(
+        "log.statistical_analyzer.calculating_stats",
+        count=len(data),
+      )
+    )
 
     values = data[value_column].dropna()
 
     if values.empty:
-      logger.warning("No valid values found for statistics calculation")
+      logger.warning(self.translator.t("log.statistical_analyzer.no_valid_values"))
       return None
 
     # Basic statistics
@@ -231,9 +261,13 @@ class StatisticalAnalyzer:
       records_per_day = len(data)
 
     # Infer record type from the first row.
-    record_type = "Unknown"
+    record_type = self.translator.t("statistical.record_type.unknown")
     if hasattr(data, "record_type") and not data.empty:
-      record_type = getattr(data.iloc[0], "record_type", "Unknown")
+      record_type = getattr(
+        data.iloc[0],
+        "record_type",
+        self.translator.t("statistical.record_type.unknown"),
+      )
     elif len(data) > 0 and hasattr(data.iloc[0], "type"):
       record_type = data.iloc[0].type
 
@@ -283,10 +317,18 @@ class StatisticalAnalyzer:
     if (
       data.empty or time_column not in data.columns or value_column not in data.columns
     ):
-      logger.warning("Insufficient data for trend analysis")
+      logger.warning(
+        self.translator.t("log.statistical_analyzer.insufficient_trend_data")
+      )
       return None
 
-    logger.info(f"Analyzing trend using {method} method for {len(data)} records")
+    logger.info(
+      self.translator.t(
+        "log.statistical_analyzer.trend_analyzing",
+        method=method,
+        count=len(data),
+      )
+    )
 
     try:
       # Prepare data.
@@ -295,7 +337,7 @@ class StatisticalAnalyzer:
       df = df.sort_values(time_column)
 
       if len(df) < 3:
-        logger.warning("Need at least 3 data points for trend analysis")
+        logger.warning(self.translator.t("log.statistical_analyzer.trend_min_points"))
         return None
 
       # Convert to numeric timestamps and normalize.
@@ -314,11 +356,16 @@ class StatisticalAnalyzer:
       elif method == "moving_average":
         return self._moving_average_trend_analysis(df, value_column, window)
       else:
-        logger.error(f"Unknown trend analysis method: {method}")
+        logger.error(
+          self.translator.t(
+            "log.statistical_analyzer.trend_unknown_method",
+            method=method,
+          )
+        )
         return None
 
     except Exception as e:
-      logger.error(f"Error in trend analysis: {e}")
+      logger.error(self.translator.t("log.statistical_analyzer.trend_error", error=e))
       return None
 
   def generate_report(
@@ -339,13 +386,18 @@ class StatisticalAnalyzer:
         Statistical analysis report.
     """
     if not records:
-      logger.warning("No records provided for report generation")
+      logger.warning(self.translator.t("log.statistical_analyzer.no_records_report"))
       return {} if output_format == "dict" else pd.DataFrame()
 
     if intervals is None:
       intervals = ["day", "week", "month"]
 
-    logger.info(f"Generating statistical report for {len(records)} records")
+    logger.info(
+      self.translator.t(
+        "log.statistical_analyzer.report_generating",
+        count=len(records),
+      )
+    )
 
     report: dict[str, Any] = {
       "summary": self.calculate_statistics(self._records_to_dataframe(records)),
@@ -367,7 +419,13 @@ class StatisticalAnalyzer:
               "data_points": len(aggregated_data),
             }
       except Exception as e:
-        logger.error(f"Error analyzing {interval} interval: {e}")
+        logger.error(
+          self.translator.t(
+            "log.statistical_analyzer.interval_error",
+            interval=interval,
+            error=e,
+          )
+        )
         continue
 
     if output_format == "dataframe":
@@ -487,7 +545,9 @@ class StatisticalAnalyzer:
         confidence_level=round(r_squared * 100, 2),
       )
     except Exception as e:
-      logger.error(f"Error in polynomial trend analysis: {e}")
+      logger.error(
+        self.translator.t("log.statistical_analyzer.polynomial_error", error=e)
+      )
       return None
 
   def _moving_average_trend_analysis(
@@ -532,7 +592,9 @@ class StatisticalAnalyzer:
         confidence_level=round(r_squared * 100, 2),
       )
     except Exception as e:
-      logger.error(f"Error in moving average trend analysis: {e}")
+      logger.error(
+        self.translator.t("log.statistical_analyzer.moving_average_error", error=e)
+      )
       return None
 
   def _calculate_data_quality_score(
@@ -587,8 +649,12 @@ class StatisticalAnalyzer:
     quality = 0.4 * completeness + 0.3 * reasonability + 0.3 * consistency
 
     logger.debug(
-      f"Quality score breakdown: completeness={completeness:.3f}, "
-      f"reasonability={reasonability:.3f}, consistency={consistency:.3f}"
+      self.translator.t(
+        "log.statistical_analyzer.quality_breakdown",
+        completeness=completeness,
+        reasonability=reasonability,
+        consistency=consistency,
+      )
     )
 
     return quality
@@ -599,7 +665,10 @@ class StatisticalAnalyzer:
       # For small samples, return a neutral score.
       if len(values) < 10:
         logger.debug(
-          f"Small sample size ({len(values)}), returning default normality score"
+          self.translator.t(
+            "log.statistical_analyzer.normality_small_sample",
+            count=len(values),
+          )
         )
         return 0.5
 
@@ -608,7 +677,11 @@ class StatisticalAnalyzer:
         # Sample 5,000 points for normality testing.
         sample = values.sample(n=5000, random_state=42)
         logger.debug(
-          f"Large dataset detected ({len(values)} records), using sampling (n=5000)"
+          self.translator.t(
+            "log.statistical_analyzer.normality_sampling",
+            count=len(values),
+            sample=5000,
+          )
         )
       else:
         sample = values
@@ -624,7 +697,9 @@ class StatisticalAnalyzer:
 
       return normality_score
     except Exception as e:
-      logger.warning(f"Normality test failed: {e}, returning default score")
+      logger.warning(
+        self.translator.t("log.statistical_analyzer.normality_failed", error=e)
+      )
       # Fall back to neutral score on failure.
       return 0.5
 

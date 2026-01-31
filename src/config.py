@@ -37,6 +37,9 @@ class Config(BaseModel):
   log_level: str = Field(default="INFO")
   log_file: Path | None = Field(default=None)
 
+  # Localization
+  locale: str = Field(default="en")
+
   # Performance settings
   batch_size: int = Field(default=1000, gt=0)
   memory_limit_mb: int = Field(default=500, gt=0)
@@ -81,6 +84,14 @@ class Config(BaseModel):
     if v.upper() not in valid_levels:
       raise ValueError(f"Invalid log level '{v}'. Must be one of: {valid_levels}")
     return v.upper()
+
+  @field_validator("locale")
+  @classmethod
+  def validate_locale(cls, v: str) -> str:
+    valid_locales = {"en", "zh"}
+    if v not in valid_locales:
+      raise ValueError(f"Invalid locale '{v}'. Must be one of: {sorted(valid_locales)}")
+    return v
 
   @property
   def source_priority_map(self) -> dict[str, int]:
@@ -145,6 +156,9 @@ def load_config() -> Config:
   log_file = os.getenv("LOG_FILE")
   if log_file:
     config_data["log_file"] = Path(log_file)
+
+  # Localization
+  config_data["locale"] = os.getenv("LOCALE", "en")
 
   # Performance
   config_data["batch_size"] = int(os.getenv("BATCH_SIZE", "1000"))

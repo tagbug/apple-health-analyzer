@@ -17,6 +17,7 @@ from ..analyzers.anomaly import AnomalyDetector
 from ..analyzers.statistical import StatisticalAnalyzer
 from ..core.data_models import CategoryRecord, HealthRecord, QuantityRecord
 from ..utils.logger import get_logger
+from ..i18n import Translator, resolve_locale
 from ..utils.type_conversion import safe_float
 
 logger = get_logger(__name__)
@@ -141,13 +142,14 @@ class SleepAnalyzer:
   - Anomaly detection and health insights
   """
 
-  def __init__(self):
+  def __init__(self, locale: str | None = None):
     """Initialize sleep analyzer"""
     # Initialize analysis components.
     self.stat_analyzer = StatisticalAnalyzer()
     self.anomaly_detector = AnomalyDetector()
+    self.translator = Translator(resolve_locale(locale))
 
-    logger.info("SleepAnalyzer initialized")
+    logger.info(self.translator.t("log.sleep_analyzer.initialized"))
 
   def analyze_comprehensive(
     self,
@@ -163,10 +165,10 @@ class SleepAnalyzer:
     Returns:
         Comprehensive analysis report
     """
-    logger.info("Starting comprehensive sleep analysis")
+    logger.info(self.translator.t("log.sleep_analyzer.start_comprehensive"))
 
     if not sleep_records:
-      logger.warning("No sleep records provided for analysis")
+      logger.warning(self.translator.t("log.sleep_analyzer.no_records"))
       return SleepAnalysisReport(
         analysis_date=datetime.now(),
         data_range=(datetime.now(), datetime.now()),
@@ -179,7 +181,7 @@ class SleepAnalyzer:
     sleep_sessions = self.parse_sleep_sessions(sleep_records)
 
     if not sleep_sessions:
-      logger.warning("No valid sleep sessions found")
+      logger.warning(self.translator.t("log.sleep_analyzer.no_sessions"))
       return SleepAnalysisReport(
         analysis_date=analysis_date,
         data_range=data_range,
@@ -254,12 +256,17 @@ class SleepAnalyzer:
       record_count=len(sleep_records),
     )
 
-    logger.info("Comprehensive sleep analysis completed")
+    logger.info(self.translator.t("log.sleep_analyzer.completed"))
     return report
 
   def parse_sleep_sessions(self, records: list[HealthRecord]) -> list[SleepSession]:
     """Parse sleep sessions from raw sleep records."""
-    logger.info(f"Parsing {len(records)} sleep records into sessions")
+    logger.info(
+      self.translator.t(
+        "log.sleep_analyzer.parsing_sessions",
+        count=len(records),
+      )
+    )
 
     # Group records by date.
     records_by_date = {}
@@ -279,10 +286,21 @@ class SleepAnalyzer:
         if session:
           sleep_sessions.append(session)
       except Exception as e:
-        logger.warning(f"Failed to parse sleep session for {date_key}: {e}")
+        logger.warning(
+          self.translator.t(
+            "log.sleep_analyzer.parse_session_failed",
+            date=str(date_key),
+            error=str(e),
+          )
+        )
         continue
 
-    logger.info(f"Parsed {len(sleep_sessions)} sleep sessions")
+    logger.info(
+      self.translator.t(
+        "log.sleep_analyzer.parsed_sessions",
+        count=len(sleep_sessions),
+      )
+    )
     return sleep_sessions
 
   def _parse_sleep_sessions(self, records: list[HealthRecord]) -> list[SleepSession]:
@@ -383,7 +401,13 @@ class SleepAnalyzer:
     light_sleep = 0
 
     # Debug: log the first few records.
-    logger.debug(f"Debugging sleep records for {date} (total: {len(sleep_records)}):")
+    logger.debug(
+      self.translator.t(
+        "log.sleep_analyzer.debug_records",
+        date=date,
+        count=len(sleep_records),
+      )
+    )
     for i, record in enumerate(sleep_records[:3]):  # Show only the first 3.
       logger.debug(
         f"  Record {i}: type={record.type}, value={getattr(record, 'value', 'N/A')}, "
@@ -437,7 +461,9 @@ class SleepAnalyzer:
           stage_type = str(stage_type)
 
         if len(sleep_records) <= 10:
-          logger.debug(f"  Mapped stage: {stage_type}")
+          logger.debug(
+            self.translator.t("log.sleep_analyzer.debug_stage", stage=stage_type)
+          )
 
         # Type check: ensure stage_type is a valid stage.
         if stage_type in ["InBed", "Asleep", "Awake", "Core", "Deep", "REM"]:
@@ -540,7 +566,12 @@ class SleepAnalyzer:
         overall_quality_score=0,
       )
 
-    logger.info(f"Analyzing sleep quality from {len(sleep_sessions)} sessions")
+    logger.info(
+      self.translator.t(
+        "log.sleep_analyzer.analyzing_quality",
+        count=len(sleep_sessions),
+      )
+    )
 
     # Basic metrics.
     durations = [s.total_duration for s in sleep_sessions]
@@ -671,7 +702,12 @@ class SleepAnalyzer:
         efficiency_trend="stable",
       )
 
-    logger.info(f"Analyzing sleep patterns from {len(sleep_sessions)} sessions")
+    logger.info(
+      self.translator.t(
+        "log.sleep_analyzer.analyzing_patterns",
+        count=len(sleep_sessions),
+      )
+    )
 
     # Extract bedtimes and wake times.
     bedtimes = []
@@ -807,7 +843,7 @@ class SleepAnalyzer:
     if not sleep_sessions or not heart_rate_records:
       return None
 
-    logger.info("Analyzing sleep-heart rate correlation")
+    logger.info(self.translator.t("log.sleep_analyzer.analyzing_hr_correlation"))
 
     # Convert heart rate records to a DataFrame.
     hr_data = []
@@ -1111,37 +1147,57 @@ class SleepAnalyzer:
     if quality:
       duration_hours = quality.average_duration
       if duration_hours >= 7:
-        highlights.append(f"😴 平均睡眠时长{duration_hours:.1f}小时，睡眠充足")
+        highlights.append(
+          self.translator.t(
+            "sleep.highlight.duration_good",
+            hours=duration_hours,
+          )
+        )
       elif duration_hours < 6:
-        highlights.append(f"⚠️ 平均睡眠时长仅{duration_hours:.1f}小时，建议增加睡眠时间")
+        highlights.append(
+          self.translator.t(
+            "sleep.highlight.duration_low",
+            hours=duration_hours,
+          )
+        )
 
       efficiency_pct = quality.average_efficiency * 100
       if efficiency_pct >= 85:
-        highlights.append(f"💤 睡眠效率{efficiency_pct:.0f}%，睡眠质量良好")
+        highlights.append(
+          self.translator.t(
+            "sleep.highlight.efficiency_good",
+            efficiency=efficiency_pct,
+          )
+        )
       else:
-        highlights.append(f"⚠️ 睡眠效率仅{efficiency_pct:.0f}%，可能存在睡眠问题")
+        highlights.append(
+          self.translator.t(
+            "sleep.highlight.efficiency_low",
+            efficiency=efficiency_pct,
+          )
+        )
 
       if quality.consistency_score >= 0.7:
-        highlights.append("📅 睡眠规律性良好，有助于身体恢复")
+        highlights.append(self.translator.t("sleep.highlight.consistency_good"))
       else:
-        highlights.append("⏰ 睡眠时间不规律，建议调整作息时间")
+        highlights.append(self.translator.t("sleep.highlight.consistency_low"))
 
     # Sleep pattern highlights.
     if patterns:
       if patterns.bedtime_consistency >= 0.8:
-        highlights.append("🌙 就寝时间很规律")
+        highlights.append(self.translator.t("sleep.highlight.bedtime_regular"))
       if patterns.waketime_consistency >= 0.8:
-        highlights.append("🌅 起床时间很规律")
+        highlights.append(self.translator.t("sleep.highlight.wake_regular"))
 
       if patterns.weekday_vs_weekend.get("social_jetlag", 0) > 2:
-        highlights.append("⚠️ 工作日和周末作息差异较大，可能影响生物钟")
+        highlights.append(self.translator.t("sleep.highlight.social_jetlag"))
 
     # Sleep-heart rate highlights.
     if hr_corr:
       if hr_corr.recovery_quality >= 80:
-        highlights.append("💚 睡眠期间心率恢复良好，身体恢复状态佳")
+        highlights.append(self.translator.t("sleep.highlight.hr_recovery_good"))
       elif hr_corr.recovery_quality < 60:
-        highlights.append("⚠️ 睡眠期间心率恢复不佳，建议关注压力管理")
+        highlights.append(self.translator.t("sleep.highlight.hr_recovery_low"))
 
     # Trend highlights.
     if trends:
@@ -1149,15 +1205,20 @@ class SleepAnalyzer:
       if duration_trend_obj and hasattr(duration_trend_obj, "trend_direction"):
         duration_trend = duration_trend_obj.trend_direction
         if duration_trend == "increasing":
-          highlights.append("📈 睡眠时长呈上升趋势")
+          highlights.append(self.translator.t("sleep.highlight.duration_up"))
         elif duration_trend == "decreasing":
-          highlights.append("📉 睡眠时长呈下降趋势")
+          highlights.append(self.translator.t("sleep.highlight.duration_down"))
 
     # Anomaly highlights.
     if anomalies:
       anomaly_count = len(anomalies)
       if anomaly_count > 0:
-        highlights.append(f"🔍 检测到{anomaly_count}个睡眠异常事件")
+        highlights.append(
+          self.translator.t(
+            "sleep.highlight.anomalies",
+            count=anomaly_count,
+          )
+        )
 
     return highlights
 
@@ -1174,13 +1235,13 @@ class SleepAnalyzer:
     # Recommendations based on sleep quality.
     if quality:
       if quality.average_duration < 7:
-        recommendations.append("建议每天保证7-9小时的睡眠时间")
+        recommendations.append(self.translator.t("sleep.recommendation.sleep_7_9"))
 
       if quality.average_efficiency < 0.85:
-        recommendations.append("改善睡眠环境：保持卧室凉爽、黑暗和安静")
+        recommendations.append(self.translator.t("sleep.recommendation.environment"))
 
       if quality.average_latency > 30:
-        recommendations.append("建立睡前放松 routine，避免使用电子设备")
+        recommendations.append(self.translator.t("sleep.recommendation.routine"))
 
     # Recommendations based on sleep patterns.
     if patterns:
@@ -1189,23 +1250,23 @@ class SleepAnalyzer:
         patterns.bedtime_consistency + patterns.waketime_consistency
       ) / 2
       if overall_consistency < 0.7:
-        recommendations.append("保持规律的作息时间，包括周末")
+        recommendations.append(self.translator.t("sleep.recommendation.schedule"))
 
       social_jetlag = patterns.weekday_vs_weekend.get("social_jetlag", 0)
       if social_jetlag > 2:
-        recommendations.append("减少周末和工作日的作息差异，维持生物钟稳定")
+        recommendations.append(self.translator.t("sleep.recommendation.reduce_jetlag"))
 
     # Recommendations based on heart rate correlation.
     if hr_corr and hr_corr.recovery_quality < 70:
-      recommendations.append("睡前避免剧烈运动和咖啡因，保持放松状态")
+      recommendations.append(self.translator.t("sleep.recommendation.pre_sleep"))
 
     # General recommendations.
     if not recommendations:
       recommendations.extend(
         [
-          "保持规律的作息时间",
-          "睡前2小时避免使用电子设备",
-          "保持卧室适宜的温度和湿度",
+          self.translator.t("sleep.recommendation.schedule"),
+          self.translator.t("sleep.recommendation.no_screens"),
+          self.translator.t("sleep.recommendation.room_conditions"),
         ]
       )
 

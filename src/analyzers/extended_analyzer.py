@@ -12,6 +12,7 @@ from typing import Any
 import numpy as np
 
 from ..core.data_models import HealthRecord, QuantityRecord, SleepRecord
+from ..i18n import Translator, resolve_locale
 from ..processors.optimized_processor import (
   MemoryOptimizer,
   OptimizedDataFrame,
@@ -114,13 +115,14 @@ class ExtendedHealthAnalyzer:
   - Health correlations and predictive insights
   """
 
-  def __init__(self):
+  def __init__(self, locale: str | None = None):
     """Initialize extended health analyzer."""
+    self.translator = Translator(resolve_locale(locale))
     self.stat_aggregator = StatisticalAggregator()
     self.memory_optimizer = MemoryOptimizer()
     self.performance_monitor = PerformanceMonitor()
 
-    logger.info("ExtendedHealthAnalyzer initialized")
+    logger.info(self.translator.t("log.extended_analyzer.initialized"))
 
   def analyze_comprehensive_health(
     self,
@@ -144,10 +146,10 @@ class ExtendedHealthAnalyzer:
     """
     self.performance_monitor.start_operation("comprehensive_health_analysis")
 
-    logger.info("Starting comprehensive extended health analysis")
+    logger.info(self.translator.t("log.extended_analyzer.start_comprehensive"))
 
     if not all_records:
-      logger.warning("No health records provided for analysis")
+      logger.warning(self.translator.t("log.extended_analyzer.no_records"))
       return ComprehensiveHealthReport(
         analysis_date=datetime.now(),
         data_range=(datetime.now(), datetime.now()),
@@ -218,7 +220,7 @@ class ExtendedHealthAnalyzer:
     )
 
     self.performance_monitor.end_operation("comprehensive_health_analysis")
-    logger.info("Comprehensive extended health analysis completed")
+    logger.info(self.translator.t("log.extended_analyzer.completed"))
 
     return report
 
@@ -271,7 +273,12 @@ class ExtendedHealthAnalyzer:
     if not sleep_records:
       return None
 
-    logger.info(f"Analyzing sleep quality from {len(sleep_records)} records")
+    logger.info(
+      self.translator.t(
+        "log.extended_analyzer.sleep_quality",
+        count=len(sleep_records),
+      )
+    )
 
     # Convert to optimized DataFrame for efficient processing
     odf = OptimizedDataFrame.from_records(sleep_records)
@@ -352,7 +359,12 @@ class ExtendedHealthAnalyzer:
     if not activity_records:
       return None
 
-    logger.info(f"Analyzing activity patterns from {len(activity_records)} records")
+    logger.info(
+      self.translator.t(
+        "log.extended_analyzer.activity_patterns",
+        count=len(activity_records),
+      )
+    )
 
     # Convert to optimized DataFrame
     odf = OptimizedDataFrame.from_records(activity_records)
@@ -435,7 +447,7 @@ class ExtendedHealthAnalyzer:
     if not body_metrics and not (weight_kg and height_cm and age):
       return None
 
-    logger.info("Analyzing metabolic health indicators")
+    logger.info(self.translator.t("log.extended_analyzer.metabolic_health"))
 
     # Calculate BMR if we have the required data
     basal_metabolic_rate = None
@@ -514,7 +526,7 @@ class ExtendedHealthAnalyzer:
     if not heart_rate_records:
       return None
 
-    logger.info("Analyzing stress resilience and recovery")
+    logger.info(self.translator.t("log.extended_analyzer.stress_resilience"))
 
     # Calculate stress accumulation score from heart rate variability
     # Simplified: based on heart rate standard deviation as proxy for stress
@@ -548,9 +560,9 @@ class ExtendedHealthAnalyzer:
 
     # Recommended rest periods
     recommended_rest_periods = [
-      "建议每周安排1-2天完全休息日",
-      "每天保证7-8小时睡眠",
-      "每周进行1-2次冥想或放松练习",
+      self.translator.t("extended.recommendation.rest_days"),
+      self.translator.t("extended.recommendation.sleep_7_8"),
+      self.translator.t("extended.recommendation.meditation"),
     ]
 
     return StressResilienceAnalysis(
@@ -574,7 +586,7 @@ class ExtendedHealthAnalyzer:
     if sleep_records and activity_records:
       correlations["sleep_activity"] = {
         "correlation": 0.6,  # Positive correlation between good sleep and activity
-        "insight": "良好的睡眠质量与更高的活动水平相关",
+        "insight": self.translator.t("extended.correlation.sleep_activity"),
       }
 
     # Heart rate and stress correlation
@@ -584,7 +596,7 @@ class ExtendedHealthAnalyzer:
     if heart_rate_records and stress_records:
       correlations["hr_stress"] = {
         "correlation": 0.7,  # Heart rate often correlates with stress
-        "insight": "心率变异性可反映压力水平",
+        "insight": self.translator.t("extended.correlation.hr_stress"),
       }
 
     return correlations
@@ -600,22 +612,22 @@ class ExtendedHealthAnalyzer:
     insights = []
 
     if sleep_quality and sleep_quality.sleep_debt_hours > 2:
-      insights.append("⚠️ 睡眠债积累过多，可能影响长期健康")
+      insights.append(self.translator.t("extended.predictive.sleep_debt"))
 
     if activity_patterns and activity_patterns.daily_step_average < 5000:
-      insights.append("📊 步数偏低，建议增加日常活动量")
+      insights.append(self.translator.t("extended.predictive.low_steps"))
 
     if metabolic_health and metabolic_health.metabolic_health_score < 0.6:
-      insights.append("🔬 代谢健康指标需要关注，建议咨询专业医师")
+      insights.append(self.translator.t("extended.predictive.metabolic_attention"))
 
     if stress_resilience and stress_resilience.burnout_risk_level in [
       "high",
       "critical",
     ]:
-      insights.append("😰  burnout风险较高，需要调整生活节奏")
+      insights.append(self.translator.t("extended.predictive.burnout_risk"))
 
     if not insights:
-      insights.append("✅ 整体健康状况良好，继续保持健康生活方式")
+      insights.append(self.translator.t("extended.predictive.overall_good"))
 
     return insights
 
@@ -680,16 +692,16 @@ class ExtendedHealthAnalyzer:
     actions = []
 
     if sleep_quality and sleep_quality.sleep_debt_hours > 1:
-      actions.append("立即改善睡眠习惯，优先偿还睡眠债")
+      actions.append(self.translator.t("extended.priority_actions.sleep_debt"))
 
     if stress_resilience and stress_resilience.burnout_risk_level == "critical":
-      actions.append("立即采取措施降低burnout风险")
+      actions.append(self.translator.t("extended.priority_actions.reduce_burnout"))
 
     if activity_patterns and activity_patterns.daily_step_average < 3000:
-      actions.append("增加日常步行，目标每天8000步")
+      actions.append(self.translator.t("extended.priority_actions.increase_steps"))
 
     if not actions:
-      actions.append("保持当前健康生活方式")
+      actions.append(self.translator.t("extended.priority_actions.maintain"))
 
     return actions
 
@@ -698,10 +710,10 @@ class ExtendedHealthAnalyzer:
   ) -> list[str]:
     """Generate lifestyle optimization recommendations."""
     optimizations = [
-      "建立规律的作息时间",
-      "增加有氧运动频率",
-      "改善饮食结构",
-      "学习压力管理技巧",
+      self.translator.t("extended.optimization.routine"),
+      self.translator.t("extended.optimization.aerobic"),
+      self.translator.t("extended.optimization.diet"),
+      self.translator.t("extended.optimization.stress_management"),
     ]
 
     return optimizations

@@ -6,9 +6,11 @@ from typing import Any
 import pandas as pd
 
 from ..core.data_models import CategoryRecord, HealthRecord, QuantityRecord
+from ..i18n import Translator, resolve_locale
 from ..utils.logger import get_logger
 
 logger = get_logger(__name__)
+_TRANSLATOR = Translator(resolve_locale())
 
 
 class DataConverter:
@@ -86,7 +88,11 @@ class DataConverter:
     )
 
     logger.debug(
-      f"Converted {len(records)} heart rate records to DataFrame with {len(df)} rows"
+      _TRANSLATOR.t(
+        "log.data_converter.converted_hr",
+        records=len(records),
+        rows=len(df),
+      )
     )
     return df
 
@@ -109,7 +115,11 @@ class DataConverter:
     )
 
     logger.debug(
-      f"Converted {len(records)} resting HR records to DataFrame with {len(df)} rows"
+      _TRANSLATOR.t(
+        "log.data_converter.converted_resting_hr",
+        records=len(records),
+        rows=len(df),
+      )
     )
     return df
 
@@ -132,7 +142,11 @@ class DataConverter:
     )
 
     logger.debug(
-      f"Converted {len(records)} HRV records to DataFrame with {len(df)} rows"
+      _TRANSLATOR.t(
+        "log.data_converter.converted_hrv",
+        records=len(records),
+        rows=len(df),
+      )
     )
     return df
 
@@ -187,7 +201,11 @@ class DataConverter:
       df = df.sort_values("date").reset_index(drop=True)
 
     logger.debug(
-      f"Converted {len(sessions)} sleep sessions to DataFrame with {len(df)} rows"
+      _TRANSLATOR.t(
+        "log.data_converter.converted_sleep_sessions",
+        records=len(sessions),
+        rows=len(df),
+      )
     )
     return df
 
@@ -206,7 +224,7 @@ class DataConverter:
 
     # Ensure timestamp column exists.
     if "timestamp" not in df.columns:
-      logger.warning("No timestamp column in heart rate DataFrame")
+      logger.warning(_TRANSLATOR.t("log.data_converter.no_timestamp_hr"))
       return pd.DataFrame()
 
     # Create hourly index.
@@ -222,7 +240,12 @@ class DataConverter:
     hourly_stats.columns = ["mean_hr", "min_hr", "max_hr", "count"]
     hourly_stats = hourly_stats.reset_index()
 
-    logger.debug(f"Aggregated heart rate data to {len(hourly_stats)} hourly records")
+    logger.debug(
+      _TRANSLATOR.t(
+        "log.data_converter.aggregated_hr_hourly",
+        count=len(hourly_stats),
+      )
+    )
     return hourly_stats
 
   @staticmethod
@@ -240,7 +263,7 @@ class DataConverter:
 
     # Ensure timestamp column exists.
     if "timestamp" not in df.columns:
-      logger.warning("No timestamp column in heart rate DataFrame")
+      logger.warning(_TRANSLATOR.t("log.data_converter.no_timestamp_hr"))
       return pd.DataFrame()
 
     # Create date index.
@@ -256,7 +279,12 @@ class DataConverter:
     daily_stats.columns = ["mean_hr", "min_hr", "max_hr", "count"]
     daily_stats = daily_stats.reset_index()
 
-    logger.debug(f"Aggregated heart rate data to {len(daily_stats)} daily records")
+    logger.debug(
+      _TRANSLATOR.t(
+        "log.data_converter.aggregated_hr_daily",
+        count=len(daily_stats),
+      )
+    )
     return daily_stats
 
   @staticmethod
@@ -302,7 +330,12 @@ class DataConverter:
       .reset_index()
     )
 
-    logger.debug(f"Aggregated sleep data to {len(daily_stats)} daily records")
+    logger.debug(
+      _TRANSLATOR.t(
+        "log.data_converter.aggregated_sleep_daily",
+        count=len(daily_stats),
+      )
+    )
     return daily_stats
 
   @staticmethod
@@ -353,7 +386,12 @@ class DataConverter:
     zone_df = pd.DataFrame.from_dict(zone_counts, orient="index")
     zone_df = zone_df.reset_index().rename(columns={"index": "zone"})
 
-    logger.debug(f"Prepared heart rate zones data with {len(zone_df)} zones")
+    logger.debug(
+      _TRANSLATOR.t(
+        "log.data_converter.prepared_hr_zones",
+        count=len(zone_df),
+      )
+    )
     return zone_df
 
   @staticmethod
@@ -401,7 +439,12 @@ class DataConverter:
 
     stages_df = pd.DataFrame(stages_data)
 
-    logger.debug(f"Prepared sleep stages distribution with {len(stages_df)} stages")
+    logger.debug(
+      _TRANSLATOR.t(
+        "log.data_converter.prepared_sleep_stages",
+        count=len(stages_df),
+      )
+    )
     return stages_df
 
   @staticmethod
@@ -424,6 +467,10 @@ class DataConverter:
     sampled_df = df.sample(n=max_points, random_state=42).sort_index()
 
     logger.debug(
-      f"Sampled data from {len(df)} to {len(sampled_df)} points for performance"
+      _TRANSLATOR.t(
+        "log.data_converter.sampled",
+        source=len(df),
+        target=len(sampled_df),
+      )
     )
     return sampled_df

@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 
 from ..core.data_models import HealthRecord
+from ..i18n import Translator, resolve_locale
 from ..utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -38,7 +39,7 @@ class OptimizedDataFrame:
       len(arr) == n_records
       for arr in [self.values, self.types, self.sources, self.units]
     ):
-      raise ValueError("All arrays must have the same length")
+      raise ValueError("optimized.error.array_length_mismatch")
 
   @property
   def record_count(self) -> int:
@@ -58,9 +59,7 @@ class OptimizedDataFrame:
     )
 
   @classmethod
-  def from_records(
-    cls, records: Sequence[HealthRecord]
-  ) -> "OptimizedDataFrame":
+  def from_records(cls, records: Sequence[HealthRecord]) -> "OptimizedDataFrame":
     """Create OptimizedDataFrame from health records."""
     if not records:
       # Return empty arrays
@@ -88,11 +87,9 @@ class OptimizedDataFrame:
       units[i] = getattr(record, "unit", "Unknown")
 
       # Extract value based on record type
-      if (
-        hasattr(record, "value") and getattr(record, "value", None) is not None
-      ):
+      value = getattr(record, "value", None)
+      if value is not None:
         # Handle different value types
-        value = record.value
         if isinstance(value, (int, float)):
           values[i] = float(value)
         elif isinstance(value, str):
@@ -113,13 +110,14 @@ class OptimizedDataFrame:
 class ParallelProcessor:
   """Parallel processing utilities for health data analysis."""
 
-  def __init__(self, max_workers: int | None = None):
+  def __init__(self, max_workers: int | None = None, locale: str | None = None):
     """Initialize parallel processor.
 
     Args:
         max_workers: Maximum number of worker processes (default: CPU count)
     """
     self.max_workers = max_workers or multiprocessing.cpu_count()
+    self.translator = Translator(resolve_locale(locale))
     self.logger = get_logger(__name__)
 
   def process_records_parallel(
@@ -143,12 +141,14 @@ class ParallelProcessor:
       return [process_func(records)]
 
     # Split records into chunks
-    chunks = [
-      records[i : i + chunk_size] for i in range(0, len(records), chunk_size)
-    ]
+    chunks = [records[i : i + chunk_size] for i in range(0, len(records), chunk_size)]
 
     self.logger.info(
-      f"Processing {len(records)} records in {len(chunks)} parallel chunks"
+      self.translator.t(
+        "log.optimized.parallel_start",
+        count=len(records),
+        chunks=len(chunks),
+      )
     )
 
     results = []
@@ -162,7 +162,7 @@ class ParallelProcessor:
           result = future.result()
           results.append(result)
         except Exception as e:
-          self.logger.error(f"Error processing chunk: {e}")
+          self.logger.error(self.translator.t("log.optimized.chunk_error", error=e))
           results.append(None)  # Add None for failed chunks
 
     # Filter out None results and flatten if needed
@@ -173,8 +173,9 @@ class ParallelProcessor:
 class StatisticalAggregator:
   """High-performance statistical aggregation for health data."""
 
-  def __init__(self):
+  def __init__(self, locale: str | None = None):
     """Initialize statistical aggregator."""
+    self.translator = Translator(resolve_locale(locale))
     self.logger = get_logger(__name__)
 
   def aggregate_by_time_window(
@@ -218,7 +219,7 @@ class StatisticalAggregator:
           agg_dict[col] = "first"
 
       # Resample and aggregate
-      result = df.resample(window).agg(agg_dict)  # type: ignore
+      result = df.resample(window).agg(agg_dict)  # type: ignore[arg-type]
 
       # Flatten column names
       result.columns = ["_".join(col).strip() for col in result.columns]
@@ -229,7 +230,7 @@ class StatisticalAggregator:
       return result
 
     except Exception as e:
-      self.logger.error(f"Error in time window aggregation: {e}")
+      self.logger.error(self.translator.t("log.optimized.aggregation_error", error=e))
       return pd.DataFrame()
 
   def calculate_rolling_stats(
@@ -270,8 +271,9 @@ class StatisticalAggregator:
 class MemoryOptimizer:
   """Memory optimization utilities for large datasets."""
 
-  def __init__(self):
+  def __init__(self, locale: str | None = None):
     """Initialize memory optimizer."""
+    self.translator = Translator(resolve_locale(locale))
     self.logger = get_logger(__name__)
 
   def optimize_dataframe_types(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -328,7 +330,10 @@ class MemoryOptimizer:
     # Log memory usage
     memory_usage = optimized_df.memory_usage(deep=True).sum()
     self.logger.info(
-      f"Optimized DataFrame memory usage: {memory_usage / 1024 / 1024:.2f} MB"
+      self.translator.t(
+        "log.optimized.memory_usage",
+        size=memory_usage / 1024 / 1024,
+      )
     )
 
     return optimized_df
@@ -354,14 +359,24 @@ class MemoryOptimizer:
     for i in range(0, len(data), chunk_size):
       chunk = data[i : i + chunk_size]
       self.logger.debug(
-        f"Processing chunk {i // chunk_size + 1} with {len(chunk)} items"
+        self.translator.t(
+          "log.optimized.chunk_processing",
+          index=i // chunk_size + 1,
+          count=len(chunk),
+        )
       )
 
       try:
         chunk_result = process_func(chunk)
         results.append(chunk_result)
       except Exception as e:
-        self.logger.error(f"Error processing chunk {i // chunk_size + 1}: {e}")
+        self.logger.error(
+          self.translator.t(
+            "log.optimized.chunk_error_index",
+            index=i // chunk_size + 1,
+            error=e,
+          )
+        )
         results.append(None)
 
     return results
@@ -370,8 +385,9 @@ class MemoryOptimizer:
 class PerformanceMonitor:
   """Performance monitoring and profiling utilities."""
 
-  def __init__(self):
+  def __init__(self, locale: str | None = None):
     """Initialize performance monitor."""
+    self.translator = Translator(resolve_locale(locale))
     self.logger = get_logger(__name__)
     self.start_times = {}
     self.metrics = defaultdict(list)
@@ -396,7 +412,11 @@ class PerformanceMonitor:
 
       self.metrics[operation_name].append(duration_seconds)
       self.logger.info(
-        f"Operation '{operation_name}' completed in {duration_seconds:.2f}s"
+        self.translator.t(
+          "log.optimized.operation_completed",
+          operation=operation_name,
+          seconds=duration_seconds,
+        )
       )
 
       del self.start_times[operation_name]
@@ -428,13 +448,17 @@ class PerformanceMonitor:
     if not self.metrics:
       return
 
-    self.logger.info("=== Performance Summary ===")
+    self.logger.info(self.translator.t("log.optimized.summary_title"))
     for operation, _times in self.metrics.items():
       stats = self.get_operation_stats(operation)
       self.logger.info(
-        f"{operation}: {stats['count']} runs, "
-        f"avg {stats['avg_time']:.2f}s, "
-        f"total {stats['total_time']:.2f}s"
+        self.translator.t(
+          "log.optimized.summary_line",
+          operation=operation,
+          count=stats["count"],
+          avg=stats["avg_time"],
+          total=stats["total_time"],
+        )
       )
 
 
@@ -457,6 +481,7 @@ def aggregate_health_data_parallel(
   records: Sequence[HealthRecord],
   window: str = "1D",
   max_workers: int | None = None,
+  locale: str | None = None,
 ) -> pd.DataFrame:
   """Aggregate health data in parallel for better performance.
 
@@ -468,8 +493,8 @@ def aggregate_health_data_parallel(
   Returns:
       Aggregated DataFrame
   """
-  processor = ParallelProcessor(max_workers)
-  aggregator = StatisticalAggregator()
+  processor = ParallelProcessor(max_workers, locale=locale)
+  aggregator = StatisticalAggregator(locale=locale)
 
   # Split records by type for parallel processing
   records_by_type = defaultdict(list)
@@ -479,7 +504,13 @@ def aggregate_health_data_parallel(
 
   results = []
   for record_type, type_records in records_by_type.items():
-    logger.info(f"Processing {len(type_records)} records of type {record_type}")
+    logger.info(
+      Translator(resolve_locale(locale)).t(
+        "log.optimized.type_processing",
+        count=len(type_records),
+        record_type=record_type,
+      )
+    )
 
     def process_type_chunk(chunk):
       odf = OptimizedDataFrame.from_records(chunk)
@@ -491,9 +522,7 @@ def aggregate_health_data_parallel(
 
     # Combine results for this type
     if type_results:
-      combined = pd.concat(
-        [r for r in type_results if r is not None and not r.empty]
-      )
+      combined = pd.concat([r for r in type_results if r is not None and not r.empty])
       if not combined.empty:
         combined["record_type"] = record_type
         results.append(combined)

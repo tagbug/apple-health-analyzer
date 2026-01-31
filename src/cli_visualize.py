@@ -14,6 +14,7 @@ from src.core.xml_parser import StreamingXMLParser
 from src.processors.heart_rate import HeartRateAnalyzer
 from src.processors.sleep import SleepAnalyzer
 from src.utils.logger import get_logger
+from src.i18n import Translator, resolve_locale
 
 from src.utils.record_categorizer import (
   categorize_chart_records,
@@ -31,23 +32,45 @@ console = Console()
 logger = get_logger(__name__)
 
 
-@click.command()
+@click.command(
+  help=Translator(resolve_locale()).t("cli.help.report_command"),
+  short_help=Translator(resolve_locale()).t("cli.help.report_command_short"),
+  add_help_option=False,
+)
 @click.argument("xml_path", type=click.Path())
-@click.option("--output", "-o", type=click.Path(), help="Output directory")
+@click.option(
+  "--output",
+  "-o",
+  type=click.Path(),
+  help=Translator(resolve_locale()).t("cli.help.output_dir"),
+)
 @click.option(
   "--format",
   "-f",
   type=click.Choice(["html", "markdown", "both"]),
   default="html",
-  help="Report format",
+  help=Translator(resolve_locale()).t("cli.help.report_format"),
 )
-@click.option("--age", type=int, help="User age (for cardio fitness analysis)")
+@click.option(
+  "--age",
+  type=int,
+  help=Translator(resolve_locale()).t("cli.help.report_age"),
+)
 @click.option(
   "--gender",
   type=click.Choice(["male", "female"]),
-  help="Gender (for cardio fitness analysis)",
+  help=Translator(resolve_locale()).t("cli.help.report_gender"),
 )
-@click.option("--no-charts", is_flag=True, help="Exclude charts (text report only)")
+@click.option(
+  "--no-charts",
+  is_flag=True,
+  help=Translator(resolve_locale()).t("cli.help.report_no_charts"),
+)
+@click.help_option(
+  "--help",
+  "-h",
+  help=Translator(resolve_locale()).t("cli.help.help_option"),
+)
 def report(
   xml_path: str,
   output: str | None,
@@ -56,38 +79,44 @@ def report(
   gender: str | None,
   no_charts: bool,
 ):
-  """Generate comprehensive health analysis report (with charts and insights)
+  def _format_error(error: Exception | str) -> str:
+    message = str(error)
+    if not message:
+      return message
+    try:
+      return translator.t(message)
+    except Exception:
+      return message
 
-  Combines data analysis and visualization to generate reports with complete analysis results, charts, and health insights.
-
-  Examples:\n
-      # Generate HTML report\n
-      health-analyzer report export.xml --age 30 --gender male
-
-      # Generate Markdown report\n
-      health-analyzer report export.xml --format markdown
-
-      # Generate both HTML and Markdown formats\n
-      health-analyzer report export.xml --format both --age 30 --gender male
-  """
   # Validate input file exists
   xml_file = Path(xml_path)
   if not xml_file.exists():
-    logger.error(f"XML file not found: {xml_file}")
-    console.print(f"[bold red]Error:[/bold red] XML file not found: {xml_file}")
+    translator = Translator(resolve_locale())
+    logger.error(translator.t("log.cli.xml_not_found", path=xml_file))
+    console.print(
+      f"[bold red]{translator.t('cli.common.error')}:[/bold red] "
+      f"{translator.t('cli.parse.file_not_found', path=xml_file)}"
+    )
     sys.exit(2)
 
   try:
+    translator = Translator(resolve_locale())
     output_dir = Path(output) if output else get_config().output_dir / "reports"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    console.print(f"[bold blue]Generating health report:[/bold blue] {xml_file}")
-    console.print(f"[bold blue]Output directory:[/bold blue] {output_dir}")
-    console.print(f"[bold blue]Report format:[/bold blue] {format}")
+    console.print(
+      f"[bold blue]{translator.t('cli.report.generating')}[/bold blue] {xml_file}"
+    )
+    console.print(
+      f"[bold blue]{translator.t('cli.common.output_dir')}[/bold blue] {output_dir}"
+    )
+    console.print(
+      f"[bold blue]{translator.t('cli.report.format')}[/bold blue] {format}"
+    )
 
     # Step 1: Parse data
-    console.print("\n[bold]Step 1/4: Parsing health data...[/bold]")
-    with console.status("[bold green]Parsing records..."):
+    console.print(f"\n[bold]{translator.t('cli.report.step_parse')}[/bold]")
+    with console.status(f"[bold green]{translator.t('cli.report.status_parsing')}"):
       parser = StreamingXMLParser(xml_file)
 
       # Define all record types needed for report generation
@@ -110,11 +139,11 @@ def report(
       sleep_records = categorized["sleep"]
 
     console.print(
-      f"[green]✓ Parsing completed: {len(hr_records)} heart rate records, {len(sleep_records)} sleep records[/green]"
+      f"[green]✓ {translator.t('cli.report.parsing_completed', heart_rate=len(hr_records), sleep=len(sleep_records))}[/green]"
     )
 
     # Step 2: Analyze data
-    console.print("\n[bold]Step 2/4: Analyzing health data...[/bold]")
+    console.print(f"\n[bold]{translator.t('cli.report.step_analyze')}[/bold]")
 
     # Heart rate analysis
     gender_value: Literal["male", "female"] | None
@@ -124,87 +153,122 @@ def report(
       gender_value = None
 
     heart_rate_analyzer = HeartRateAnalyzer(age=age, gender=gender_value)
-    with console.status("[bold green]Analyzing heart rate data..."):
+    with console.status(
+      f"[bold green]{translator.t('cli.report.status_analyzing_hr')}"
+    ):
       heart_rate_report = heart_rate_analyzer.analyze_comprehensive(
         heart_rate_records=hr_records,
         resting_hr_records=resting_hr_records,
         hrv_records=hrv_records,
         vo2_max_records=vo2_max_records,
       )
-    console.print("[green]✓ Heart rate analysis completed[/green]")
+    console.print(f"[green]✓ {translator.t('cli.analyze.hr_completed')}[/green]")
 
     # Sleep analysis
     sleep_analyzer = SleepAnalyzer()
     sleep_report = None
     if sleep_records:
-      with console.status("[bold green]Analyzing sleep data..."):
+      with console.status(
+        f"[bold green]{translator.t('cli.report.status_analyzing_sleep')}"
+      ):
         sleep_report = sleep_analyzer.analyze_comprehensive(sleep_records)  # type: ignore
-      console.print("[green]✓ Sleep analysis completed[/green]")
+      console.print(f"[green]✓ {translator.t('cli.analyze.sleep_completed')}[/green]")
 
     # Step 3: Generate highlights
-    console.print("\n[bold]Step 3/4: Generating health insights...[/bold]")
+    console.print(f"\n[bold]{translator.t('cli.report.step_insights')}[/bold]")
     highlights_generator = HighlightsGenerator()
-    with console.status("[bold green]Generating insights and recommendations..."):
+    with console.status(
+      f"[bold green]{translator.t('cli.report.status_generating_insights')}"
+    ):
       highlights = highlights_generator.generate_comprehensive_highlights(
         heart_rate_report=heart_rate_report,
         sleep_report=sleep_report,
       )
     console.print(
-      f"[green]✓ Generated {len(highlights.insights)} insights and {len(highlights.recommendations)} recommendations[/green]"
+      f"[green]✓ {translator.t('cli.analyze.generated_insights', insights=len(highlights.insights), recommendations=len(highlights.recommendations))}[/green]"
     )
 
     # Step 4: Generate reports
-    console.print("\n[bold]Step 4/4: Generating report files...[/bold]")
+    console.print(f"\n[bold]{translator.t('cli.report.step_generate')}[/bold]")
     report_generator = ReportGenerator(output_dir)
+    locale = resolve_locale()
 
     report_files = []
 
     if format in ["html", "both"]:
-      with console.status("[bold green]Generating HTML report..."):
+      with console.status(f"[bold green]{translator.t('cli.report.status_html')}"):
         html_file = report_generator.generate_html_report(
-          title="Health Analysis Report",
+          title=None,
           heart_rate_report=heart_rate_report,
           sleep_report=sleep_report,
           highlights=highlights,
           include_charts=not no_charts,
+          locale=locale,
         )
         report_files.append(html_file)
-      console.print(f"[green]✓ HTML report: {html_file}[/green]")
+      console.print(
+        f"[green]✓ {translator.t('cli.report.html_saved', path=html_file)}[/green]"
+      )
 
     if format in ["markdown", "both"]:
-      with console.status("[bold green]Generating Markdown report..."):
+      with console.status(f"[bold green]{translator.t('cli.report.status_markdown')}"):
         md_file = report_generator.generate_markdown_report(
-          title="Health Analysis Report",
+          title=None,
           heart_rate_report=heart_rate_report,
           sleep_report=sleep_report,
           highlights=highlights,
+          locale=locale,
         )
         report_files.append(md_file)
-      console.print(f"[green]✓ Markdown report: {md_file}[/green]")
+      console.print(
+        f"[green]✓ {translator.t('cli.report.md_saved', path=md_file)}[/green]"
+      )
 
     # Summary
-    console.print("\n[bold green]✅ Report generation successful![/bold green]")
-    console.print("\n[bold]Generated files:[/bold]")
+    console.print(f"\n[bold green]✅ {translator.t('cli.report.success')}[/bold green]")
+    console.print(f"\n[bold]{translator.t('cli.export.generated_files')}[/bold]")
 
     # Display file information with robust error handling
     for file_path in report_files:
       try:
         size_mb = file_path.stat().st_size / (1024 * 1024)
-        console.print(f"  • {file_path.name} ({size_mb:.2f} MB)")
+        console.print(
+          f"  • {file_path.name} "
+          f"({translator.t('cli.common.file_size_mb', size=size_mb)})"
+        )
       except (FileNotFoundError, OSError) as e:
         # Report file might not exist or be inaccessible
-        logger.warning(f"Could not get file size for {file_path}: {e}")
-        console.print(f"  • {file_path.name} (size unknown)")
+        logger.warning(
+          translator.t(
+            "log.cli.file_size_error",
+            path=file_path,
+            error=_format_error(e),
+          )
+        )
+        console.print(
+          f"  • {file_path.name} ({translator.t('cli.export.file_size_unknown')})"
+        )
 
   except Exception as e:
-    logger.error(f"Report generation failed: {e}")
-    console.print(f"[bold red]Error:[/bold red] {e}")
+    logger.error(translator.t("log.cli.report_failed", error=_format_error(e)))
+    console.print(
+      f"[bold red]{translator.t('cli.common.error')}:[/bold red] {_format_error(e)}"
+    )
     sys.exit(1)
 
 
-@click.command()
+@click.command(
+  help=Translator(resolve_locale()).t("cli.help.visualize_command"),
+  short_help=Translator(resolve_locale()).t("cli.help.visualize_command_short"),
+  add_help_option=False,
+)
 @click.argument("xml_path", type=click.Path())
-@click.option("--output", "-o", type=click.Path(), help="Output directory")
+@click.option(
+  "--output",
+  "-o",
+  type=click.Path(),
+  help=Translator(resolve_locale()).t("cli.help.output_dir"),
+)
 @click.option(
   "--charts",
   "-c",
@@ -225,14 +289,23 @@ def report(
       "all",
     ]
   ),
-  help="Chart types to generate (multiple selection allowed, default: all)",
+  help=Translator(resolve_locale()).t("cli.help.visualize_charts"),
 )
 @click.option(
   "--interactive/--static",
   default=True,
-  help="Interactive charts (HTML) or static charts (PNG)",
+  help=Translator(resolve_locale()).t("cli.help.visualize_interactive"),
 )
-@click.option("--age", type=int, help="User age (for heart rate zone calculation)")
+@click.option(
+  "--age",
+  type=int,
+  help=Translator(resolve_locale()).t("cli.help.visualize_age"),
+)
+@click.help_option(
+  "--help",
+  "-h",
+  help=Translator(resolve_locale()).t("cli.help.help_option"),
+)
 def visualize(
   xml_path: str,
   output: str | None,
@@ -240,33 +313,37 @@ def visualize(
   interactive: bool,
   age: int | None,
 ):
-  """Generate health data visualization charts
+  def _format_error(error: Exception | str) -> str:
+    message = str(error)
+    if not message:
+      return message
+    try:
+      return translator.t(message)
+    except Exception:
+      return message
 
-  Supports generating various heart rate and sleep-related visualization charts.
-
-  Examples:\n
-      # Generate all charts\n
-      health-analyzer visualize export.xml
-
-      # Generate specific charts\n
-      health-analyzer visualize export.xml -c heart_rate_timeseries -c sleep_quality_trend
-
-      # Generate static PNG charts\n
-      health-analyzer visualize export.xml --static
-  """
   # Validate input file exists
   xml_file = Path(xml_path)
   if not xml_file.exists():
-    logger.error(f"XML file not found: {xml_file}")
-    console.print(f"[bold red]Error:[/bold red] XML file not found: {xml_file}")
+    translator = Translator(resolve_locale())
+    logger.error(translator.t("log.cli.xml_not_found", path=xml_file))
+    console.print(
+      f"[bold red]{translator.t('cli.common.error')}:[/bold red] "
+      f"{translator.t('cli.parse.file_not_found', path=xml_file)}"
+    )
     sys.exit(2)
 
   try:
+    translator = Translator(resolve_locale())
     output_dir = Path(output) if output else get_config().output_dir / "charts"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    console.print(f"[bold blue]Generating visualization charts:[/bold blue] {xml_file}")
-    console.print(f"[bold blue]Output directory:[/bold blue] {output_dir}")
+    console.print(
+      f"[bold blue]{translator.t('cli.visualize.generating')}[/bold blue] {xml_file}"
+    )
+    console.print(
+      f"[bold blue]{translator.t('cli.common.output_dir')}[/bold blue] {output_dir}"
+    )
 
     # Determine charts to generate
     if not charts or "all" in charts:
@@ -282,11 +359,12 @@ def visualize(
       selected_charts = list(charts)
 
     console.print(
-      f"[bold blue]Charts to generate:[/bold blue] {len(selected_charts)} charts"
+      f"[bold blue]{translator.t('cli.visualize.charts_to_generate')}[/bold blue] "
+      f"{translator.t('cli.visualize.chart_count', count=len(selected_charts))}"
     )
 
     # Parse data
-    console.print("\n[bold]Parsing data...[/bold]")
+    console.print(f"\n[bold]{translator.t('cli.visualize.parsing_data')}[/bold]")
     parser = StreamingXMLParser(xml_file)
 
     # Determine required data types
@@ -310,7 +388,9 @@ def visualize(
 
     # Parse all records in a single pass if any data is needed
     if all_types:
-      with console.status("[bold green]Parsing health data..."):
+      with console.status(
+        f"[bold green]{translator.t('cli.visualize.status_parsing')}"
+      ):
         all_records = list(parser.parse_records(record_types=all_types))
 
         categorized = categorize_chart_records(all_records)
@@ -321,11 +401,15 @@ def visualize(
         }
         sleep_data = {"sleep_records": categorized["sleep_records"]}
 
-      console.print("[green]✓ Data parsing completed[/green]")
+      console.print(
+        f"[green]✓ {translator.t('cli.visualize.parsing_completed')}[/green]"
+      )
 
     # Process sleep data if needed
     if need_sleep and "sleep_records" in sleep_data:
-      with console.status("[bold green]Processing sleep sessions..."):
+      with console.status(
+        f"[bold green]{translator.t('cli.visualize.status_processing_sleep')}"
+      ):
         # Parse sleep sessions
         sleep_analyzer = SleepAnalyzer()
         sleep_sessions = sleep_analyzer.parse_sleep_sessions(
@@ -333,10 +417,12 @@ def visualize(
         )
 
         sleep_data["sleep_sessions"] = sleep_sessions
-      console.print("[green]✓ Sleep data processing completed[/green]")
+      console.print(
+        f"[green]✓ {translator.t('cli.visualize.sleep_processing_completed')}[/green]"
+      )
 
     # Generate charts
-    console.print("\n[bold]Generating charts...[/bold]")
+    console.print(f"\n[bold]{translator.t('cli.visualize.generating_charts')}[/bold]")
     chart_generator = ChartGenerator()
     generated_files = []
 
@@ -347,7 +433,9 @@ def visualize(
     # Algorithm: Iterate through chart types, dynamically dispatch to appropriate generation method
     for chart_type in selected_charts:
       try:
-        console.print(f"[dim]Generating {chart_type}...[/dim]")
+        console.print(
+          f"[dim]{translator.t('cli.visualize.generating_chart', chart=chart_type)}[/dim]"
+        )
 
         if chart_type == "heart_rate_timeseries":
           if "heart_rate" in hr_data and hr_data["heart_rate"]:
@@ -377,9 +465,13 @@ def visualize(
                 if file_path.exists():
                   generated_files.append(file_path)
                 else:
-                  console.print(f"[yellow]⚠ 静态图表文件未找到: {file_path}[/yellow]")
+                  console.print(
+                    f"[yellow]⚠ {translator.t('cli.visualize.static_not_found', path=file_path)}[/yellow]"
+                  )
 
-              console.print(f"[green]✓ 生成: {chart_type}[/green]")
+              console.print(
+                f"[green]✓ {translator.t('cli.visualize.generated', chart=chart_type)}[/green]"
+              )
 
         elif chart_type == "resting_hr_trend":
           if "resting_hr" in hr_data and hr_data["resting_hr"]:
@@ -406,9 +498,13 @@ def visualize(
                 if file_path.exists():
                   generated_files.append(file_path)
                 else:
-                  console.print(f"[yellow]⚠ 静态图表文件未找到: {file_path}[/yellow]")
+                  console.print(
+                    f"[yellow]⚠ {translator.t('cli.visualize.static_not_found', path=file_path)}[/yellow]"
+                  )
 
-              console.print(f"[green]✓ 生成: {chart_type}[/green]")
+              console.print(
+                f"[green]✓ {translator.t('cli.visualize.generated', chart=chart_type)}[/green]"
+              )
 
         elif chart_type == "hrv_analysis":
           if "hrv" in hr_data and hr_data["hrv"]:
@@ -435,9 +531,13 @@ def visualize(
                 if file_path.exists():
                   generated_files.append(file_path)
                 else:
-                  console.print(f"[yellow]⚠ 静态图表文件未找到: {file_path}[/yellow]")
+                  console.print(
+                    f"[yellow]⚠ {translator.t('cli.visualize.static_not_found', path=file_path)}[/yellow]"
+                  )
 
-              console.print(f"[green]✓ 生成: {chart_type}[/green]")
+              console.print(
+                f"[green]✓ {translator.t('cli.visualize.generated', chart=chart_type)}[/green]"
+              )
 
         elif chart_type == "heart_rate_heatmap":
           if "heart_rate" in hr_data and hr_data["heart_rate"]:
@@ -468,9 +568,13 @@ def visualize(
                 if file_path.exists():
                   generated_files.append(file_path)
                 else:
-                  console.print(f"[yellow]⚠ 静态图表文件未找到: {file_path}[/yellow]")
+                  console.print(
+                    f"[yellow]⚠ {translator.t('cli.visualize.static_not_found', path=file_path)}[/yellow]"
+                  )
 
-              console.print(f"[green]✓ 生成: {chart_type}[/green]")
+              console.print(
+                f"[green]✓ {translator.t('cli.visualize.generated', chart=chart_type)}[/green]"
+              )
 
         elif chart_type == "heart_rate_distribution":
           if "heart_rate" in hr_data and hr_data["heart_rate"]:
@@ -497,9 +601,13 @@ def visualize(
                 if file_path.exists():
                   generated_files.append(file_path)
                 else:
-                  console.print(f"[yellow]⚠ 静态图表文件未找到: {file_path}[/yellow]")
+                  console.print(
+                    f"[yellow]⚠ {translator.t('cli.visualize.static_not_found', path=file_path)}[/yellow]"
+                  )
 
-              console.print(f"[green]✓ 生成: {chart_type}[/green]")
+              console.print(
+                f"[green]✓ {translator.t('cli.visualize.generated', chart=chart_type)}[/green]"
+              )
 
         elif chart_type == "heart_rate_zones":
           if "heart_rate" in hr_data and hr_data["heart_rate"]:
@@ -529,9 +637,13 @@ def visualize(
                 if file_path.exists():
                   generated_files.append(file_path)
                 else:
-                  console.print(f"[yellow]⚠ 静态图表文件未找到: {file_path}[/yellow]")
+                  console.print(
+                    f"[yellow]⚠ {translator.t('cli.visualize.static_not_found', path=file_path)}[/yellow]"
+                  )
 
-                console.print(f"[green]✓ 生成: {chart_type}[/green]")
+                console.print(
+                  f"[green]✓ {translator.t('cli.visualize.generated', chart=chart_type)}[/green]"
+                )
 
         elif chart_type == "sleep_timeline":
           if "sleep_sessions" in sleep_data and sleep_data["sleep_sessions"]:
@@ -558,9 +670,13 @@ def visualize(
                 if file_path.exists():
                   generated_files.append(file_path)
                 else:
-                  console.print(f"[yellow]⚠ 静态图表文件未找到: {file_path}[/yellow]")
+                  console.print(
+                    f"[yellow]⚠ {translator.t('cli.visualize.static_not_found', path=file_path)}[/yellow]"
+                  )
 
-              console.print(f"[green]✓ 生成: {chart_type}[/green]")
+              console.print(
+                f"[green]✓ {translator.t('cli.visualize.generated', chart=chart_type)}[/green]"
+              )
 
         elif chart_type == "sleep_quality_trend":
           if "sleep_sessions" in sleep_data and sleep_data["sleep_sessions"]:
@@ -589,9 +705,13 @@ def visualize(
                 if file_path.exists():
                   generated_files.append(file_path)
                 else:
-                  console.print(f"[yellow]⚠ 静态图表文件未找到: {file_path}[/yellow]")
+                  console.print(
+                    f"[yellow]⚠ {translator.t('cli.visualize.static_not_found', path=file_path)}[/yellow]"
+                  )
 
-                console.print(f"[green]✓ 生成: {chart_type}[/green]")
+                console.print(
+                  f"[green]✓ {translator.t('cli.visualize.generated', chart=chart_type)}[/green]"
+                )
 
         elif chart_type == "sleep_stages_distribution":
           if "sleep_sessions" in sleep_data and sleep_data["sleep_sessions"]:
@@ -620,9 +740,13 @@ def visualize(
                 if file_path.exists():
                   generated_files.append(file_path)
                 else:
-                  console.print(f"[yellow]⚠ 静态图表文件未找到: {file_path}[/yellow]")
+                  console.print(
+                    f"[yellow]⚠ {translator.t('cli.visualize.static_not_found', path=file_path)}[/yellow]"
+                  )
 
-                console.print(f"[green]✓ 生成: {chart_type}[/green]")
+                console.print(
+                  f"[green]✓ {translator.t('cli.visualize.generated', chart=chart_type)}[/green]"
+                )
 
         elif chart_type == "sleep_consistency":
           if "sleep_sessions" in sleep_data and sleep_data["sleep_sessions"]:
@@ -649,9 +773,13 @@ def visualize(
                 if file_path.exists():
                   generated_files.append(file_path)
                 else:
-                  console.print(f"[yellow]⚠ 静态图表文件未找到: {file_path}[/yellow]")
+                  console.print(
+                    f"[yellow]⚠ {translator.t('cli.visualize.static_not_found', path=file_path)}[/yellow]"
+                  )
 
-              console.print(f"[green]✓ 生成: {chart_type}[/green]")
+              console.print(
+                f"[green]✓ {translator.t('cli.visualize.generated', chart=chart_type)}[/green]"
+              )
 
         elif chart_type == "weekday_vs_weekend_sleep":
           if "sleep_sessions" in sleep_data and sleep_data["sleep_sessions"]:
@@ -681,59 +809,90 @@ def visualize(
                 if file_path.exists():
                   generated_files.append(file_path)
                 else:
-                  console.print(f"[yellow]⚠ 静态图表文件未找到: {file_path}[/yellow]")
+                  console.print(
+                    f"[yellow]⚠ {translator.t('cli.visualize.static_not_found', path=file_path)}[/yellow]"
+                  )
 
-              console.print(f"[green]✓ 生成: {chart_type}[/green]")
+              console.print(
+                f"[green]✓ {translator.t('cli.visualize.generated', chart=chart_type)}[/green]"
+              )
 
         else:
-          console.print(f"[yellow]⚠ Chart type not supported: {chart_type}[/yellow]")
+          console.print(
+            f"[yellow]⚠ {translator.t('cli.visualize.unsupported_chart', chart=chart_type)}[/yellow]"
+          )
 
       except Exception as e:
-        console.print(f"[red]✗ Failed to generate {chart_type}: {e}[/red]")
-        logger.error(f"Failed to generate chart {chart_type}: {e}")
+        console.print(
+          f"[red]✗ {translator.t('cli.visualize.failed_chart', chart=chart_type, error=_format_error(e))}[/red]"
+        )
+        logger.error(
+          translator.t(
+            "log.cli.chart_failed",
+            chart=chart_type,
+            error=_format_error(e),
+          )
+        )
 
     # Generate summary information
     if generated_files:
       # Create chart index file
-      index_content = f"""# Health Data Visualization Charts
+      index_content = f"""# {translator.t("cli.visualize.index_title")}
 
-Generation time: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
-Data source: {xml_file.name}
-Number of charts: {len(generated_files)}
-Output format: {"Interactive HTML" if interactive else "Static PNG"}
+{translator.t("cli.visualize.index_generated_at")}: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+{translator.t("cli.visualize.index_data_source")}: {xml_file.name}
+{translator.t("cli.visualize.index_chart_count")}: {len(generated_files)}
+{translator.t("cli.visualize.index_output_format")}: {translator.t("cli.visualize.index_format_html") if interactive else translator.t("cli.visualize.index_format_png")}
 
-## Generated Charts
+## {translator.t("cli.visualize.index_generated_charts")}
 
 """
 
       for i, file_path in enumerate(generated_files, 1):
         size_mb = file_path.stat().st_size / (1024 * 1024)
-        index_content += f"{i}. **{file_path.stem}** - {size_mb:.2f} MB\n"
+        index_content += (
+          f"{i}. **{file_path.stem}** - "
+          f"{translator.t('cli.common.file_size_mb', size=size_mb)}\n"
+        )
 
       index_file = output_dir / "index.md"
       index_file.write_text(index_content, encoding="utf-8")
 
-      console.print("\n[bold green]✅ Chart generation completed![/bold green]")
-      console.print(f"[bold]Files generated:[/bold] {len(generated_files)}")
-      console.print(f"[bold]Output directory:[/bold] {output_dir}")
-      console.print(f"[bold]Chart index:[/bold] {index_file}")
-
-      # Display file list
-      console.print("\n[bold]Generated files:[/bold]")
-      for file_path in generated_files:
-        size_mb = file_path.stat().st_size / (1024 * 1024)
-        console.print(f"  • {file_path.name} ({size_mb:.2f} MB)")
-    else:
-      console.print("[yellow]⚠ No chart files were generated[/yellow]")
       console.print(
-        "[yellow]Possible reasons: insufficient data or unsupported chart types[/yellow]"
+        f"\n[bold green]✅ {translator.t('cli.visualize.completed')}[/bold green]"
+      )
+      console.print(
+        f"[bold]{translator.t('cli.visualize.files_generated')}[/bold] {len(generated_files)}"
+      )
+      console.print(
+        f"[bold]{translator.t('cli.common.output_dir')}[/bold] {output_dir}"
+      )
+      console.print(
+        f"[bold]{translator.t('cli.visualize.index_file')}[/bold] {index_file}"
       )
 
+      # Display file list
+      console.print(f"\n[bold]{translator.t('cli.export.generated_files')}[/bold]")
+      for file_path in generated_files:
+        size_mb = file_path.stat().st_size / (1024 * 1024)
+        console.print(
+          f"  • {file_path.name} "
+          f"({translator.t('cli.common.file_size_mb', size=size_mb)})"
+        )
+    else:
+      console.print(f"[yellow]⚠ {translator.t('cli.visualize.no_files')}[/yellow]")
+      console.print(f"[yellow]{translator.t('cli.visualize.no_files_reason')}[/yellow]")
+
   except FileNotFoundError:
-    logger.error("XML file not found")
-    console.print("[bold red]Error:[/bold red] XML file not found")
+    logger.error(translator.t("log.cli.xml_not_found", path=xml_file))
+    console.print(
+      f"[bold red]{translator.t('cli.common.error')}:[/bold red] "
+      f"{translator.t('cli.parse.file_not_found', path=xml_file)}"
+    )
     sys.exit(2)
   except Exception as e:
-    logger.error(f"Chart generation failed: {e}")
-    console.print(f"[bold red]Error:[/bold red] {e}")
+    logger.error(translator.t("log.cli.visualize_failed", error=_format_error(e)))
+    console.print(
+      f"[bold red]{translator.t('cli.common.error')}:[/bold red] {_format_error(e)}"
+    )
     sys.exit(1)

@@ -115,7 +115,7 @@ class HealthRecord(BaseRecord):
   def validate_end_date(cls, v, info):
     """Ensure end_date is not before start_date."""
     if info.data and "start_date" in info.data and v < info.data["start_date"]:
-      raise ValueError("end_date cannot be before start_date")
+      raise ValueError("validation.error.end_before_start")
     return v
 
   @property
@@ -134,7 +134,7 @@ class QuantityRecord(HealthRecord):
   def validate_value(cls, v):
     """Validate quantity value is positive."""
     if v <= 0:
-      raise ValueError("Quantity value must be positive")
+      raise ValueError("validation.error.quantity_positive")
     return v
 
   @property
@@ -446,12 +446,12 @@ def create_record_from_xml_element(
       - record_instance: Parsed record or None if parsing completely fails
       - warnings_list: List of warning messages for missing/using default values
   """
-  warnings = []
+  warnings: list[str] = []
 
   try:
     record_type = element.get("type")
     if not record_type:
-      return None, ["Missing required field: type"]
+      return None, ["parser.warning.missing_required_field:type"]
 
     # Get the appropriate record class
     record_class = RECORD_TYPE_MAPPING.get(record_type)
@@ -462,7 +462,9 @@ def create_record_from_xml_element(
       elif record_type.startswith("HKCategoryTypeIdentifier"):
         record_class = CategoryRecord
       else:
-        return None, [f"Unknown record type: {record_type}"]
+        return None, [
+          f"parser.warning.unknown_record_type:{record_type}",
+        ]
 
     # Parse attributes with default value handling
     data: dict[str, Any] = {
@@ -473,10 +475,10 @@ def create_record_from_xml_element(
     source_name = element.get("sourceName")
     if not source_name:
       if use_defaults:
-        warnings.append('Missing sourceName, using default "Unknown"')
+        warnings.append("parser.warning.missing_source_name_default")
         data["source_name"] = "Unknown"
       else:
-        return None, ["Missing required field: sourceName"]
+        return None, ["parser.warning.missing_required_source_name"]
     else:
       data["source_name"] = source_name
 
@@ -490,21 +492,23 @@ def create_record_from_xml_element(
       date_value = element.get(date_field)
       if not date_value:
         if use_defaults:
-          warnings.append(f"Missing {date_field}, using current time")
+          warnings.append(f"parser.warning.missing_date_field:{date_field}")
           data[data_key] = current_time
         else:
-          return None, [f"Missing required field: {date_field}"]
+          return None, [f"parser.warning.missing_required_field:{date_field}"]
       else:
         try:
           data[data_key] = datetime.strptime(date_value, "%Y-%m-%d %H:%M:%S %z")
         except ValueError as e:
           if use_defaults:
             warnings.append(
-              f"Invalid {date_field} format ({date_value}), using current time"
+              f"parser.warning.invalid_date_format:{date_field}:{date_value}"
             )
             data[data_key] = current_time
           else:
-            return None, [f"Invalid {date_field} format: {e}"]
+            return None, [
+              f"parser.warning.invalid_date_format_error:{date_field}:{date_value}:{e}",
+            ]
 
     # Optional fields - no warnings for missing values
     data["source_version"] = element.get("sourceVersion")
@@ -519,16 +523,16 @@ def create_record_from_xml_element(
           data["value"] = float(value)
         except (ValueError, TypeError):
           if use_defaults:
-            warnings.append(f"Invalid value format ({value}); record skipped")
+            warnings.append(f"parser.warning.invalid_value_format:{value}")
             return None, warnings
-          return None, [f"Invalid value format: {value}"]
+          return None, [f"parser.warning.invalid_value_format:{value}"]
       else:
         data["value"] = value
     elif record_class == QuantityRecord or issubclass(record_class, QuantityRecord):
       if use_defaults:
-        warnings.append("Missing value for quantity record; record skipped")
+        warnings.append("parser.warning.missing_value_for_quantity")
         return None, warnings
-      return None, ["Missing required field: value (for quantity records)"]
+      return None, ["parser.warning.missing_value_for_quantity_required"]
 
     # Parse metadata
     metadata: dict[str, str | float | int] = {}
@@ -552,8 +556,8 @@ def create_record_from_xml_element(
       record = record_class(**data)
       return record, warnings
     except Exception as e:
-      warnings.append(f"Record validation failed: {e}")
+      warnings.append(f"parser.warning.record_validation_failed:{e}")
       return None, warnings
 
   except Exception as e:
-    return None, [f"Unexpected parsing error: {str(e)}"]
+    return None, [f"parser.warning.unexpected_parsing_error:{str(e)}"]

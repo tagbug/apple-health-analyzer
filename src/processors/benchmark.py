@@ -19,6 +19,7 @@ from rich.text import Text
 from ..analyzers.highlights import HighlightsGenerator
 from ..analyzers.statistical import StatisticalAnalyzer
 from ..core.xml_parser import StreamingXMLParser
+from ..i18n import Translator, resolve_locale
 from ..utils.logger import get_logger
 from .cleaner import DataCleaner
 from .exporter import DataExporter
@@ -60,11 +61,13 @@ class BenchmarkRunner:
     xml_path: Path,
     output_dir: Path | None = None,
     timeout_seconds: int = 30,
+    locale: str | None = None,
   ):
     self.xml_path = xml_path
     self.output_dir = output_dir if output_dir is not None else Path("output")
     self.output_dir.mkdir(exist_ok=True)
     self.timeout_seconds = timeout_seconds
+    self.translator = Translator(resolve_locale(locale))
     self.sample_records: list[Any] = []
     self.results: list[BenchmarkResult] = []
     self.start_time = time.time()
@@ -91,8 +94,18 @@ class BenchmarkRunner:
     thread.join(self.timeout_seconds)
 
     if thread.is_alive():
-      logger.warning(f"Timeout ({self.timeout_seconds}s), stopping execution")
-      raise TimeoutError(f"Timeout ({self.timeout_seconds}s)")
+      logger.warning(
+        self.translator.t(
+          "log.benchmark.timeout",
+          seconds=self.timeout_seconds,
+        )
+      )
+      raise TimeoutError(
+        self.translator.t(
+          "benchmark.error.timeout",
+          seconds=self.timeout_seconds,
+        )
+      )
 
     if exception[0]:
       raise exception[0]
@@ -101,7 +114,7 @@ class BenchmarkRunner:
 
   def load_sample_data(self, limit: int = 10000) -> tuple[list[Any], dict[str, Any]]:
     """Load a sample of records from XML and return parse metrics."""
-    logger.info(f"Loading first {limit} XML records as benchmark sample...")
+    logger.info(self.translator.t("log.benchmark.loading_sample", count=limit))
 
     sample_records = []
     parser = StreamingXMLParser(self.xml_path)
@@ -131,10 +144,17 @@ class BenchmarkRunner:
       "parse_time_seconds": parse_time,
     }
 
-    logger.info(f"Loaded {len(sample_records)} records for benchmarking")
     logger.info(
-      "XML parse throughput: "
-      f"{parse_metrics['throughput_records_per_sec']:.0f} records/sec"
+      self.translator.t(
+        "log.benchmark.loaded_sample",
+        count=len(sample_records),
+      )
+    )
+    logger.info(
+      self.translator.t(
+        "log.benchmark.parse_throughput",
+        throughput=parse_metrics["throughput_records_per_sec"],
+      )
     )
 
     self.sample_records = sample_records
@@ -147,7 +167,12 @@ class BenchmarkRunner:
     result = BenchmarkResult(module.name)
 
     try:
-      logger.info(f"Starting benchmark module: {module.name}")
+      logger.info(
+        self.translator.t(
+          "log.benchmark.module_start",
+          module=module.name,
+        )
+      )
 
       start_time = time.time()
       start_mem = self.get_memory_usage()
@@ -171,18 +196,33 @@ class BenchmarkRunner:
         )
 
       logger.info(
-        f"Benchmark module {module.name} completed: {result.time_seconds:.2f}s"
+        self.translator.t(
+          "log.benchmark.module_completed",
+          module=module.name,
+          seconds=result.time_seconds,
+        )
       )
 
     except TimeoutError:
       result.status = "timeout"
       result.time_seconds = self.timeout_seconds
-      logger.warning(f"Benchmark module {module.name} timed out")
+      logger.warning(
+        self.translator.t(
+          "log.benchmark.module_timeout",
+          module=module.name,
+        )
+      )
 
     except Exception as e:
       result.status = "error"
       result.error_message = str(e)
-      logger.error(f"Benchmark module {module.name} failed: {e}")
+      logger.error(
+        self.translator.t(
+          "log.benchmark.module_failed",
+          module=module.name,
+          error=e,
+        )
+      )
 
     return result
 
@@ -215,7 +255,7 @@ class BenchmarkRunner:
     start_time = time.time()
     start_mem = self.get_memory_usage()
 
-    analyzer = StatisticalAnalyzer()
+    analyzer = StatisticalAnalyzer(locale=self.translator.locale)
     analyzer.generate_report(sample_records)
 
     end_time = time.time()
@@ -236,7 +276,7 @@ class BenchmarkRunner:
     start_mem = self.get_memory_usage()
 
     # Simulate report generation.
-    highlights_gen = HighlightsGenerator()
+    highlights_gen = HighlightsGenerator(locale=self.translator.locale)
     _highlights = highlights_gen.generate_comprehensive_highlights()
 
     end_time = time.time()
@@ -257,7 +297,7 @@ class BenchmarkRunner:
     start_mem = self.get_memory_usage()
 
     output_path = self.output_dir / "benchmark_export_sample.csv"
-    exporter = DataExporter(self.output_dir)
+    exporter = DataExporter(self.output_dir, locale=self.translator.locale)
     exporter.export_to_csv(sample_records, output_path)
 
     end_time = time.time()
@@ -276,12 +316,12 @@ class BenchmarkRunner:
 
   def run_all_benchmarks(self) -> list[BenchmarkResult]:
     """Run all benchmark modules."""
-    logger.info("=== Starting full benchmark run ===")
+    logger.info(self.translator.t("log.benchmark.run_start"))
 
     # 1. Load sample data and gather XML parse metrics.
     sample_records, xml_parse_metrics = self.load_sample_data(10000)
     if not sample_records:
-      logger.error("Failed to load sample data, aborting benchmarks")
+      logger.error(self.translator.t("log.benchmark.load_failed"))
       return []
 
     # 2. Define benchmark modules.
@@ -327,17 +367,25 @@ class BenchmarkRunner:
     completed_count = sum(1 for r in results if r.status == "completed")
     total_time = time.time() - self.start_time
 
-    logger.info("=== Benchmark run completed ===")
-    logger.info(f"Total time: {total_time:.2f} seconds")
-    logger.info(f"Sample size: {len(sample_records)} records")
-    logger.info(f"Modules completed: {completed_count}/{len(results)}")
+    logger.info(self.translator.t("log.benchmark.run_completed"))
+    logger.info(self.translator.t("log.benchmark.total_time", seconds=total_time))
+    logger.info(
+      self.translator.t("log.benchmark.sample_size", count=len(sample_records))
+    )
+    logger.info(
+      self.translator.t(
+        "log.benchmark.modules_completed",
+        completed=completed_count,
+        total=len(results),
+      )
+    )
 
     return results
 
   def print_report(self):
     """Print the benchmark report."""
     if not self.results:
-      logger.error("No benchmark results available; run run_all_benchmarks() first")
+      logger.error(self.translator.t("log.benchmark.no_results"))
       return
 
     console = Console()
@@ -345,41 +393,104 @@ class BenchmarkRunner:
     completed_count = sum(1 for r in self.results if r.status == "completed")
 
     # Title panel.
-    title = Text("🍎 Apple Health Analyzer - Benchmark Report", style="bold blue")
+    title = Text(
+      self.translator.t("benchmark.report.title"),
+      style="bold blue",
+    )
     console.print(Panel(title, border_style="blue", padding=(1, 2)))
 
     # Summary table.
     info_table = Table(show_header=True, header_style="bold cyan", box=None)
-    info_table.add_column("Metric", style="dim", width=14)
-    info_table.add_column("Value", style="green")
+    info_table.add_column(
+      self.translator.t("benchmark.report.metric"),
+      style="dim",
+      width=14,
+    )
+    info_table.add_column(
+      self.translator.t("benchmark.report.value"),
+      style="green",
+    )
 
-    info_table.add_row("Start time", time.strftime("%Y-%m-%d %H:%M:%S"))
-    info_table.add_row("Total time", f"{total_time:.2f} seconds")
-    info_table.add_row("Sample size", f"{len(self.sample_records):,} records")
-    info_table.add_row("Timeout", f"{self.timeout_seconds} seconds")
-    info_table.add_row("Modules completed", f"{completed_count}/{len(self.results)}")
+    info_table.add_row(
+      self.translator.t("benchmark.report.start_time"),
+      time.strftime("%Y-%m-%d %H:%M:%S"),
+    )
+    info_table.add_row(
+      self.translator.t("benchmark.report.total_time"),
+      self.translator.t(
+        "benchmark.report.total_time_value",
+        seconds=total_time,
+      ),
+    )
+    info_table.add_row(
+      self.translator.t("benchmark.report.sample_size"),
+      self.translator.t(
+        "benchmark.report.sample_size_value",
+        count=len(self.sample_records),
+      ),
+    )
+    info_table.add_row(
+      self.translator.t("benchmark.report.timeout"),
+      self.translator.t(
+        "benchmark.report.timeout_value",
+        seconds=self.timeout_seconds,
+      ),
+    )
+    info_table.add_row(
+      self.translator.t("benchmark.report.modules_completed"),
+      self.translator.t(
+        "benchmark.report.modules_completed_value",
+        completed=completed_count,
+        total=len(self.results),
+      ),
+    )
 
     console.print(info_table)
     console.print()
 
     # Performance table.
     perf_table = Table(
-      title="🔍 Module Performance",
+      title=self.translator.t("benchmark.report.performance_title"),
       title_style="bold yellow",
       show_header=True,
       header_style="bold magenta",
       border_style="blue",
     )
 
-    perf_table.add_column("Module", style="cyan", min_width=12)
-    perf_table.add_column("Status", style="green", min_width=6, justify="center")
-    perf_table.add_column("Time (s)", style="yellow", min_width=10, justify="right")
-    perf_table.add_column("Records", style="blue", min_width=10, justify="right")
     perf_table.add_column(
-      "Throughput (records/s)", style="red", min_width=18, justify="right"
+      self.translator.t("benchmark.report.column.module"),
+      style="cyan",
+      min_width=12,
     )
     perf_table.add_column(
-      "Memory delta (MB)", style="purple", min_width=14, justify="right"
+      self.translator.t("benchmark.report.column.status"),
+      style="green",
+      min_width=6,
+      justify="center",
+    )
+    perf_table.add_column(
+      self.translator.t("benchmark.report.column.time"),
+      style="yellow",
+      min_width=10,
+      justify="right",
+    )
+    perf_table.add_column(
+      self.translator.t("benchmark.report.column.records"),
+      style="blue",
+      min_width=10,
+      justify="right",
+    )
+    perf_table.add_column(
+      self.translator.t("benchmark.report.column.throughput"),
+      style="red",
+      min_width=18,
+      justify="right",
+    )
+    perf_table.add_column(
+      self.translator.t("benchmark.report.column.memory"),
+      style="purple",
+      min_width=14,
+      justify="right",
     )
 
     for result in self.results:
@@ -395,7 +506,10 @@ class BenchmarkRunner:
       # Format throughput to avoid extreme values.
       throughput = result.throughput_records_per_sec
       if throughput > 1000000:  # Display "Instant" for extreme throughput.
-        throughput_str = Text("Instant", style="bold green")
+        throughput_str = Text(
+          self.translator.t("benchmark.report.throughput_instant"),
+          style="bold green",
+        )
       else:
         throughput_str = f"{throughput:,.0f}"
 
@@ -416,7 +530,9 @@ class BenchmarkRunner:
 
     # Bottleneck analysis.
     if completed_count > 0:
-      console.print("\n💡 [bold cyan]Bottleneck analysis:[/bold cyan]")
+      console.print(
+        f"\n💡 [bold cyan]{self.translator.t('benchmark.report.bottleneck_title')}[/bold cyan]"
+      )
 
       # Find the slowest module.
       sorted_by_time = sorted(
@@ -427,8 +543,11 @@ class BenchmarkRunner:
       if sorted_by_time:
         slowest = sorted_by_time[0]
         console.print(
-          f"  ⚠️  [red]{slowest.module_name}[/red] is slowest "
-          f"([bold]{slowest.time_seconds:.2f}s[/bold])"
+          self.translator.t(
+            "benchmark.report.slowest",
+            module=slowest.module_name,
+            seconds=slowest.time_seconds,
+          )
         )
 
       # Find the lowest throughput module.
@@ -441,8 +560,11 @@ class BenchmarkRunner:
       ):
         lowest_throughput = sorted_by_throughput[0]
         console.print(
-          f"  ⚠️  [red]{lowest_throughput.module_name}[/red] has lowest throughput "
-          f"([bold]{lowest_throughput.throughput_records_per_sec:,.0f} records/s[/bold])"
+          self.translator.t(
+            "benchmark.report.lowest_throughput",
+            module=lowest_throughput.module_name,
+            throughput=lowest_throughput.throughput_records_per_sec,
+          )
         )
 
       # Find the highest memory usage module.
@@ -455,25 +577,40 @@ class BenchmarkRunner:
         highest_memory = sorted_by_memory[0]
         memory_color = "red" if highest_memory.memory_mb > 0 else "green"
         console.print(
-          f"  ⚠️  [red]{highest_memory.module_name}[/red] has highest memory delta "
-          f"([bold {memory_color}]{highest_memory.memory_mb:.1f} MB[/bold {memory_color}])"
+          self.translator.t(
+            "benchmark.report.highest_memory",
+            module=highest_memory.module_name,
+            memory=highest_memory.memory_mb,
+            color=memory_color,
+          )
         )
 
     # Completion timestamp.
     console.print(
-      f"\n✅ [green]Completed at: {time.strftime('%Y-%m-%d %H:%M:%S')}[/green]"
+      self.translator.t(
+        "benchmark.report.completed_at",
+        timestamp=time.strftime("%Y-%m-%d %H:%M:%S"),
+      )
     )
 
 
-def run_benchmark(xml_path: str, output_dir: str | None = None, timeout: int = 30):
+def run_benchmark(
+  xml_path: str,
+  output_dir: str | None = None,
+  timeout: int = 30,
+  locale: str | None = None,
+):
   """Convenience runner for performance benchmarks."""
   xml_path_obj = Path(xml_path)
   if not xml_path_obj.exists():
-    raise FileNotFoundError(f"XML file not found: {xml_path}")
+    translator = Translator(resolve_locale(locale))
+    raise FileNotFoundError(
+      translator.t("benchmark.error.xml_not_found", path=xml_path)
+    )
 
   output_dir_obj = Path(output_dir) if output_dir else None
 
-  runner = BenchmarkRunner(xml_path_obj, output_dir_obj, timeout)
+  runner = BenchmarkRunner(xml_path_obj, output_dir_obj, timeout, locale=locale)
   results = runner.run_all_benchmarks()
   runner.print_report()
 
