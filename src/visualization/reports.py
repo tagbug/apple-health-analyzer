@@ -118,74 +118,14 @@ class ReportGenerator:
         Report file path.
     """
     logger.info("Generating Markdown report")
+    content_timestamp = datetime.now()
 
-    md_content = f"# {title}\n\n"
-    md_content += f"**生成时间**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-    md_content += "---\n\n"
-
-    # Executive summary.
-    md_content += "## 执行摘要\n\n"
-    if heart_rate_report:
-      md_content += f"- **心率记录数**: {heart_rate_report.record_count}\n"
-      md_content += f"- **数据质量**: {heart_rate_report.data_quality_score:.1%}\n"
-    if sleep_report:
-      md_content += f"- **睡眠记录数**: {sleep_report.record_count}\n"
-      md_content += f"- **数据质量**: {sleep_report.data_quality_score:.1%}\n"
-    md_content += "\n"
-
-    # Highlights.
-    if highlights:
-      md_content += "## 关键发现\n\n"
-      for i, insight in enumerate(highlights.insights[:5], 1):
-        priority_emoji = {
-          "high": "🔴",
-          "medium": "🟡",
-          "low": "🟢",
-        }
-        emoji = priority_emoji.get(insight.priority, "⚪")
-        md_content += f"{i}. {emoji} **{insight.title}**\n"
-        md_content += f"   - {insight.message}\n\n"
-
-    # Heart rate analysis.
-    if heart_rate_report:
-      md_content += "## 心率分析\n\n"
-      md_content += "### 数据概览\n\n"
-      md_content += f"- 记录总数: {heart_rate_report.record_count}\n"
-      md_content += f"- 时间范围: {heart_rate_report.data_range[0]} 至 {heart_rate_report.data_range[1]}\n"
-      md_content += f"- 数据质量评分: {heart_rate_report.data_quality_score:.1%}\n\n"
-
-      if heart_rate_report.resting_hr_analysis:
-        rhr = heart_rate_report.resting_hr_analysis
-        md_content += "### 静息心率\n\n"
-        md_content += f"- 当前值: {rhr.current_value:.0f} bpm\n"
-        md_content += f"- 基线值: {rhr.baseline_value:.0f} bpm\n"
-        md_content += f"- 变化: {rhr.change_from_baseline:+.1f} bpm\n"
-        md_content += f"- 趋势: {rhr.trend_direction}\n"
-        md_content += f"- 健康评级: {rhr.health_rating}\n\n"
-
-    # Sleep analysis.
-    if sleep_report:
-      md_content += "## 睡眠分析\n\n"
-      md_content += "### 数据概览\n\n"
-      md_content += f"- 记录总数: {sleep_report.record_count}\n"
-      md_content += (
-        f"- 时间范围: {sleep_report.data_range[0]} 至 {sleep_report.data_range[1]}\n"
-      )
-      md_content += f"- 数据质量评分: {sleep_report.data_quality_score:.1%}\n\n"
-
-      if sleep_report.quality_metrics:
-        quality = sleep_report.quality_metrics
-        md_content += "### 睡眠质量指标\n\n"
-        md_content += f"- 平均时长: {quality.average_duration:.1f} 小时\n"
-        md_content += f"- 平均效率: {quality.average_efficiency:.1%}\n"
-        md_content += f"- 规律性评分: {quality.consistency_score:.1%}\n\n"
-
-    # Recommendations.
-    if highlights and highlights.recommendations:
-      md_content += "## 健康建议\n\n"
-      for i, rec in enumerate(highlights.recommendations, 1):
-        md_content += f"{i}. {rec}\n"
-      md_content += "\n"
+    md_content = self._markdown_header(title, content_timestamp)
+    md_content += self._markdown_executive_summary(heart_rate_report, sleep_report)
+    md_content += self._markdown_highlights(highlights)
+    md_content += self._markdown_heart_rate_section(heart_rate_report)
+    md_content += self._markdown_sleep_section(sleep_report)
+    md_content += self._markdown_recommendations(highlights)
 
     # Save report.
     report_path = (
@@ -195,6 +135,103 @@ class ReportGenerator:
 
     logger.info(f"Markdown report saved to {report_path}")
     return report_path
+
+  def _markdown_header(self, title: str, timestamp: datetime) -> str:
+    """Build the Markdown report header."""
+    content = f"# {title}\n\n"
+    content += f"**生成时间**: {timestamp.strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+    content += "---\n\n"
+    return content
+
+  def _markdown_executive_summary(
+    self,
+    heart_rate_report: HeartRateAnalysisReport | None,
+    sleep_report: SleepAnalysisReport | None,
+  ) -> str:
+    """Build executive summary section."""
+    content = "## 执行摘要\n\n"
+    if heart_rate_report:
+      content += f"- **心率记录数**: {heart_rate_report.record_count}\n"
+      content += f"- **数据质量**: {heart_rate_report.data_quality_score:.1%}\n"
+    if sleep_report:
+      content += f"- **睡眠记录数**: {sleep_report.record_count}\n"
+      content += f"- **数据质量**: {sleep_report.data_quality_score:.1%}\n"
+    content += "\n"
+    return content
+
+  def _markdown_highlights(self, highlights: HealthHighlights | None) -> str:
+    """Build highlights section."""
+    if not highlights:
+      return ""
+
+    content = "## 关键发现\n\n"
+    for i, insight in enumerate(highlights.insights[:5], 1):
+      priority_emoji = {
+        "high": "🔴",
+        "medium": "🟡",
+        "low": "🟢",
+      }
+      emoji = priority_emoji.get(insight.priority, "⚪")
+      content += f"{i}. {emoji} **{insight.title}**\n"
+      content += f"   - {insight.message}\n\n"
+    return content
+
+  def _markdown_heart_rate_section(
+    self, heart_rate_report: HeartRateAnalysisReport | None
+  ) -> str:
+    """Build heart rate section."""
+    if not heart_rate_report:
+      return ""
+
+    content = "## 心率分析\n\n"
+    content += "### 数据概览\n\n"
+    content += f"- 记录总数: {heart_rate_report.record_count}\n"
+    content += f"- 时间范围: {heart_rate_report.data_range[0]} 至 {heart_rate_report.data_range[1]}\n"
+    content += f"- 数据质量评分: {heart_rate_report.data_quality_score:.1%}\n\n"
+
+    if heart_rate_report.resting_hr_analysis:
+      rhr = heart_rate_report.resting_hr_analysis
+      content += "### 静息心率\n\n"
+      content += f"- 当前值: {rhr.current_value:.0f} bpm\n"
+      content += f"- 基线值: {rhr.baseline_value:.0f} bpm\n"
+      content += f"- 变化: {rhr.change_from_baseline:+.1f} bpm\n"
+      content += f"- 趋势: {rhr.trend_direction}\n"
+      content += f"- 健康评级: {rhr.health_rating}\n\n"
+
+    return content
+
+  def _markdown_sleep_section(self, sleep_report: SleepAnalysisReport | None) -> str:
+    """Build sleep section."""
+    if not sleep_report:
+      return ""
+
+    content = "## 睡眠分析\n\n"
+    content += "### 数据概览\n\n"
+    content += f"- 记录总数: {sleep_report.record_count}\n"
+    content += (
+      f"- 时间范围: {sleep_report.data_range[0]} 至 {sleep_report.data_range[1]}\n"
+    )
+    content += f"- 数据质量评分: {sleep_report.data_quality_score:.1%}\n\n"
+
+    if sleep_report.quality_metrics:
+      quality = sleep_report.quality_metrics
+      content += "### 睡眠质量指标\n\n"
+      content += f"- 平均时长: {quality.average_duration:.1f} 小时\n"
+      content += f"- 平均效率: {quality.average_efficiency:.1%}\n"
+      content += f"- 规律性评分: {quality.consistency_score:.1%}\n\n"
+
+    return content
+
+  def _markdown_recommendations(self, highlights: HealthHighlights | None) -> str:
+    """Build recommendations section."""
+    if not highlights or not highlights.recommendations:
+      return ""
+
+    content = "## 健康建议\n\n"
+    for i, rec in enumerate(highlights.recommendations, 1):
+      content += f"{i}. {rec}\n"
+    content += "\n"
+    return content
 
   def generate_comprehensive_report(
     self,

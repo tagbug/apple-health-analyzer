@@ -5,6 +5,7 @@ from datetime import datetime
 from pathlib import Path
 
 import click
+from typing import Literal, cast
 from rich.console import Console
 
 from src.analyzers.highlights import HighlightsGenerator
@@ -13,6 +14,16 @@ from src.core.xml_parser import StreamingXMLParser
 from src.processors.heart_rate import HeartRateAnalyzer
 from src.processors.sleep import SleepAnalyzer
 from src.utils.logger import get_logger
+
+from src.utils.record_categorizer import (
+  categorize_chart_records,
+  categorize_records,
+  HEART_RATE_TYPE,
+  HRV_TYPE,
+  RESTING_HR_TYPE,
+  SLEEP_TYPE,
+  VO2_MAX_TYPE,
+)
 from src.visualization.charts import ChartGenerator
 from src.visualization.reports import ReportGenerator
 
@@ -91,25 +102,12 @@ def report(
       # Parse all records in a single pass
       all_records = list(parser.parse_records(record_types=all_types))
 
-      # Categorize records by type
-      hr_records = []
-      resting_hr_records = []
-      hrv_records = []
-      vo2_max_records = []
-      sleep_records = []
-
-      for record in all_records:
-        record_type = getattr(record, "type", "")
-        if record_type == "HKQuantityTypeIdentifierHeartRate":
-          hr_records.append(record)
-        elif record_type == "HKQuantityTypeIdentifierRestingHeartRate":
-          resting_hr_records.append(record)
-        elif record_type == "HKQuantityTypeIdentifierHeartRateVariabilitySDNN":
-          hrv_records.append(record)
-        elif record_type == "HKQuantityTypeIdentifierVO2Max":
-          vo2_max_records.append(record)
-        elif record_type == "HKCategoryTypeIdentifierSleepAnalysis":
-          sleep_records.append(record)
+      categorized = categorize_records(all_records)
+      hr_records = categorized["heart_rate"]
+      resting_hr_records = categorized["resting_hr"]
+      hrv_records = categorized["hrv"]
+      vo2_max_records = categorized["vo2_max"]
+      sleep_records = categorized["sleep"]
 
     console.print(
       f"[green]✓ Parsing completed: {len(hr_records)} heart rate records, {len(sleep_records)} sleep records[/green]"
@@ -119,7 +117,13 @@ def report(
     console.print("\n[bold]Step 2/4: Analyzing health data...[/bold]")
 
     # Heart rate analysis
-    heart_rate_analyzer = HeartRateAnalyzer(age=age, gender=gender)  # type: ignore
+    gender_value: Literal["male", "female"] | None
+    if gender in ("male", "female"):
+      gender_value = cast(Literal["male", "female"], gender)
+    else:
+      gender_value = None
+
+    heart_rate_analyzer = HeartRateAnalyzer(age=age, gender=gender_value)
     with console.status("[bold green]Analyzing heart rate data..."):
       heart_rate_report = heart_rate_analyzer.analyze_comprehensive(
         heart_rate_records=hr_records,
@@ -300,32 +304,22 @@ def visualize(
     # Define all record types needed for visualization
     all_types = []
     if need_hr:
-      all_types.extend(
-        [
-          "HKQuantityTypeIdentifierHeartRate",
-          "HKQuantityTypeIdentifierRestingHeartRate",
-          "HKQuantityTypeIdentifierHeartRateVariabilitySDNN",
-        ]
-      )
+      all_types.extend([HEART_RATE_TYPE, RESTING_HR_TYPE, HRV_TYPE])
     if need_sleep:
-      all_types.append("HKCategoryTypeIdentifierSleepAnalysis")
+      all_types.append(SLEEP_TYPE)
 
     # Parse all records in a single pass if any data is needed
     if all_types:
       with console.status("[bold green]Parsing health data..."):
         all_records = list(parser.parse_records(record_types=all_types))
 
-        # Categorize records by type
-        for record in all_records:
-          record_type = getattr(record, "type", "")
-          if record_type == "HKQuantityTypeIdentifierHeartRate":
-            hr_data.setdefault("heart_rate", []).append(record)
-          elif record_type == "HKQuantityTypeIdentifierRestingHeartRate":
-            hr_data.setdefault("resting_hr", []).append(record)
-          elif record_type == "HKQuantityTypeIdentifierHeartRateVariabilitySDNN":
-            hr_data.setdefault("hrv", []).append(record)
-          elif record_type == "HKCategoryTypeIdentifierSleepAnalysis":
-            sleep_data.setdefault("sleep_records", []).append(record)
+        categorized = categorize_chart_records(all_records)
+        hr_data = {
+          "heart_rate": categorized["heart_rate"],
+          "resting_hr": categorized["resting_hr"],
+          "hrv": categorized["hrv"],
+        }
+        sleep_data = {"sleep_records": categorized["sleep_records"]}
 
       console.print("[green]✓ Data parsing completed[/green]")
 
@@ -334,7 +328,7 @@ def visualize(
       with console.status("[bold green]Processing sleep sessions..."):
         # Parse sleep sessions
         sleep_analyzer = SleepAnalyzer()
-        sleep_sessions = sleep_analyzer._parse_sleep_sessions(  # type: ignore
+        sleep_sessions = sleep_analyzer.parse_sleep_sessions(
           sleep_data["sleep_records"]
         )
 

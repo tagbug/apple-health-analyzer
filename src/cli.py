@@ -7,7 +7,7 @@ import sys
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from pathlib import Path
-from typing import cast
+from typing import Literal, cast
 
 import click
 from rich.console import Console
@@ -20,6 +20,14 @@ from src.core.exceptions import HealthAnalyzerError
 from src.core.data_models import HealthRecord
 from src.core.xml_parser import StreamingXMLParser, get_export_file_info
 from src.utils.logger import UnifiedProgress, get_logger
+from src.utils.record_categorizer import (
+  categorize_records,
+  HEART_RATE_TYPE,
+  RESTING_HR_TYPE,
+  HRV_TYPE,
+  VO2_MAX_TYPE,
+  SLEEP_TYPE,
+)
 
 console = Console()
 logger = get_logger(__name__)
@@ -80,41 +88,17 @@ def parse(xml_path: str, output: str | None, types: list[str], preview: bool):
     xml_file = Path(xml_path)
 
     # Validate input file
-    if not xml_file.exists():
-      console.print(f"[bold red]Error:[/bold red] File not found: {xml_file}")
-      console.print("[yellow]Tip:[/yellow] Check the file path and try again")
-      sys.exit(1)
-
-    if xml_file.stat().st_size == 0:
-      console.print(f"[bold red]Error:[/bold red] File is empty: {xml_file}")
-      sys.exit(1)
+    _ensure_xml_file(xml_file)
 
     output_dir = Path(output) if output else get_config().output_dir
 
     console.print(f"[bold blue]Parsing Apple Health export:[/bold blue] {xml_file}")
     console.print(f"[bold blue]Output directory:[/bold blue] {output_dir}")
 
-    # Get file info with better error handling
-    try:
-      file_info = get_export_file_info(xml_file)
-      if file_info:
-        console.print(f"[green]File size:[/green] {file_info['file_size_mb']:.1f} MB")
-        console.print(
-          f"[green]Estimated records:[/green] {file_info['estimated_record_count']:,}"
-        )
-      else:
-        console.print("[yellow]Warning:[/yellow] Could not read file information")
-    except Exception as e:
-      console.print(f"[yellow]Warning:[/yellow] Could not analyze file: {e}")
-      console.print("[yellow]Continuing with parsing...[/yellow]")
+    _display_file_info(xml_file)
 
     # Initialize parser
-    try:
-      parser = StreamingXMLParser(xml_file)
-    except Exception as e:
-      console.print(f"[bold red]Error:[/bold red] Failed to initialize parser: {e}")
-      console.print("[yellow]Tip:[/yellow] Check if the file is a valid XML file")
-      sys.exit(1)
+    parser = _init_parser(xml_file)
 
     # Parse records with progress tracking
     record_types = list(types) if types else None
@@ -122,51 +106,9 @@ def parse(xml_path: str, output: str | None, types: list[str], preview: bool):
     stats = {}
 
     try:
-      # Create progress bar for parsing
-      # Note: We don't use estimated count as total since it may be inaccurate
-      # Instead, we use indeterminate progress for better UX
-
-      with UnifiedProgress(
-        "Parsing records",
-        total=None,  # Always use indeterminate progress for parsing
-        quiet=True,  # Disable logging for cleaner CLI output
-      ) as progress:
-        # Progress callback function
-        def update_progress(count: int) -> None:
-          progress.update(count, f"Parsed {count:,} records")
-
-        records_generator = parser.parse_records(
-          record_types=record_types,
-          progress_callback=update_progress,
-          quiet=True,
-        )
-        records = list(records_generator)
-        stats = parser.get_statistics()
-
-        # Final update
-        progress.update(len(records), f"Parsed {len(records):,} records")
-
+      records, stats = _parse_records_with_progress(parser, record_types)
     except Exception as e:
-      logger.error(f"Parsing failed: {e}")
-
-      # Provide helpful error messages based on error type
-      error_str = str(e).lower()
-      if "memory" in error_str:
-        console.print("[bold red]Error:[/bold red] Insufficient memory for parsing")
-        console.print(
-          "[yellow]Tip:[/yellow] Try processing a smaller file or increase system memory"
-        )
-      elif "permission" in error_str:
-        console.print("[bold red]Error:[/bold red] File permission denied")
-        console.print("[yellow]Tip:[/yellow] Check file permissions")
-      elif "encoding" in error_str:
-        console.print("[bold red]Error:[/bold red] File encoding issue")
-        console.print("[yellow]Tip:[/yellow] Ensure the file is UTF-8 encoded")
-      else:
-        console.print(f"[bold red]Error:[/bold red] Failed to parse records: {e}")
-        console.print("[yellow]Tip:[/yellow] Check the XML file format and try again")
-
-      sys.exit(1)
+      _handle_parsing_exception(e)
 
     # Validate parsing results
     if not records:
@@ -200,20 +142,7 @@ def parse(xml_path: str, output: str | None, types: list[str], preview: bool):
         )
         sys.exit(1)
 
-    # Success message with summary
-    success_rate = stats.get("success_rate", 0)
-    if success_rate >= 0.95:
-      console.print("[bold green]✓ Parsing completed successfully![/bold green]")
-    elif success_rate >= 0.80:
-      console.print("[bold yellow]⚠ Parsing completed with minor issues[/bold yellow]")
-    else:
-      console.print(
-        "[bold yellow]⚠ Parsing completed but with significant data loss[/bold yellow]"
-      )
-
-    console.print(
-      f"[green]Processed {stats.get('processed_records', 0):,} records with {success_rate:.1%} success rate[/green]"
-    )
+    _print_parsing_success(stats)
 
   except KeyboardInterrupt:
     console.print("\n[yellow]Operation cancelled by user[/yellow]")
@@ -652,9 +581,15 @@ def analyze(
     console.print(f"[bold blue]Analysis types:[/bold blue] {', '.join(analysis_types)}")
 
     # Initialize analyzers
+    gender_value: Literal["male", "female"] | None
+    if gender in ("male", "female"):
+      gender_value = cast(Literal["male", "female"], gender)
+    else:
+      gender_value = None
+
     heart_rate_analyzer = HeartRateAnalyzer(
       age=age,
-      gender=cast("Literal['male', 'female'] | None", gender),
+      gender=gender_value,
     )
     sleep_analyzer = SleepAnalyzer()
     highlights_generator = HighlightsGenerator()
@@ -673,35 +608,27 @@ def analyze(
         t in analysis_types
         for t in ["heart_rate", "resting_hr", "hrv", "cardio_fitness"]
       ):
-        record_types.append("HKQuantityTypeIdentifierHeartRate")
+        record_types.append(HEART_RATE_TYPE)
         if "resting_hr" in analysis_types:
-          record_types.append("HKQuantityTypeIdentifierRestingHeartRate")
+          record_types.append(RESTING_HR_TYPE)
         if "hrv" in analysis_types:
-          record_types.append("HKQuantityTypeIdentifierHeartRateVariabilitySDNN")
+          record_types.append(HRV_TYPE)
         if "cardio_fitness" in analysis_types:
-          record_types.append("HKQuantityTypeIdentifierVO2Max")
+          record_types.append(VO2_MAX_TYPE)
 
       if "sleep" in analysis_types:
-        record_types.append("HKCategoryTypeIdentifierSleepAnalysis")
+        record_types.append(SLEEP_TYPE)
 
       if record_types:
         parser = StreamingXMLParser(xml_file)
         all_records = list(parser.parse_records(record_types=record_types))
 
-        # Categorize records by type
-        # Algorithm: Single-pass classification based on HK record type identifiers
-        for record in all_records:
-          record_type = getattr(record, "type", "")
-          if record_type == "HKQuantityTypeIdentifierHeartRate":
-            hr_records.append(record)
-          elif record_type == "HKQuantityTypeIdentifierRestingHeartRate":
-            resting_hr_records.append(record)
-          elif record_type == "HKQuantityTypeIdentifierHeartRateVariabilitySDNN":
-            hrv_records.append(record)
-          elif record_type == "HKQuantityTypeIdentifierVO2Max":
-            vo2_max_records.append(record)
-          elif record_type == "HKCategoryTypeIdentifierSleepAnalysis":
-            sleep_records.append(record)
+        categorized = categorize_records(all_records)
+        hr_records = categorized["heart_rate"]
+        resting_hr_records = categorized["resting_hr"]
+        hrv_records = categorized["hrv"]
+        vo2_max_records = categorized["vo2_max"]
+        sleep_records = categorized["sleep"]
 
       # Filter by date range if specified
       if start_date and end_date:
@@ -1187,6 +1114,110 @@ def _report_to_dict(report):
     "record_count": getattr(report, "record_count", 0),
     "data_quality_score": getattr(report, "data_quality_score", 0.0),
   }
+
+
+def _ensure_xml_file(xml_file: Path) -> None:
+  """Validate XML file existence and size."""
+  if not xml_file.exists():
+    console.print(f"[bold red]Error:[/bold red] File not found: {xml_file}")
+    console.print("[yellow]Tip:[/yellow] Check the file path and try again")
+    sys.exit(1)
+
+  if xml_file.stat().st_size == 0:
+    console.print(f"[bold red]Error:[/bold red] File is empty: {xml_file}")
+    sys.exit(1)
+
+
+def _display_file_info(xml_file: Path) -> None:
+  """Display export file information with guardrails."""
+  try:
+    file_info = get_export_file_info(xml_file)
+    if file_info:
+      console.print(f"[green]File size:[/green] {file_info['file_size_mb']:.1f} MB")
+      console.print(
+        f"[green]Estimated records:[/green] {file_info['estimated_record_count']:,}"
+      )
+    else:
+      console.print("[yellow]Warning:[/yellow] Could not read file information")
+  except Exception as e:
+    console.print(f"[yellow]Warning:[/yellow] Could not analyze file: {e}")
+    console.print("[yellow]Continuing with parsing...[/yellow]")
+
+
+def _init_parser(xml_file: Path) -> StreamingXMLParser:
+  """Initialize the streaming parser with error handling."""
+  try:
+    return StreamingXMLParser(xml_file)
+  except Exception as e:
+    console.print(f"[bold red]Error:[/bold red] Failed to initialize parser: {e}")
+    console.print("[yellow]Tip:[/yellow] Check if the file is a valid XML file")
+    sys.exit(1)
+
+
+def _parse_records_with_progress(
+  parser: StreamingXMLParser, record_types: list[str] | None
+) -> tuple[list, dict]:
+  """Parse records with CLI progress feedback."""
+  with UnifiedProgress(
+    "Parsing records",
+    total=None,  # Always use indeterminate progress for parsing
+    quiet=True,  # Disable logging for cleaner CLI output
+  ) as progress:
+
+    def update_progress(count: int) -> None:
+      progress.update(count, f"Parsed {count:,} records")
+
+    records_generator = parser.parse_records(
+      record_types=record_types,
+      progress_callback=update_progress,
+      quiet=True,
+    )
+    records = list(records_generator)
+    stats = parser.get_statistics()
+
+    progress.update(len(records), f"Parsed {len(records):,} records")
+
+  return records, stats
+
+
+def _handle_parsing_exception(error: Exception) -> None:
+  """Handle parsing errors with user-friendly messages."""
+  logger.error(f"Parsing failed: {error}")
+
+  error_str = str(error).lower()
+  if "memory" in error_str:
+    console.print("[bold red]Error:[/bold red] Insufficient memory for parsing")
+    console.print(
+      "[yellow]Tip:[/yellow] Try processing a smaller file or increase system memory"
+    )
+  elif "permission" in error_str:
+    console.print("[bold red]Error:[/bold red] File permission denied")
+    console.print("[yellow]Tip:[/yellow] Check file permissions")
+  elif "encoding" in error_str:
+    console.print("[bold red]Error:[/bold red] File encoding issue")
+    console.print("[yellow]Tip:[/yellow] Ensure the file is UTF-8 encoded")
+  else:
+    console.print(f"[bold red]Error:[/bold red] Failed to parse records: {error}")
+    console.print("[yellow]Tip:[/yellow] Check the XML file format and try again")
+
+  sys.exit(1)
+
+
+def _print_parsing_success(stats: dict) -> None:
+  """Print parsing summary and success indicator."""
+  success_rate = stats.get("success_rate", 0)
+  if success_rate >= 0.95:
+    console.print("[bold green]✓ Parsing completed successfully![/bold green]")
+  elif success_rate >= 0.80:
+    console.print("[bold yellow]⚠ Parsing completed with minor issues[/bold yellow]")
+  else:
+    console.print(
+      "[bold yellow]⚠ Parsing completed but with significant data loss[/bold yellow]"
+    )
+
+  console.print(
+    f"[green]Processed {stats.get('processed_records', 0):,} records with {success_rate:.1%} success rate[/green]"
+  )
 
 
 def main():

@@ -230,18 +230,18 @@ class DataCleaner:
     """Initialize the data cleaner.
 
     Args:
-        source_priority: Source priority map (lower value is higher priority).
+        source_priority: Source priority map (higher value is higher priority).
         default_window_seconds: Default deduplication window size in seconds.
     """
     # Default source priority map.
     self.source_priority = source_priority or {
-      "🐙Watch": 1,  # Apple Watch highest priority
-      "Apple Watch": 1,  # Alias
+      "🐙Watch": 3,  # Apple Watch highest priority
+      "Apple Watch": 3,  # Alias
       "小米运动健康": 2,  # Xiaomi Health
       "Xiaomi Health": 2,  # Alias
       "Xiaomi Home": 2,  # Alias
-      "🐙Phone": 3,  # iPhone lowest priority
-      "iPhone": 3,  # Alias
+      "🐙Phone": 1,  # iPhone lowest priority
+      "iPhone": 1,  # Alias
     }
 
     self.default_window_seconds = default_window_seconds
@@ -334,13 +334,13 @@ class DataCleaner:
       original_count = len(df)
 
       if strategy == "priority":
-        # Calculate priority score (lower is higher).
+        # Calculate priority score (higher is higher).
         # Unknown sources default to lowest priority.
-        df["priority_score"] = df["source_name"].map(self.source_priority).fillna(999)
+        df["priority_score"] = df["source_name"].map(self.source_priority).fillna(0)
 
-        # Sort by time window and priority (both ascending).
+        # Sort by time window (asc) and priority (desc).
         df.sort_values(
-          by=["time_window", "priority_score"], ascending=[True, True], inplace=True
+          by=["time_window", "priority_score"], ascending=[True, False], inplace=True
         )
 
         # Keep the first record per time window (highest priority).
@@ -382,8 +382,8 @@ class DataCleaner:
       elif strategy == "highest_quality":
         # Calculate quality score.
         # 1) Source priority score (0-40).
-        df["priority_score"] = df["source_name"].map(self.source_priority).fillna(999)
-        df["quality_score"] = (40 - (df["priority_score"] - 1) * 10).clip(lower=0)
+        df["priority_score"] = df["source_name"].map(self.source_priority).fillna(0)
+        df["quality_score"] = (df["priority_score"] * 10).clip(lower=0, upper=40)
 
         # 2) Timestamp plausibility (0-30).
         time_diff = (df["creation_date"] - df["start_date"]).abs().dt.total_seconds()
@@ -400,9 +400,9 @@ class DataCleaner:
 
       else:
         # Default to priority strategy.
-        df["priority_score"] = df["source_name"].map(self.source_priority).fillna(999)
+        df["priority_score"] = df["source_name"].map(self.source_priority).fillna(0)
         df.sort_values(
-          by=["time_window", "priority_score"], ascending=[True, True], inplace=True
+          by=["time_window", "priority_score"], ascending=[True, False], inplace=True
         )
         deduped_df = df.drop_duplicates(subset=["time_window"], keep="first")
 
@@ -471,14 +471,14 @@ class DataCleaner:
       if strategy == "latest":
         record_value = getattr(record, "creation_date", record.start_date)
       else:
-        record_value = self.source_priority.get(record.source_name, 999)
+        record_value = self.source_priority.get(record.source_name, 0)
 
       existing = selected.get(time_key)
       if existing is None:
         selected[time_key] = (record, record_value)
       else:
         _, existing_value = existing
-        if record_value < existing_value and strategy == "priority":
+        if record_value > existing_value and strategy == "priority":
           selected[time_key] = (record, record_value)
         elif record_value > existing_value and strategy == "latest":
           selected[time_key] = (record, record_value)

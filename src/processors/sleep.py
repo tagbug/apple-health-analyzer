@@ -176,7 +176,7 @@ class SleepAnalyzer:
     analysis_date = datetime.now()
 
     # Parse sleep sessions.
-    sleep_sessions = self._parse_sleep_sessions(sleep_records)
+    sleep_sessions = self.parse_sleep_sessions(sleep_records)
 
     if not sleep_sessions:
       logger.warning("No valid sleep sessions found")
@@ -257,7 +257,7 @@ class SleepAnalyzer:
     logger.info("Comprehensive sleep analysis completed")
     return report
 
-  def _parse_sleep_sessions(self, records: list[HealthRecord]) -> list[SleepSession]:
+  def parse_sleep_sessions(self, records: list[HealthRecord]) -> list[SleepSession]:
     """Parse sleep sessions from raw sleep records."""
     logger.info(f"Parsing {len(records)} sleep records into sessions")
 
@@ -284,6 +284,10 @@ class SleepAnalyzer:
 
     logger.info(f"Parsed {len(sleep_sessions)} sleep sessions")
     return sleep_sessions
+
+  def _parse_sleep_sessions(self, records: list[HealthRecord]) -> list[SleepSession]:
+    """Backward-compatible wrapper for internal sleep parsing."""
+    return self.parse_sleep_sessions(records)
 
   def _parse_single_sleep_session(
     self, date: date, records: list[HealthRecord]

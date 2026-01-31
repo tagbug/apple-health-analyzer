@@ -575,7 +575,7 @@ def test_visualize_interactive_branches(monkeypatch, tmp_path):
 
   monkeypatch.setattr(
     "src.cli_visualize.SleepAnalyzer",
-    lambda: SimpleNamespace(_parse_sleep_sessions=lambda *_: [object()]),
+    lambda: SimpleNamespace(parse_sleep_sessions=lambda *_: [object()]),
   )
 
   monkeypatch.setattr("src.cli_visualize.ChartGenerator", DummyChartGenerator)

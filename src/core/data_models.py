@@ -519,18 +519,16 @@ def create_record_from_xml_element(
           data["value"] = float(value)
         except (ValueError, TypeError):
           if use_defaults:
-            warnings.append(f"Invalid value format ({value}), using 0.0")
-            data["value"] = 0.0
-          else:
-            return None, [f"Invalid value format: {value}"]
+            warnings.append(f"Invalid value format ({value}); record skipped")
+            return None, warnings
+          return None, [f"Invalid value format: {value}"]
       else:
         data["value"] = value
     elif record_class == QuantityRecord or issubclass(record_class, QuantityRecord):
       if use_defaults:
-        warnings.append("Missing value for quantity record, using 0.0")
-        data["value"] = 0.0
-      else:
-        return None, ["Missing required field: value (for quantity records)"]
+        warnings.append("Missing value for quantity record; record skipped")
+        return None, warnings
+      return None, ["Missing required field: value (for quantity records)"]
 
     # Parse metadata
     metadata: dict[str, str | float | int] = {}
@@ -554,11 +552,8 @@ def create_record_from_xml_element(
       record = record_class(**data)
       return record, warnings
     except Exception as e:
-      if use_defaults:
-        warnings.append(f"Record validation failed: {e}, but proceeding with defaults")
-        return record_class(**data), warnings
-      else:
-        return None, [f"Record validation failed: {e}"]
+      warnings.append(f"Record validation failed: {e}")
+      return None, warnings
 
   except Exception as e:
     return None, [f"Unexpected parsing error: {str(e)}"]
