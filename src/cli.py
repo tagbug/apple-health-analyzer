@@ -48,6 +48,12 @@ def _format_error(error: Exception | str, translator: Translator) -> str:
     return message
 
 
+def _resolve_xml_path(xml_path: str | None) -> Path:
+  if xml_path:
+    return Path(xml_path)
+  return get_config().export_xml_path
+
+
 @click.group(help=_t().t("cli.help.root"), add_help_option=False)
 @click.option(
   "--config",
@@ -92,7 +98,7 @@ def cli(config_path: str | None, verbose: bool, locale: str | None):
   short_help=_t().t("cli.help.parse_command_short"),
   add_help_option=False,
 )
-@click.argument("xml_path", type=click.Path(exists=True))
+@click.argument("xml_path", type=click.Path(exists=True), required=False)
 @click.option(
   "--output",
   "-o",
@@ -114,7 +120,7 @@ def cli(config_path: str | None, verbose: bool, locale: str | None):
 def parse(xml_path: str, output: str | None, types: list[str], preview: bool):
   translator = _t()
   try:
-    xml_file = Path(xml_path)
+    xml_file = _resolve_xml_path(xml_path)
 
     # Validate input file
     _ensure_xml_file(xml_file)
@@ -211,12 +217,12 @@ def parse(xml_path: str, output: str | None, types: list[str], preview: bool):
   short_help=_t().t("cli.help.info_command_short"),
   add_help_option=False,
 )
-@click.argument("xml_path", type=click.Path(exists=True))
+@click.argument("xml_path", type=click.Path(exists=True), required=False)
 @click.help_option("--help", "-h", help=_t().t("cli.help.help_option"))
 def info(xml_path: str):
   translator = _t()
   try:
-    xml_file = Path(xml_path)
+    xml_file = _resolve_xml_path(xml_path)
 
     console.print(
       f"[bold blue]{translator.t('cli.info.analyzing_file')}[/bold blue] {xml_file}"
@@ -333,7 +339,7 @@ def info(xml_path: str):
   short_help=_t().t("cli.help.export_command_short"),
   add_help_option=False,
 )
-@click.argument("xml_path", type=click.Path(exists=True))
+@click.argument("xml_path", type=click.Path(exists=True), required=False)
 @click.option(
   "--output",
   "-o",
@@ -366,7 +372,7 @@ def export(
   try:
     from src.processors.exporter import DataExporter
 
-    xml_file = Path(xml_path)
+    xml_file = _resolve_xml_path(xml_path)
     output_dir = Path(output) if output else get_config().output_dir
 
     console.print(
@@ -513,7 +519,7 @@ cli.add_command(visualize_command, name="visualize")
   short_help=_t().t("cli.help.benchmark_command_short"),
   add_help_option=False,
 )
-@click.argument("xml_path", type=click.Path(exists=True))
+@click.argument("xml_path", type=click.Path(exists=True), required=False)
 @click.option(
   "--output",
   "-o",
@@ -532,7 +538,7 @@ def benchmark(xml_path: str, output: str | None, timeout: int):
   try:
     from src.processors.benchmark import run_benchmark
 
-    xml_file = Path(xml_path)
+    xml_file = _resolve_xml_path(xml_path)
     output_dir = Path(output) if output else get_config().output_dir
 
     console.print(
@@ -565,7 +571,7 @@ def benchmark(xml_path: str, output: str | None, timeout: int):
   short_help=_t().t("cli.help.analyze_command_short"),
   add_help_option=False,
 )
-@click.argument("xml_path", type=click.Path(exists=True))
+@click.argument("xml_path", type=click.Path(exists=True), required=False)
 @click.option(
   "--output",
   "-o",
@@ -642,7 +648,7 @@ def analyze(
     from src.processors.heart_rate import HeartRateAnalyzer
     from src.processors.sleep import SleepAnalyzer
 
-    xml_file = Path(xml_path)
+    xml_file = _resolve_xml_path(xml_path)
     output_dir = Path(output) if output else get_config().output_dir
 
     console.print(

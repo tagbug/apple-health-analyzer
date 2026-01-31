@@ -32,12 +32,18 @@ console = Console()
 logger = get_logger(__name__)
 
 
+def _resolve_xml_path(xml_path: str | None) -> Path:
+  if xml_path:
+    return Path(xml_path)
+  return get_config().export_xml_path
+
+
 @click.command(
   help=Translator(resolve_locale()).t("cli.help.report_command"),
   short_help=Translator(resolve_locale()).t("cli.help.report_command_short"),
   add_help_option=False,
 )
-@click.argument("xml_path", type=click.Path())
+@click.argument("xml_path", type=click.Path(), required=False)
 @click.option(
   "--output",
   "-o",
@@ -89,7 +95,7 @@ def report(
       return message
 
   # Validate input file exists
-  xml_file = Path(xml_path)
+  xml_file = _resolve_xml_path(xml_path)
   if not xml_file.exists():
     translator = Translator(resolve_locale())
     logger.error(translator.t("log.cli.xml_not_found", path=xml_file))
@@ -262,7 +268,7 @@ def report(
   short_help=Translator(resolve_locale()).t("cli.help.visualize_command_short"),
   add_help_option=False,
 )
-@click.argument("xml_path", type=click.Path())
+@click.argument("xml_path", type=click.Path(), required=False)
 @click.option(
   "--output",
   "-o",
@@ -323,7 +329,7 @@ def visualize(
       return message
 
   # Validate input file exists
-  xml_file = Path(xml_path)
+  xml_file = _resolve_xml_path(xml_path)
   if not xml_file.exists():
     translator = Translator(resolve_locale())
     logger.error(translator.t("log.cli.xml_not_found", path=xml_file))
