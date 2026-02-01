@@ -200,6 +200,7 @@ class TestExtendedHealthAnalyzer:
       "declining",
       "stable",
     ]
+    assert sleep_analysis.deep_sleep_ratio > 0
 
   def test_analyze_sleep_quality_empty(self):
     """Test sleep quality analysis with no records."""
@@ -449,8 +450,7 @@ class TestExtendedHealthAnalyzer:
     correlations = analyzer._analyze_health_correlations(categorized_records)
 
     assert isinstance(correlations, dict)
-    assert "sleep_activity" in correlations
-    assert "hr_stress" in correlations
+    assert correlations == {}
 
   def test_generate_predictive_insights(self):
     """Test predictive insights generation."""

@@ -16,6 +16,7 @@ from src.core.data_models import (
   WorkoutRecord,
   create_record_from_xml_element,
 )
+from src.i18n import Translator, resolve_locale
 from src.utils.logger import get_logger, performance_logger
 
 logger = get_logger(__name__)
@@ -37,6 +38,7 @@ class StreamingXMLParser:
     self.xml_path = xml_path
     self.config = config or get_config()
     self.logger = get_logger(__name__)
+    self.translator = Translator(resolve_locale())
 
     # Statistics tracking
     self.stats: dict[str, Any] = {
@@ -68,8 +70,13 @@ class StreamingXMLParser:
         Parsed health record objects
     """
     if not quiet:
-      self.logger.info(f"Starting to parse records from {self.xml_path}")
-      self.logger.info(f"Record types filter: {record_types or 'all'}")
+      self.logger.info(self.translator.t("log.parser.start", path=self.xml_path))
+      self.logger.info(
+        self.translator.t(
+          "log.parser.filter",
+          record_types=record_types or self.translator.t("log.parser.filter_all"),
+        )
+      )
 
     # Reset statistics
     self._reset_stats()
@@ -126,11 +133,14 @@ class StreamingXMLParser:
       root.clear()
 
     except Exception as e:
-      self.logger.error(f"Error during XML parsing: {e}")
+      self.logger.error(self.translator.t("log.parser.error", error=e))
       raise
 
     self.logger.info(
-      f"Completed parsing {self.stats['processed_records']} records"
+      self.translator.t(
+        "log.parser.completed",
+        count=self.stats["processed_records"],
+      )
     )
     self._log_parsing_summary()
 
@@ -142,7 +152,7 @@ class StreamingXMLParser:
     Yields:
         WorkoutRecord instances
     """
-    self.logger.info("Starting to parse workouts")
+    self.logger.info(self.translator.t("log.parser.workouts_start"))
 
     try:
       context = ET.iterparse(self.xml_path, events=("start", "end"))
@@ -163,10 +173,15 @@ class StreamingXMLParser:
 
       root.clear()
 
-      self.logger.info(f"Completed parsing {workout_count} workouts")
+      self.logger.info(
+        self.translator.t(
+          "log.parser.workouts_completed",
+          count=workout_count,
+        )
+      )
 
     except Exception as e:
-      self.logger.error(f"Error parsing workouts: {e}")
+      self.logger.error(self.translator.t("log.parser.workouts_error", error=e))
       raise
 
   def parse_activity_summaries(
@@ -177,7 +192,7 @@ class StreamingXMLParser:
     Yields:
         ActivitySummaryRecord instances
     """
-    self.logger.info("Starting to parse activity summaries")
+    self.logger.info(self.translator.t("log.parser.activity_start"))
 
     try:
       context = ET.iterparse(self.xml_path, events=("start", "end"))
@@ -198,10 +213,15 @@ class StreamingXMLParser:
 
       root.clear()
 
-      self.logger.info(f"Completed parsing {summary_count} activity summaries")
+      self.logger.info(
+        self.translator.t(
+          "log.parser.activity_completed",
+          count=summary_count,
+        )
+      )
 
     except Exception as e:
-      self.logger.error(f"Error parsing activity summaries: {e}")
+      self.logger.error(self.translator.t("log.parser.activity_error", error=e))
       raise
 
   def get_statistics(self) -> dict[str, Any]:
@@ -271,7 +291,7 @@ class StreamingXMLParser:
 
       return record
     except Exception as e:
-      self.logger.debug(f"Failed to parse record element: {e}")
+      self.logger.debug(self.translator.t("log.parser.record_failed", error=e))
       return None
 
   def _parse_workout_element(self, elem: ET.Element) -> WorkoutRecord | None:
@@ -292,12 +312,8 @@ class StreamingXMLParser:
       )
       workout_duration_seconds = float(elem.get("duration", 0))
       source_name = elem.get("sourceName", "")
-      start_date = datetime.strptime(
-        elem.get("startDate", ""), "%Y-%m-%d %H:%M:%S %z"
-      )
-      end_date = datetime.strptime(
-        elem.get("endDate", ""), "%Y-%m-%d %H:%M:%S %z"
-      )
+      start_date = datetime.strptime(elem.get("startDate", ""), "%Y-%m-%d %H:%M:%S %z")
+      end_date = datetime.strptime(elem.get("endDate", ""), "%Y-%m-%d %H:%M:%S %z")
 
       # Parse workout statistics
       calories = None
@@ -342,7 +358,7 @@ class StreamingXMLParser:
       )
 
     except Exception as e:
-      self.logger.debug(f"Failed to parse workout element: {e}")
+      self.logger.debug(self.translator.t("log.parser.workout_failed", error=e))
       return None
 
   def _parse_activity_summary_element(
@@ -377,9 +393,7 @@ class StreamingXMLParser:
         else None
       )
       stand_hours = (
-        float(elem.get("appleStandHours", 0))
-        if elem.get("appleStandHours")
-        else None
+        float(elem.get("appleStandHours", 0)) if elem.get("appleStandHours") else None
       )
 
       # Parse goals
@@ -440,7 +454,7 @@ class StreamingXMLParser:
       )
 
     except Exception as e:
-      self.logger.debug(f"Failed to parse activity summary element: {e}")
+      self.logger.debug(self.translator.t("log.parser.activity_failed", error=e))
       return None
 
   def _update_record_stats(self, record: AnyRecord) -> None:
@@ -480,53 +494,143 @@ class StreamingXMLParser:
     """Log a summary of the parsing results."""
     stats = self.get_statistics()
 
-    self.logger.info("=== XML Parsing Summary ===")
-    self.logger.info(f"Total records in file: {stats['total_records']:,}")
-    self.logger.info(f"Successfully processed: {stats['processed_records']:,}")
-    self.logger.info(f"Skipped (filtered): {stats['skipped_records']:,}")
-    self.logger.info(f"Invalid/malformed: {stats['invalid_records']:,}")
-    self.logger.info(f"Success rate: {stats['success_rate']:.1%}")
+    self.logger.info(self.translator.t("log.parser.summary_title"))
+    self.logger.info(
+      self.translator.t(
+        "log.parser.summary_total",
+        count=stats["total_records"],
+      )
+    )
+    self.logger.info(
+      self.translator.t(
+        "log.parser.summary_processed",
+        count=stats["processed_records"],
+      )
+    )
+    self.logger.info(
+      self.translator.t(
+        "log.parser.summary_skipped",
+        count=stats["skipped_records"],
+      )
+    )
+    self.logger.info(
+      self.translator.t(
+        "log.parser.summary_invalid",
+        count=stats["invalid_records"],
+      )
+    )
+    self.logger.info(
+      self.translator.t(
+        "log.parser.summary_success_rate",
+        rate=stats["success_rate"],
+      )
+    )
 
     # Log warnings if any
     if self.stats["warning_records"] > 0:
       self.logger.warning(
-        f"⚠️  {self.stats['warning_records']:,} records parsed with warnings"
+        self.translator.t(
+          "log.parser.summary_warnings",
+          count=self.stats["warning_records"],
+        )
       )
-      self.logger.warning("   (Records used default values for missing fields)")
+      self.logger.warning(self.translator.t("log.parser.summary_defaults"))
 
       # Show first few warnings
       for _i, warning_info in enumerate(self.stats["warnings"][:3]):
+        translated_warnings: list[str] = []
+        for warning in warning_info["warnings"]:
+          translated = warning
+          if isinstance(warning, str) and warning.startswith("parser.warning"):
+            parts = warning.split(":", 1)
+            key = parts[0]
+            payload = parts[1] if len(parts) > 1 else ""
+            payload_parts = payload.split(":") if payload else []
+            if key == "parser.warning.missing_required_field" and payload_parts:
+              translated = self.translator.t(key, field=payload_parts[0])
+            elif key == "parser.warning.unknown_record_type" and payload_parts:
+              translated = self.translator.t(key, record_type=payload_parts[0])
+            elif key == "parser.warning.missing_date_field" and payload_parts:
+              translated = self.translator.t(key, field=payload_parts[0])
+            elif (
+              key == "parser.warning.invalid_date_format" and len(payload_parts) >= 2
+            ):
+              translated = self.translator.t(
+                key, field=payload_parts[0], value=payload_parts[1]
+              )
+            elif (
+              key == "parser.warning.invalid_date_format_error"
+              and len(payload_parts) >= 3
+            ):
+              translated = self.translator.t(
+                key,
+                field=payload_parts[0],
+                value=payload_parts[1],
+                error=": ".join(payload_parts[2:]),
+              )
+            elif key == "parser.warning.invalid_value_format" and payload_parts:
+              translated = self.translator.t(key, value=payload_parts[0])
+            elif key == "parser.warning.record_validation_failed" and payload_parts:
+              translated = self.translator.t(key, error=": ".join(payload_parts))
+            elif key == "parser.warning.unexpected_parsing_error" and payload_parts:
+              translated = self.translator.t(key, error=": ".join(payload_parts))
+            else:
+              translated = self.translator.t(key)
+          translated_warnings.append(translated)
         self.logger.warning(
-          f"   - {warning_info['record_type']}: {', '.join(warning_info['warnings'])}"
+          self.translator.t(
+            "log.parser.summary_warning_item",
+            record_type=warning_info["record_type"],
+            warnings=", ".join(translated_warnings),
+          )
         )
 
       if len(self.stats["warnings"]) > 3:
         self.logger.warning(
-          f"   ... and {len(self.stats['warnings']) - 3} more warnings"
+          self.translator.t(
+            "log.parser.summary_warning_more",
+            count=len(self.stats["warnings"]) - 3,
+          )
         )
 
     if stats["date_range"]["start"] and stats["date_range"]["end"]:
       self.logger.info(
-        f"Date range: {stats['date_range']['start']} to {stats['date_range']['end']}"
+        self.translator.t(
+          "log.parser.summary_date_range",
+          start=stats["date_range"]["start"],
+          end=stats["date_range"]["end"],
+        )
       )
 
     # Log top record types
     if stats["record_types"]:
-      self.logger.info("Top record types:")
+      self.logger.info(self.translator.t("log.parser.summary_top_types"))
       sorted_types = sorted(
         stats["record_types"].items(), key=lambda x: x[1], reverse=True
       )
       for record_type, count in sorted_types[:5]:
-        self.logger.info(f"  {record_type}: {count:,}")
+        self.logger.info(
+          self.translator.t(
+            "log.parser.summary_type_item",
+            record_type=record_type,
+            count=count,
+          )
+        )
 
     # Log top sources
     if stats["sources"]:
-      self.logger.info("Top data sources:")
+      self.logger.info(self.translator.t("log.parser.summary_top_sources"))
       sorted_sources = sorted(
         stats["sources"].items(), key=lambda x: x[1], reverse=True
       )
       for source, count in sorted_sources[:5]:
-        self.logger.info(f"  {source}: {count:,}")
+        self.logger.info(
+          self.translator.t(
+            "log.parser.summary_source_item",
+            source=source,
+            count=count,
+          )
+        )
 
 
 @performance_logger
@@ -583,5 +687,5 @@ def get_export_file_info(xml_path: Path) -> dict[str, Any]:
     }
 
   except Exception as e:
-    logger.error(f"Error getting file info: {e}")
+    logger.error(Translator(resolve_locale()).t("log.parser.file_info_error", error=e))
     return {}

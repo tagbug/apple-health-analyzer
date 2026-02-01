@@ -357,6 +357,7 @@ class TestSleepAnalyzer:
         efficiency=0.875,
         deep_sleep=90,
         rem_sleep=60,
+        light_sleep=150,
         sleep_latency=30,
         awakenings_count=2,
       ),
@@ -370,6 +371,7 @@ class TestSleepAnalyzer:
         efficiency=0.875,
         deep_sleep=90,
         rem_sleep=60,
+        light_sleep=150,
         sleep_latency=30,
         awakenings_count=2,
       ),
@@ -382,6 +384,7 @@ class TestSleepAnalyzer:
     assert "total_duration" in summary.columns
     assert "sleep_duration" in summary.columns
     assert "efficiency" in summary.columns
+    assert "light_sleep" in summary.columns
 
   def test_generate_weekly_summary(self, analyzer):
     """Test weekly summary generation."""
@@ -397,6 +400,7 @@ class TestSleepAnalyzer:
       "awakenings": [2] * 7,
       "deep_sleep": [90] * 7,
       "rem_sleep": [60] * 7,
+      "light_sleep": [150] * 7,
     }
     daily_df = pd.DataFrame(daily_data)
 
@@ -461,8 +465,16 @@ class TestSleepAnalyzer:
 
     assert isinstance(highlights, list)
     assert len(highlights) > 0
-    assert any("睡眠时长" in h for h in highlights)
-    assert any("睡眠效率" in h for h in highlights)
+    from src.i18n import Translator, resolve_locale
+
+    translator = Translator(resolve_locale())
+    assert any(
+      translator.t("sleep.highlight.duration_good", hours=8.0) in h for h in highlights
+    )
+    assert any(
+      translator.t("sleep.highlight.efficiency_good", efficiency=90.0) in h
+      for h in highlights
+    )
 
   def test_generate_highlights_poor_sleep(self, analyzer):
     """Test highlights for poor sleep."""
@@ -478,8 +490,16 @@ class TestSleepAnalyzer:
 
     assert isinstance(highlights, list)
     # Should include sleep issue messaging.
-    assert any("睡眠时长" in h for h in highlights)
-    assert any("睡眠效率" in h for h in highlights)
+    from src.i18n import Translator, resolve_locale
+
+    translator = Translator(resolve_locale())
+    assert any(
+      translator.t("sleep.highlight.duration_low", hours=5.0) in h for h in highlights
+    )
+    assert any(
+      translator.t("sleep.highlight.efficiency_low", efficiency=75.0) in h
+      for h in highlights
+    )
 
   def test_generate_recommendations(self, analyzer):
     """Test recommendation generation."""
@@ -495,7 +515,15 @@ class TestSleepAnalyzer:
 
     assert isinstance(recommendations, list)
     assert len(recommendations) > 0
-    assert any("睡眠" in rec for rec in recommendations)
+    from src.i18n import Translator, resolve_locale
+
+    translator = Translator(resolve_locale())
+    assert any(
+      translator.t("sleep.recommendation.sleep_7_9") in rec for rec in recommendations
+    )
+    assert any(
+      translator.t("sleep.recommendation.environment") in rec for rec in recommendations
+    )
 
   def test_assess_data_quality(self, analyzer, sample_sleep_records):
     """Test data quality assessment."""

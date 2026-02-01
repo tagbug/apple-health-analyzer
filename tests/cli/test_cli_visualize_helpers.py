@@ -46,6 +46,7 @@ def test_plot_sleep_stages_distribution_with_data():
   """Ensure sleep stages distribution renders when durations exist."""
   data = pd.DataFrame(
     {
+      "date": pd.date_range("2024-01-01", periods=4, freq="D"),
       "stage": ["Deep", "REM", "Core", "Deep"],
       "duration": [60, 90, 120, 30],
     }
@@ -55,7 +56,7 @@ def test_plot_sleep_stages_distribution_with_data():
   fig = generator.plot_sleep_stages_distribution(data)
 
   assert fig is not None
-  assert len(fig.data) == 1
+  assert len(fig.data) == 3
 
 
 def test_plot_sleep_consistency_with_times():

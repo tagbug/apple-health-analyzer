@@ -13,6 +13,7 @@ import pandas as pd
 
 from ..core.data_models import AnyRecord
 from ..core.xml_parser import StreamingXMLParser
+from ..i18n import Translator, resolve_locale
 from ..utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -21,8 +22,9 @@ logger = get_logger(__name__)
 class ExportManifest:
   """Export manifest containing metadata about exported files."""
 
-  def __init__(self, export_dir: Path):
+  def __init__(self, export_dir: Path, translator: Translator | None = None):
     self.export_dir = export_dir
+    self.translator = translator or Translator(resolve_locale())
     self.manifest_path = export_dir / "manifest.json"
     self.manifest_data: dict[str, Any] = {
       "export_timestamp": pd.Timestamp.now().isoformat(),
@@ -63,20 +65,24 @@ class ExportManifest:
     with open(self.manifest_path, "w", encoding="utf-8") as f:
       json.dump(self.manifest_data, f, indent=2, ensure_ascii=False)
 
-    logger.info(f"Export manifest saved to {self.manifest_path}")
+    logger.info(
+      self.translator.t(
+        "log.exporter.manifest_saved",
+        path=self.manifest_path,
+      )
+    )
 
 
 class DataExporter:
   """Exports Apple Health records to CSV and JSON formats."""
 
-  def __init__(self, output_dir: Path):
+  def __init__(self, output_dir: Path, locale: str | None = None):
     self.output_dir = Path(output_dir)
     self.output_dir.mkdir(parents=True, exist_ok=True)
-    self.manifest = ExportManifest(self.output_dir)
+    self.translator = Translator(resolve_locale(locale))
+    self.manifest = ExportManifest(self.output_dir, self.translator)
 
-  def export_to_csv(
-    self, records: Sequence[AnyRecord], output_path: Path
-  ) -> int:
+  def export_to_csv(self, records: Sequence[AnyRecord], output_path: Path) -> int:
     """Export records to CSV format.
 
     Args:
@@ -87,7 +93,12 @@ class DataExporter:
         Number of records exported
     """
     if not records:
-      logger.warning(f"No records to export to {output_path}")
+      logger.warning(
+        self.translator.t(
+          "log.exporter.no_records",
+          path=output_path,
+        )
+      )
       return 0
 
     # Convert records to DataFrame
@@ -104,12 +115,16 @@ class DataExporter:
 
     record_count = len(records)
 
-    logger.info(f"Exported {record_count} records to CSV: {output_path}")
+    logger.info(
+      self.translator.t(
+        "log.exporter.exported_csv",
+        count=record_count,
+        path=output_path,
+      )
+    )
     return record_count
 
-  def export_to_json(
-    self, records: Sequence[AnyRecord], output_path: Path
-  ) -> int:
+  def export_to_json(self, records: Sequence[AnyRecord], output_path: Path) -> int:
     """Export records to JSON format.
 
     Args:
@@ -120,7 +135,12 @@ class DataExporter:
         Number of records exported
     """
     if not records:
-      logger.warning(f"No records to export to {output_path}")
+      logger.warning(
+        self.translator.t(
+          "log.exporter.no_records",
+          path=output_path,
+        )
+      )
       return 0
 
     # Convert records to dictionaries
@@ -132,7 +152,13 @@ class DataExporter:
 
     record_count = len(records)
 
-    logger.info(f"Exported {record_count} records to JSON: {output_path}")
+    logger.info(
+      self.translator.t(
+        "log.exporter.exported_json",
+        count=record_count,
+        path=output_path,
+      )
+    )
     return record_count
 
   def export_by_category(
@@ -157,12 +183,17 @@ class DataExporter:
 
     formats = [fmt.lower() for fmt in formats]
     if not all(fmt in ["csv", "json"] for fmt in formats):
-      raise ValueError("Supported formats are 'csv' and 'json'")
+      raise ValueError(self.translator.t("exporter.error.unsupported_formats"))
 
-    logger.info(f"Starting categorized export from {xml_path}")
-    logger.info(f"Export formats: {formats}")
+    logger.info(self.translator.t("log.exporter.start", path=xml_path))
+    logger.info(self.translator.t("log.exporter.formats", formats=formats))
     if record_types:
-      logger.info(f"Record types to export: {record_types}")
+      logger.info(
+        self.translator.t(
+          "log.exporter.record_types",
+          record_types=record_types,
+        )
+      )
 
     # Parse XML and group records by type
     parser = StreamingXMLParser(xml_path)
@@ -186,17 +217,26 @@ class DataExporter:
 
       # Log progress every 10,000 records
       if total_records % 10000 == 0:
-        logger.info(f"Processed {total_records} records...")
+        logger.info(
+          self.translator.t(
+            "log.exporter.processed",
+            count=total_records,
+          )
+        )
 
     logger.info(
-      f"Parsed {total_records} records from {len(records_by_type)} record types"
+      self.translator.t(
+        "log.exporter.parsed",
+        count=total_records,
+        types=len(records_by_type),
+      )
     )
 
     # Apply data cleaning if enabled
     if enable_cleaning:
-      logger.info("Applying data cleaning...")
+      logger.info(self.translator.t("log.exporter.cleaning_start"))
       records_by_type = self._apply_data_cleaning(records_by_type)
-      logger.info("Data cleaning completed")
+      logger.info(self.translator.t("log.exporter.cleaning_done"))
 
     # Export each record type
     export_stats = {}
@@ -238,8 +278,19 @@ class DataExporter:
     self.manifest.set_summary(total_records, total_files, total_size)
     self.manifest.save(export_duration)
 
-    logger.info(f"Export completed in {export_duration:.2f} seconds")
-    logger.info(f"Total files: {total_files}, Total size: {total_size:,} bytes")
+    logger.info(
+      self.translator.t(
+        "log.exporter.completed",
+        duration=export_duration,
+      )
+    )
+    logger.info(
+      self.translator.t(
+        "log.exporter.totals",
+        files=total_files,
+        size=total_size,
+      )
+    )
 
     return export_stats
 
@@ -281,13 +332,9 @@ class DataExporter:
       columns_to_remove.append("record_unit")
 
     # Remove empty metadata columns (only keep if they have non-empty values)
-    metadata_columns = [
-      col for col in df.columns if col.startswith("metadata_")
-    ]
+    metadata_columns = [col for col in df.columns if col.startswith("metadata_")]
     for col in metadata_columns:
-      if (
-        df[col].isna().all() or (df[col] == "").all() or (df[col] == "{}").all()
-      ):
+      if df[col].isna().all() or (df[col] == "").all() or (df[col] == "{}").all():
         columns_to_remove.append(col)
 
     df = df.drop(columns=columns_to_remove, errors="ignore")
@@ -328,7 +375,7 @@ class DataExporter:
     """
     from ..processors.cleaner import DataCleaner
 
-    cleaner = DataCleaner()
+    cleaner = DataCleaner(locale=self.translator.locale)
     cleaned_records_by_type = {}
 
     # Collect cleaning statistics
@@ -341,7 +388,13 @@ class DataExporter:
     }
 
     for record_type, records in records_by_type.items():
-      logger.info(f"Cleaning {len(records)} records for {record_type}")
+      logger.info(
+        self.translator.t(
+          "log.exporter.cleaning_type",
+          count=len(records),
+          record_type=record_type,
+        )
+      )
 
       # Apply deduplication (cast to HealthRecord list for type compatibility)
       from typing import cast
@@ -352,15 +405,18 @@ class DataExporter:
         list[HealthRecord],
         [record for record in records if hasattr(record, "start_date")],
       )
-      cleaned_records, dedup_result = cleaner.deduplicate_by_time_window(
-        health_records
-      )
+      cleaned_records, dedup_result = cleaner.deduplicate_by_time_window(health_records)
 
       duplicates_removed = len(records) - len(cleaned_records)
 
       logger.info(
-        f"Cleaned {record_type}: {len(records)} -> {len(cleaned_records)} records "
-        f"({duplicates_removed} duplicates removed)"
+        self.translator.t(
+          "log.exporter.cleaned_type",
+          record_type=record_type,
+          original=len(records),
+          cleaned=len(cleaned_records),
+          duplicates=duplicates_removed,
+        )
       )
 
       cleaned_records_by_type[record_type] = cleaned_records
@@ -379,9 +435,12 @@ class DataExporter:
     self.manifest.add_cleaning_stats(cleaning_stats)
 
     logger.info(
-      f"Overall cleaning: {cleaning_stats['total_original_records']} -> "
-      f"{cleaning_stats['total_cleaned_records']} records "
-      f"({cleaning_stats['total_duplicates_removed']} duplicates removed)"
+      self.translator.t(
+        "log.exporter.cleaned_total",
+        original=cleaning_stats["total_original_records"],
+        cleaned=cleaning_stats["total_cleaned_records"],
+        duplicates=cleaning_stats["total_duplicates_removed"],
+      )
     )
 
     return cleaned_records_by_type

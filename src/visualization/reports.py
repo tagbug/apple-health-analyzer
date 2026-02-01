@@ -8,6 +8,7 @@ from ..analyzers.highlights import HealthHighlights
 from ..processors.heart_rate import HeartRateAnalysisReport
 from ..processors.sleep import SleepAnalysisReport
 from ..utils.logger import get_logger
+from ..i18n import Translator, resolve_locale
 from .charts import ChartGenerator
 
 logger = get_logger(__name__)
@@ -31,18 +32,24 @@ class ReportGenerator:
 
     # Create chart generator.
     self.chart_generator = ChartGenerator()
-
-    logger.info(f"ReportGenerator initialized: output_dir={self.output_dir}")
+    init_translator = Translator(resolve_locale())
+    logger.info(
+      init_translator.t(
+        "log.report_generator_initialized",
+        output_dir=str(self.output_dir),
+      )
+    )
 
   def generate_html_report(
     self,
-    title: str = "健康分析报告",
+    title: str | None = None,
     heart_rate_report: HeartRateAnalysisReport | None = None,
     sleep_report: SleepAnalysisReport | None = None,
     highlights: HealthHighlights | None = None,
     include_charts: bool = True,
     heart_rate_data: list | None = None,
     sleep_data: list | None = None,
+    locale: str | None = None,
   ) -> Path:
     """Generate HTML format report
 
@@ -56,35 +63,41 @@ class ReportGenerator:
     Returns:
         Report file path
     """
-    logger.info("Generating HTML report")
+    translator = Translator(resolve_locale(locale))
+    logger.info(translator.t("log.report_html_generating"))
+    report_title = title or translator.t("report.title.health_analysis")
 
     # Create report HTML content.
-    html_content = self._create_html_structure(title)
+    html_content = self._create_html_structure(report_title, translator)
 
     # Add executive summary.
     html_content += self._create_executive_summary(
-      heart_rate_report, sleep_report, highlights
+      heart_rate_report, sleep_report, highlights, translator
     )
 
     # Add heart rate analysis section.
     if heart_rate_report:
       html_content += self._create_heart_rate_section(
-        heart_rate_report, include_charts, heart_rate_data
+        heart_rate_report, include_charts, heart_rate_data, translator
       )
 
     # Add sleep analysis section.
     if sleep_report:
-      html_content += self._create_sleep_section(sleep_report, include_charts)
+      html_content += self._create_sleep_section(
+        sleep_report, include_charts, translator
+      )
 
     # Add highlights section.
     if highlights:
-      html_content += self._create_highlights_section(highlights)
+      html_content += self._create_highlights_section(highlights, translator)
 
     # Add data quality section.
-    html_content += self._create_data_quality_section(heart_rate_report, sleep_report)
+    html_content += self._create_data_quality_section(
+      heart_rate_report, sleep_report, translator
+    )
 
     # Close HTML.
-    html_content += self._close_html_structure()
+    html_content += self._close_html_structure(translator)
 
     # Save report.
     import time
@@ -96,15 +109,16 @@ class ReportGenerator:
     report_path = self.output_dir / f"health_report_{timestamp}.html"
     report_path.write_text(html_content, encoding="utf-8")
 
-    logger.info(f"HTML report saved to {report_path}")
+    logger.info(translator.t("log.report_html_saved", path=report_path))
     return report_path
 
   def generate_markdown_report(
     self,
-    title: str = "健康分析报告",
+    title: str | None = None,
     heart_rate_report: HeartRateAnalysisReport | None = None,
     sleep_report: SleepAnalysisReport | None = None,
     highlights: HealthHighlights | None = None,
+    locale: str | None = None,
   ) -> Path:
     """Generate a Markdown report.
 
@@ -117,75 +131,19 @@ class ReportGenerator:
     Returns:
         Report file path.
     """
-    logger.info("Generating Markdown report")
+    translator = Translator(resolve_locale(locale))
+    logger.info(translator.t("log.report_md_generating"))
+    content_timestamp = datetime.now()
+    report_title = title or translator.t("report.title.health_analysis")
 
-    md_content = f"# {title}\n\n"
-    md_content += f"**生成时间**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-    md_content += "---\n\n"
-
-    # Executive summary.
-    md_content += "## 执行摘要\n\n"
-    if heart_rate_report:
-      md_content += f"- **心率记录数**: {heart_rate_report.record_count}\n"
-      md_content += f"- **数据质量**: {heart_rate_report.data_quality_score:.1%}\n"
-    if sleep_report:
-      md_content += f"- **睡眠记录数**: {sleep_report.record_count}\n"
-      md_content += f"- **数据质量**: {sleep_report.data_quality_score:.1%}\n"
-    md_content += "\n"
-
-    # Highlights.
-    if highlights:
-      md_content += "## 关键发现\n\n"
-      for i, insight in enumerate(highlights.insights[:5], 1):
-        priority_emoji = {
-          "high": "🔴",
-          "medium": "🟡",
-          "low": "🟢",
-        }
-        emoji = priority_emoji.get(insight.priority, "⚪")
-        md_content += f"{i}. {emoji} **{insight.title}**\n"
-        md_content += f"   - {insight.message}\n\n"
-
-    # Heart rate analysis.
-    if heart_rate_report:
-      md_content += "## 心率分析\n\n"
-      md_content += "### 数据概览\n\n"
-      md_content += f"- 记录总数: {heart_rate_report.record_count}\n"
-      md_content += f"- 时间范围: {heart_rate_report.data_range[0]} 至 {heart_rate_report.data_range[1]}\n"
-      md_content += f"- 数据质量评分: {heart_rate_report.data_quality_score:.1%}\n\n"
-
-      if heart_rate_report.resting_hr_analysis:
-        rhr = heart_rate_report.resting_hr_analysis
-        md_content += "### 静息心率\n\n"
-        md_content += f"- 当前值: {rhr.current_value:.0f} bpm\n"
-        md_content += f"- 基线值: {rhr.baseline_value:.0f} bpm\n"
-        md_content += f"- 变化: {rhr.change_from_baseline:+.1f} bpm\n"
-        md_content += f"- 趋势: {rhr.trend_direction}\n"
-        md_content += f"- 健康评级: {rhr.health_rating}\n\n"
-
-    # Sleep analysis.
-    if sleep_report:
-      md_content += "## 睡眠分析\n\n"
-      md_content += "### 数据概览\n\n"
-      md_content += f"- 记录总数: {sleep_report.record_count}\n"
-      md_content += (
-        f"- 时间范围: {sleep_report.data_range[0]} 至 {sleep_report.data_range[1]}\n"
-      )
-      md_content += f"- 数据质量评分: {sleep_report.data_quality_score:.1%}\n\n"
-
-      if sleep_report.quality_metrics:
-        quality = sleep_report.quality_metrics
-        md_content += "### 睡眠质量指标\n\n"
-        md_content += f"- 平均时长: {quality.average_duration:.1f} 小时\n"
-        md_content += f"- 平均效率: {quality.average_efficiency:.1%}\n"
-        md_content += f"- 规律性评分: {quality.consistency_score:.1%}\n\n"
-
-    # Recommendations.
-    if highlights and highlights.recommendations:
-      md_content += "## 健康建议\n\n"
-      for i, rec in enumerate(highlights.recommendations, 1):
-        md_content += f"{i}. {rec}\n"
-      md_content += "\n"
+    md_content = self._markdown_header(report_title, content_timestamp, translator)
+    md_content += self._markdown_executive_summary(
+      heart_rate_report, sleep_report, translator
+    )
+    md_content += self._markdown_highlights(highlights, translator)
+    md_content += self._markdown_heart_rate_section(heart_rate_report, translator)
+    md_content += self._markdown_sleep_section(sleep_report, translator)
+    md_content += self._markdown_recommendations(highlights, translator)
 
     # Save report.
     report_path = (
@@ -193,14 +151,176 @@ class ReportGenerator:
     )
     report_path.write_text(md_content, encoding="utf-8")
 
-    logger.info(f"Markdown report saved to {report_path}")
+    logger.info(translator.t("log.report_md_saved", path=report_path))
     return report_path
+
+  def _markdown_header(
+    self, title: str, timestamp: datetime, translator: Translator
+  ) -> str:
+    """Build the Markdown report header."""
+    content = f"# {title}\n\n"
+    content += (
+      f"**{translator.t('report.generated_at')}**: "
+      f"{timestamp.strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+    )
+    content += "---\n\n"
+    return content
+
+  def _markdown_executive_summary(
+    self,
+    heart_rate_report: HeartRateAnalysisReport | None,
+    sleep_report: SleepAnalysisReport | None,
+    translator: Translator,
+  ) -> str:
+    """Build executive summary section."""
+    content = f"## {translator.t('report.section.executive_summary')}\n\n"
+    if heart_rate_report:
+      content += (
+        f"- **{translator.t('report.label.heart_rate_records')}**: "
+        f"{heart_rate_report.record_count}\n"
+      )
+      content += (
+        f"- **{translator.t('report.label.data_quality_score')}**: "
+        f"{heart_rate_report.data_quality_score:.1%}\n"
+      )
+    if sleep_report:
+      content += (
+        f"- **{translator.t('report.label.sleep_records')}**: "
+        f"{sleep_report.record_count}\n"
+      )
+      content += (
+        f"- **{translator.t('report.label.data_quality_score')}**: "
+        f"{sleep_report.data_quality_score:.1%}\n"
+      )
+    content += "\n"
+    return content
+
+  def _markdown_highlights(
+    self, highlights: HealthHighlights | None, translator: Translator
+  ) -> str:
+    """Build highlights section."""
+    if not highlights:
+      return ""
+
+    content = f"## {translator.t('report.section.key_findings')}\n\n"
+    for i, insight in enumerate(highlights.insights[:5], 1):
+      priority_emoji = {
+        "high": "🔴",
+        "medium": "🟡",
+        "low": "🟢",
+      }
+      emoji = priority_emoji.get(insight.priority, "⚪")
+      content += f"{i}. {emoji} **{insight.title}**\n"
+      content += f"   - {insight.message}\n\n"
+    return content
+
+  def _markdown_heart_rate_section(
+    self, heart_rate_report: HeartRateAnalysisReport | None, translator: Translator
+  ) -> str:
+    """Build heart rate section."""
+    if not heart_rate_report:
+      return ""
+
+    content = f"## {translator.t('report.section.heart_rate')}\n\n"
+    content += f"### {translator.t('report.section.data_overview')}\n\n"
+    content += (
+      f"- {translator.t('report.metric.record_count')}: "
+      f"{heart_rate_report.record_count}\n"
+    )
+    content += (
+      f"- {translator.t('report.metric.time_range')}: "
+      f"{heart_rate_report.data_range[0]} "
+      f"{translator.t('report.label.range_to')} "
+      f"{heart_rate_report.data_range[1]}\n"
+    )
+    content += (
+      f"- {translator.t('report.label.data_quality_score')}: "
+      f"{heart_rate_report.data_quality_score:.1%}\n\n"
+    )
+
+    if heart_rate_report.resting_hr_analysis:
+      rhr = heart_rate_report.resting_hr_analysis
+      content += f"### {translator.t('report.section.resting_hr')}\n\n"
+      content += (
+        f"- {translator.t('report.metric.current_value')}: "
+        f"{rhr.current_value:.0f} bpm\n"
+      )
+      content += (
+        f"- {translator.t('report.metric.baseline_value')}: "
+        f"{rhr.baseline_value:.0f} bpm\n"
+      )
+      content += (
+        f"- {translator.t('report.metric.change')}: "
+        f"{rhr.change_from_baseline:+.1f} bpm\n"
+      )
+      content += f"- {translator.t('report.metric.trend')}: {rhr.trend_direction}\n"
+      content += (
+        f"- {translator.t('report.metric.health_rating')}: {rhr.health_rating}\n\n"
+      )
+
+    return content
+
+  def _markdown_sleep_section(
+    self, sleep_report: SleepAnalysisReport | None, translator: Translator
+  ) -> str:
+    """Build sleep section."""
+    if not sleep_report:
+      return ""
+
+    content = f"## {translator.t('report.section.sleep')}\n\n"
+    content += f"### {translator.t('report.section.data_overview')}\n\n"
+    content += (
+      f"- {translator.t('report.metric.record_count')}: {sleep_report.record_count}\n"
+    )
+    content += (
+      f"- {translator.t('report.metric.time_range')}: "
+      f"{sleep_report.data_range[0]} "
+      f"{translator.t('report.label.range_to')} "
+      f"{sleep_report.data_range[1]}\n"
+    )
+    content += (
+      f"- {translator.t('report.label.data_quality_score')}: "
+      f"{sleep_report.data_quality_score:.1%}\n\n"
+    )
+
+    if sleep_report.quality_metrics:
+      quality = sleep_report.quality_metrics
+      content += f"### {translator.t('report.section.sleep_quality_metrics')}\n\n"
+      content += (
+        f"- {translator.t('report.metric.avg_duration')}: "
+        f"{quality.average_duration:.1f} "
+        f"{translator.t('report.metric.avg_sleep_duration_unit')}\n"
+      )
+      content += (
+        f"- {translator.t('report.metric.avg_efficiency')}: "
+        f"{quality.average_efficiency:.1%}\n"
+      )
+      content += (
+        f"- {translator.t('report.metric.consistency_score')}: "
+        f"{quality.consistency_score:.1%}\n\n"
+      )
+
+    return content
+
+  def _markdown_recommendations(
+    self, highlights: HealthHighlights | None, translator: Translator
+  ) -> str:
+    """Build recommendations section."""
+    if not highlights or not highlights.recommendations:
+      return ""
+
+    content = f"## {translator.t('report.section.recommendations')}\n\n"
+    for i, rec in enumerate(highlights.recommendations, 1):
+      content += f"{i}. {rec}\n"
+    content += "\n"
+    return content
 
   def generate_comprehensive_report(
     self,
     report: Any,  # ComprehensiveHealthReport
-    title: str = "综合健康分析报告",
+    title: str | None = None,
     include_charts: bool = True,
+    locale: str | None = None,
   ) -> Path:
     """Generate comprehensive health analysis report.
 
@@ -212,7 +332,9 @@ class ReportGenerator:
     Returns:
         Report file path.
     """
-    logger.info("Generating comprehensive health report")
+    translator = Translator(resolve_locale(locale))
+    logger.info(translator.t("log.report_comprehensive_generating"))
+    report_title = title or translator.t("report.title.comprehensive")
 
     # Generate charts.
     charts = {}
@@ -222,11 +344,13 @@ class ReportGenerator:
           report, self.output_dir / "charts"
         )
       except Exception as e:
-        logger.warning(f"Chart generation failed; continuing with text report: {e}")
+        logger.warning(translator.t("log.report_charts_failed", error=str(e)))
         charts = {}
 
     # Create HTML content.
-    html_content = self._create_comprehensive_html_structure(title, report, charts)
+    html_content = self._create_comprehensive_html_structure(
+      report_title, report, charts, translator
+    )
 
     # Save report.
     report_path = (
@@ -235,7 +359,7 @@ class ReportGenerator:
     )
     report_path.write_text(html_content, encoding="utf-8")
 
-    logger.info(f"Comprehensive report saved to {report_path}")
+    logger.info(translator.t("log.report_comprehensive_saved", path=report_path))
     return report_path
 
   def _create_comprehensive_html_structure(
@@ -243,10 +367,12 @@ class ReportGenerator:
     title: str,
     report: Any,
     charts: dict[str, Path],
+    translator: Translator,
   ) -> str:
     """Create comprehensive report HTML structure."""
+    lang_code = "zh-CN" if translator.locale == "zh" else "en"
     html_content = f"""<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="{lang_code}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -468,18 +594,18 @@ class ReportGenerator:
     <div class="container">
         <div class="header">
             <h1>{title}</h1>
-            <p class="subtitle">生成时间: {datetime.now().strftime("%Y年%m月%d日 %H:%M:%S")}</p>
+            <p class="subtitle">{translator.t("report.generated_at")}: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>
         </div>
 """
 
     # Executive summary.
-    html_content += self._create_comprehensive_summary(report)
+    html_content += self._create_comprehensive_summary(report, translator)
 
     # Health dashboard.
     if "dashboard" in charts:
       html_content += f"""
         <div class="section">
-            <h2>📊 健康仪表盘</h2>
+            <h2>📊 {translator.t("report.chart.dashboard")}</h2>
             <div class="chart-container">
                 <iframe src="{charts["dashboard"].relative_to(self.output_dir)}"
                         width="100%" height="600" frameborder="0"></iframe>
@@ -488,15 +614,15 @@ class ReportGenerator:
       """
 
     # Detailed analysis sections.
-    html_content += self._create_detailed_analysis_sections(report, charts)
+    html_content += self._create_detailed_analysis_sections(report, charts, translator)
 
     # Recommendations section.
-    html_content += self._create_recommendations_section(report)
+    html_content += self._create_recommendations_section(report, translator)
 
     # Footer.
     html_content += """
         <div class="footer">
-            <p>本报告由 Apple Health Analyzer 自动生成 | 数据来源: Apple Health 导出数据</p>
+            <p>{translator.t("report.footer.autogen_with_source")}</p>
         </div>
     </div>
 </body>
@@ -505,10 +631,10 @@ class ReportGenerator:
 
     return html_content
 
-  def _create_comprehensive_summary(self, report: Any) -> str:
+  def _create_comprehensive_summary(self, report: Any, translator: Translator) -> str:
     """Create comprehensive summary."""
     content = '<div class="section">\n'
-    content += "<h2>📈 执行摘要</h2>\n"
+    content += f"<h2>📈 {translator.t('report.section.executive_summary')}</h2>\n"
     content += '<div class="dashboard-grid">\n'
 
     # Overall wellness score.
@@ -521,7 +647,10 @@ class ReportGenerator:
         else "danger"
       )
       content += f'<div class="metric-card {score_class}">\n'
-      content += '<div class="metric-title">整体健康评分</div>\n'
+      content += (
+        f'<div class="metric-title">'
+        f"{translator.t('report.metric.overall_wellness')}</div>\n"
+      )
       content += (
         f'<div class="metric-value">{report.overall_wellness_score:.1%}</div>\n'
       )
@@ -530,8 +659,15 @@ class ReportGenerator:
     # Data range.
     if hasattr(report, "data_range"):
       content += '<div class="metric-card info">\n'
-      content += '<div class="metric-title">数据时间范围</div>\n'
-      content += f'<div class="metric-value" style="font-size:1.2em">{report.data_range[0].strftime("%Y-%m-%d")}<br>至<br>{report.data_range[1].strftime("%Y-%m-%d")}</div>\n'
+      content += (
+        f'<div class="metric-title">{translator.t("report.metric.data_range")}</div>\n'
+      )
+      content += (
+        f'<div class="metric-value" style="font-size:1.2em">'
+        f"{report.data_range[0].strftime('%Y-%m-%d')}<br>"
+        f"{translator.t('report.label.range_to')}<br>"
+        f"{report.data_range[1].strftime('%Y-%m-%d')}</div>\n"
+      )
       content += "</div>\n"
 
     # Data completeness.
@@ -544,7 +680,10 @@ class ReportGenerator:
         else "danger"
       )
       content += f'<div class="metric-card {completeness_class}">\n'
-      content += '<div class="metric-title">数据完整性</div>\n'
+      content += (
+        f'<div class="metric-title">'
+        f"{translator.t('report.metric.data_completeness')}</div>\n"
+      )
       content += (
         f'<div class="metric-value">{report.data_completeness_score:.1%}</div>\n'
       )
@@ -560,7 +699,10 @@ class ReportGenerator:
         else "danger"
       )
       content += f'<div class="metric-card {confidence_class}">\n'
-      content += '<div class="metric-title">分析置信度</div>\n'
+      content += (
+        f'<div class="metric-title">'
+        f"{translator.t('report.metric.analysis_confidence')}</div>\n"
+      )
       content += f'<div class="metric-value">{report.analysis_confidence:.1%}</div>\n'
       content += "</div>\n"
 
@@ -570,7 +712,7 @@ class ReportGenerator:
     return content
 
   def _create_detailed_analysis_sections(
-    self, report: Any, charts: dict[str, Path]
+    self, report: Any, charts: dict[str, Path], translator: Translator
   ) -> str:
     """Create detailed analysis sections."""
     content = ""
@@ -581,27 +723,48 @@ class ReportGenerator:
       and getattr(report, "sleep_quality", None) is not None
     ):
       content += '<div class="section">\n'
-      content += "<h2>😴 睡眠质量分析</h2>\n"
+      content += f"<h2>😴 {translator.t('report.section.sleep_quality')}</h2>\n"
       content += '<div class="dashboard-grid">\n'
 
       sleep = report.sleep_quality
       content += '<div class="metric-card success">\n'
-      content += '<div class="metric-title">平均睡眠时长</div>\n'
-      content += f'<div class="metric-value">{sleep.average_duration_hours:.1f}<span class="metric-unit"> 小时</span></div>\n'
+      content += (
+        f'<div class="metric-title">'
+        f"{translator.t('report.metric.avg_sleep_duration')}</div>\n"
+      )
+      content += (
+        f'<div class="metric-value">{sleep.average_duration_hours:.1f}'
+        f'<span class="metric-unit"> '
+        f"{translator.t('report.metric.avg_sleep_duration_unit')}"
+        f"</span></div>\n"
+      )
       content += "</div>\n"
 
       content += '<div class="metric-card info">\n'
-      content += '<div class="metric-title">睡眠效率</div>\n'
+      content += (
+        f'<div class="metric-title">'
+        f"{translator.t('report.metric.sleep_efficiency')}</div>\n"
+      )
       content += f'<div class="metric-value">{sleep.average_efficiency_percent:.1f}<span class="metric-unit">%</span></div>\n'
       content += "</div>\n"
 
       content += '<div class="metric-card warning">\n'
-      content += '<div class="metric-title">睡眠债</div>\n'
-      content += f'<div class="metric-value">{sleep.sleep_debt_hours:.1f}<span class="metric-unit"> 小时</span></div>\n'
+      content += (
+        f'<div class="metric-title">{translator.t("report.metric.sleep_debt")}</div>\n'
+      )
+      content += (
+        f'<div class="metric-value">{sleep.sleep_debt_hours:.1f}'
+        f'<span class="metric-unit"> '
+        f"{translator.t('report.metric.sleep_debt_unit')}"
+        f"</span></div>\n"
+      )
       content += "</div>\n"
 
       content += '<div class="metric-card secondary">\n'
-      content += '<div class="metric-title">规律性评分</div>\n'
+      content += (
+        f'<div class="metric-title">'
+        f"{translator.t('report.metric.consistency_score')}</div>\n"
+      )
       content += f'<div class="metric-value">{sleep.consistency_score:.1%}</div>\n'
       content += "</div>\n"
 
@@ -611,27 +774,54 @@ class ReportGenerator:
     # Activity pattern analysis.
     if getattr(report, "activity_patterns", None) is not None:
       content += '<div class="section">\n'
-      content += "<h2>🏃 活动模式分析</h2>\n"
+      content += f"<h2>🏃 {translator.t('report.section.activity_patterns')}</h2>\n"
       content += '<div class="dashboard-grid">\n'
 
       activity = report.activity_patterns
       content += '<div class="metric-card success">\n'
-      content += '<div class="metric-title">每日平均步数</div>\n'
-      content += f'<div class="metric-value">{activity.daily_step_average:,}<span class="metric-unit"> 步</span></div>\n'
+      content += (
+        f'<div class="metric-title">'
+        f"{translator.t('report.metric.daily_step_average')}</div>\n"
+      )
+      content += (
+        f'<div class="metric-value">{activity.daily_step_average:,}'
+        f'<span class="metric-unit"> '
+        f"{translator.t('report.metric.daily_steps_unit')}"
+        f"</span></div>\n"
+      )
       content += "</div>\n"
 
       content += '<div class="metric-card info">\n'
-      content += '<div class="metric-title">每周运动频率</div>\n'
-      content += f'<div class="metric-value">{activity.weekly_exercise_frequency:.1f}<span class="metric-unit"> 次</span></div>\n'
+      content += (
+        f'<div class="metric-title">'
+        f"{translator.t('report.metric.weekly_exercise_frequency')}</div>\n"
+      )
+      content += (
+        f'<div class="metric-value">{activity.weekly_exercise_frequency:.1f}'
+        f'<span class="metric-unit"> '
+        f"{translator.t('report.metric.weekly_exercise_unit')}"
+        f"</span></div>\n"
+      )
       content += "</div>\n"
 
       content += '<div class="metric-card warning">\n'
-      content += '<div class="metric-title">每日久坐时间</div>\n'
-      content += f'<div class="metric-value">{activity.sedentary_hours_daily:.1f}<span class="metric-unit"> 小时</span></div>\n'
+      content += (
+        f'<div class="metric-title">'
+        f"{translator.t('report.metric.sedentary_hours_daily')}</div>\n"
+      )
+      content += (
+        f'<div class="metric-value">{activity.sedentary_hours_daily:.1f}'
+        f'<span class="metric-unit"> '
+        f"{translator.t('report.metric.daily_sedentary_unit')}"
+        f"</span></div>\n"
+      )
       content += "</div>\n"
 
       content += '<div class="metric-card secondary">\n'
-      content += '<div class="metric-title">活动一致性</div>\n'
+      content += (
+        f'<div class="metric-title">'
+        f"{translator.t('report.metric.activity_consistency_score')}</div>\n"
+      )
       content += (
         f'<div class="metric-value">{activity.activity_consistency_score:.1%}</div>\n'
       )
@@ -644,7 +834,7 @@ class ReportGenerator:
     if "correlation" in charts:
       content += f"""
         <div class="section">
-            <h2>🔗 健康指标相关性</h2>
+            <h2>🔗 {translator.t("report.section.correlation")}</h2>
             <div class="chart-container">
                 <iframe src="{charts["correlation"].relative_to(self.output_dir)}"
                         width="100%" height="600" frameborder="0"></iframe>
@@ -656,7 +846,7 @@ class ReportGenerator:
     if "risk_assessment" in charts:
       content += f"""
         <div class="section">
-            <h2>⚠️ 健康风险评估</h2>
+            <h2>⚠️ {translator.t("report.section.risk_assessment")}</h2>
             <div class="chart-container">
                 <iframe src="{charts["risk_assessment"].relative_to(self.output_dir)}"
                         width="100%" height="500" frameborder="0"></iframe>
@@ -666,14 +856,16 @@ class ReportGenerator:
 
     return content
 
-  def _create_recommendations_section(self, report: Any) -> str:
+  def _create_recommendations_section(self, report: Any, translator: Translator) -> str:
     """Create recommendations section."""
     content = '<div class="section">\n'
-    content += "<h2>💡 个性化建议</h2>\n"
+    content += (
+      f"<h2>💡 {translator.t('report.section.personal_recommendations')}</h2>\n"
+    )
 
     # Priority actions.
     if hasattr(report, "priority_actions") and report.priority_actions:
-      content += "<h3>优先行动项目</h3>\n"
+      content += f"<h3>{translator.t('report.section.priority_actions')}</h3>\n"
       content += '<div class="recommendations">\n'
       content += "<ol>\n"
       for action in report.priority_actions:
@@ -683,7 +875,7 @@ class ReportGenerator:
 
     # Lifestyle optimization.
     if hasattr(report, "lifestyle_optimization") and report.lifestyle_optimization:
-      content += "<h3>生活方式优化建议</h3>\n"
+      content += f"<h3>{translator.t('report.section.lifestyle_optimization')}</h3>\n"
       content += '<div class="recommendations">\n'
       content += "<ol>\n"
       for optimization in report.lifestyle_optimization:
@@ -693,18 +885,26 @@ class ReportGenerator:
 
     # Predictive insights.
     if hasattr(report, "predictive_insights") and report.predictive_insights:
-      content += "<h3>预测性洞察</h3>\n"
+      content += f"<h3>{translator.t('report.section.predictive_insights')}</h3>\n"
       content += '<div class="insights-grid">\n'
+
+      risk_keyword = translator.t("report.keyword.risk").lower()
+      recommendation_keyword = translator.t("report.keyword.recommendation").lower()
+      insight_keyword = translator.t("report.keyword.insight").lower()
 
       for insight in report.predictive_insights:
         priority_class = "low"  # Default to low priority.
-        if "⚠️" in insight or "风险" in insight:
+        insight_text = str(insight)
+        insight_text_lower = insight_text.lower()
+        if "⚠️" in insight_text or risk_keyword in insight_text_lower:
           priority_class = "high"
-        elif "📊" in insight or "建议" in insight:
+        elif "📊" in insight_text or recommendation_keyword in insight_text_lower:
+          priority_class = "medium"
+        elif insight_keyword in insight_text_lower:
           priority_class = "medium"
 
         content += f'<div class="insight-card {priority_class}">\n'
-        content += f'<div class="insight-message">{insight}</div>\n'
+        content += f'<div class="insight-message">{insight_text}</div>\n'
         content += "</div>\n"
 
       content += "</div>\n"
@@ -712,10 +912,11 @@ class ReportGenerator:
     content += "</div>\n"
     return content
 
-  def _create_html_structure(self, title: str) -> str:
+  def _create_html_structure(self, title: str, translator: Translator) -> str:
     """Create base HTML structure."""
+    lang_code = "zh-CN" if translator.locale == "zh" else "en"
     return f"""<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="{lang_code}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -826,6 +1027,45 @@ class ReportGenerator:
             color: var(--primary-color);
         }}
 
+        .zone-table {{
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9em;
+        }}
+
+        .zone-table th,
+        .zone-table td {{
+            padding: 8px 10px;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+            text-align: left;
+        }}
+
+        .zone-bar {{
+            height: 8px;
+            background: rgba(0, 0, 0, 0.06);
+            border-radius: 4px;
+            overflow: hidden;
+        }}
+
+        .zone-bar-fill {{
+            height: 100%;
+        }}
+
+        .zone-scale {{
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 6px;
+            margin-top: 10px;
+        }}
+
+        .zone-chip {{
+            border-radius: 999px;
+            padding: 6px 10px;
+            font-size: 0.8em;
+            text-align: center;
+            color: #fff;
+        }}
+
         .insight-list {{
             list-style: none;
         }}
@@ -903,7 +1143,7 @@ class ReportGenerator:
     <div class="container">
         <header>
             <h1>{title}</h1>
-            <p class="subtitle">生成时间: {datetime.now().strftime("%Y年%m月%d日 %H:%M:%S")}</p>
+            <p class="subtitle">{translator.t("report.generated_at")}: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>
         </header>
 """
 
@@ -912,21 +1152,28 @@ class ReportGenerator:
     heart_rate_report: HeartRateAnalysisReport | None,
     sleep_report: SleepAnalysisReport | None,
     highlights: HealthHighlights | None,
+    translator: Translator,
   ) -> str:
     """Create executive summary section."""
     content = '<div class="section">\n'
-    content += "<h2>📊 执行摘要</h2>\n"
+    content += f"<h2>📊 {translator.t('report.section.executive_summary')}</h2>\n"
     content += '<div class="metric-grid">\n'
 
     # Heart rate overview.
     if heart_rate_report:
       content += '<div class="metric-card">\n'
-      content += '<div class="metric-label">心率记录数</div>\n'
+      content += (
+        f'<div class="metric-label">'
+        f"{translator.t('report.label.heart_rate_records')}</div>\n"
+      )
       content += f'<div class="metric-value">{heart_rate_report.record_count:,}</div>\n'
       content += "</div>\n"
 
       content += '<div class="metric-card">\n'
-      content += '<div class="metric-label">心率数据质量</div>\n'
+      content += (
+        f'<div class="metric-label">'
+        f"{translator.t('report.label.data_quality_score')}</div>\n"
+      )
       content += (
         f'<div class="metric-value">{heart_rate_report.data_quality_score:.0%}</div>\n'
       )
@@ -935,12 +1182,18 @@ class ReportGenerator:
     # Sleep data overview.
     if sleep_report:
       content += '<div class="metric-card">\n'
-      content += '<div class="metric-label">睡眠记录数</div>\n'
+      content += (
+        f'<div class="metric-label">'
+        f"{translator.t('report.label.sleep_records')}</div>\n"
+      )
       content += f'<div class="metric-value">{sleep_report.record_count}</div>\n'
       content += "</div>\n"
 
       content += '<div class="metric-card">\n'
-      content += '<div class="metric-label">睡眠数据质量</div>\n'
+      content += (
+        f'<div class="metric-label">'
+        f"{translator.t('report.label.data_quality_score')}</div>\n"
+      )
       content += (
         f'<div class="metric-value">{sleep_report.data_quality_score:.0%}</div>\n'
       )
@@ -950,7 +1203,10 @@ class ReportGenerator:
     if highlights:
       high_count = sum(1 for i in highlights.insights if i.priority == "high")
       content += f'<div class="metric-card {"danger" if high_count > 0 else ""}">\n'
-      content += '<div class="metric-label">高优先级洞察</div>\n'
+      content += (
+        f'<div class="metric-label">'
+        f"{translator.t('report.label.high_priority_insights')}</div>\n"
+      )
       content += f'<div class="metric-value">{high_count}</div>\n'
       content += "</div>\n"
 
@@ -964,45 +1220,221 @@ class ReportGenerator:
     report: HeartRateAnalysisReport,
     include_charts: bool,
     heart_rate_data: list | None = None,
+    translator: Translator | None = None,
   ) -> str:
     """Create heart rate analysis section."""
     content = '<div class="section">\n'
-    content += "<h2>❤️ 心率分析</h2>\n"
+    translator = translator or Translator()
+    content += f"<h2>❤️ {translator.t('report.section.heart_rate')}</h2>\n"
 
     # Data range.
-    content += "<h3>数据概览</h3>\n"
-    content += f"<p>时间范围: {report.data_range[0]} 至 {report.data_range[1]}</p>\n"
-    content += f"<p>记录总数: {report.record_count:,}</p>\n"
-    content += f"<p>数据质量评分: {report.data_quality_score:.1%}</p>\n"
+    content += f"<h3>{translator.t('report.section.data_overview')}</h3>\n"
+    content += (
+      f"<p>{translator.t('report.metric.time_range')}: "
+      f"{report.data_range[0]} {translator.t('report.label.range_to')} "
+      f"{report.data_range[1]}</p>\n"
+    )
+    content += (
+      f"<p>{translator.t('report.metric.record_count')}: {report.record_count:,}</p>\n"
+    )
+    content += (
+      f"<p>{translator.t('report.label.data_quality_score')}: "
+      f"{report.data_quality_score:.1%}</p>\n"
+    )
 
     # Resting heart rate.
     if report.resting_hr_analysis:
       rhr = report.resting_hr_analysis
-      content += "<h3>静息心率分析</h3>\n"
+      content += f"<h3>{translator.t('report.section.resting_hr')}</h3>\n"
       content += '<div class="metric-grid">\n'
 
       content += '<div class="metric-card">\n'
-      content += '<div class="metric-label">当前值</div>\n'
+      content += (
+        f'<div class="metric-label">'
+        f"{translator.t('report.metric.current_value')}</div>\n"
+      )
       content += f'<div class="metric-value">{rhr.current_value:.0f} bpm</div>\n'
       content += "</div>\n"
 
       content += '<div class="metric-card">\n'
-      content += '<div class="metric-label">基线值</div>\n'
+      content += (
+        f'<div class="metric-label">'
+        f"{translator.t('report.metric.baseline_value')}</div>\n"
+      )
       content += f'<div class="metric-value">{rhr.baseline_value:.0f} bpm</div>\n'
       content += "</div>\n"
 
       change_class = "danger" if rhr.change_from_baseline > 2 else ""
       content += f'<div class="metric-card {change_class}">\n'
-      content += '<div class="metric-label">变化</div>\n'
+      content += (
+        f'<div class="metric-label">{translator.t("report.metric.change")}</div>\n'
+      )
       content += (
         f'<div class="metric-value">{rhr.change_from_baseline:+.1f} bpm</div>\n'
       )
       content += "</div>\n"
 
       content += '<div class="metric-card">\n'
-      content += '<div class="metric-label">健康评级</div>\n'
+      content += (
+        f'<div class="metric-label">'
+        f"{translator.t('report.metric.health_rating')}</div>\n"
+      )
       content += f'<div class="metric-value" style="font-size:1.5em">{rhr.health_rating.upper()}</div>\n'
       content += "</div>\n"
+
+      content += "</div>\n"
+
+    # Advanced heart rate metrics.
+    if report.advanced_metrics:
+      metrics = report.advanced_metrics
+      diurnal = metrics.get("diurnal_profile", {})
+      variability = metrics.get("variability", {})
+      trends = metrics.get("recent_trends", {})
+      zones = metrics.get("zones", {})
+
+      content += f"<h3>{translator.t('report.section.heart_rate_advanced')}</h3>\n"
+      content += '<div class="metric-grid">\n'
+
+      day_mean = diurnal.get("day_mean")
+      night_mean = diurnal.get("night_mean")
+      if day_mean is not None:
+        content += '<div class="metric-card">\n'
+        content += (
+          f'<div class="metric-label">'
+          f"{translator.t('report.metric.day_mean_hr')}</div>\n"
+        )
+        content += f'<div class="metric-value">{day_mean:.1f} bpm</div>\n'
+        content += "</div>\n"
+
+      if night_mean is not None:
+        content += '<div class="metric-card">\n'
+        content += (
+          f'<div class="metric-label">'
+          f"{translator.t('report.metric.night_mean_hr')}</div>\n"
+        )
+        content += f'<div class="metric-value">{night_mean:.1f} bpm</div>\n'
+        content += "</div>\n"
+
+      day_night_delta = diurnal.get("day_night_delta")
+      if day_night_delta is not None:
+        content += '<div class="metric-card">\n'
+        content += (
+          f'<div class="metric-label">'
+          f"{translator.t('report.metric.day_night_delta')}</div>\n"
+        )
+        content += f'<div class="metric-value">{day_night_delta:+.1f} bpm</div>\n'
+        content += "</div>\n"
+
+      daily_cv = variability.get("daily_cv_mean")
+      if daily_cv is not None:
+        content += '<div class="metric-card">\n'
+        content += (
+          f'<div class="metric-label">{translator.t("report.metric.daily_cv")}</div>\n'
+        )
+        content += f'<div class="metric-value">{daily_cv:.3f}</div>\n'
+        content += "</div>\n"
+
+      daily_std = variability.get("daily_std_mean")
+      if daily_std is not None:
+        content += '<div class="metric-card">\n'
+        content += (
+          f'<div class="metric-label">{translator.t("report.metric.daily_std")}</div>\n'
+        )
+        content += f'<div class="metric-value">{daily_std:.2f} bpm</div>\n'
+        content += "</div>\n"
+
+      hr_mean_7d = trends.get("hr_mean_7d")
+      if hr_mean_7d is not None:
+        content += '<div class="metric-card">\n'
+        content += (
+          f'<div class="metric-label">'
+          f"{translator.t('report.metric.hr_mean_7d')}</div>\n"
+        )
+        content += f'<div class="metric-value">{hr_mean_7d:.1f} bpm</div>\n'
+        content += "</div>\n"
+
+      hr_mean_30d = trends.get("hr_mean_30d")
+      if hr_mean_30d is not None:
+        content += '<div class="metric-card">\n'
+        content += (
+          f'<div class="metric-label">'
+          f"{translator.t('report.metric.hr_mean_30d')}</div>\n"
+        )
+        content += f'<div class="metric-value">{hr_mean_30d:.1f} bpm</div>\n'
+        content += "</div>\n"
+
+      hr_change = trends.get("hr_change_7d_vs_30d")
+      if hr_change is not None:
+        content += '<div class="metric-card">\n'
+        content += (
+          f'<div class="metric-label">'
+          f"{translator.t('report.metric.hr_change_7d_vs_30d')}</div>\n"
+        )
+        content += f'<div class="metric-value">{hr_change:+.1f} bpm</div>\n'
+        content += "</div>\n"
+
+      if zones and zones.get("zone1"):
+        content += '<div class="metric-card">\n'
+        content += (
+          f'<div class="metric-label">{translator.t("report.metric.hr_zones")}</div>\n'
+        )
+        max_hr = zones.get("max_hr", 200)
+        zone_ranges = [
+          (0.0, 0.6),
+          (0.6, 0.7),
+          (0.7, 0.8),
+          (0.8, 0.9),
+          (0.9, 1.0),
+        ]
+        zone_labels = [
+          translator.t("report.metric.hr_zone1"),
+          translator.t("report.metric.hr_zone2"),
+          translator.t("report.metric.hr_zone3"),
+          translator.t("report.metric.hr_zone4"),
+          translator.t("report.metric.hr_zone5"),
+        ]
+        zone_values = [
+          zones["zone1"]["percentage"],
+          zones["zone2"]["percentage"],
+          zones["zone3"]["percentage"],
+          zones["zone4"]["percentage"],
+          zones["zone5"]["percentage"],
+        ]
+        zone_colors = [
+          "#34C759",
+          "#0A84FF",
+          "#5AC8FA",
+          "#FF9F0A",
+          "#FF453A",
+        ]
+        content += '<table class="zone-table">\n'
+        content += (
+          f"<tr><th>{translator.t('report.metric.hr_zones')}</th>"
+          f"<th>Range</th><th>%</th></tr>\n"
+        )
+        for label, (low_ratio, high_ratio), percent, color in zip(
+          zone_labels, zone_ranges, zone_values, zone_colors
+        ):
+          low_bpm = int(round(low_ratio * max_hr))
+          high_bpm = int(round(high_ratio * max_hr))
+          range_text = f"{int(low_ratio * 100)}-{int(high_ratio * 100)}% / {low_bpm}-{high_bpm} bpm"
+          content += "<tr>\n"
+          content += f"<td>{label}</td>\n"
+          content += f"<td>{range_text}</td>\n"
+          content += "<td>\n"
+          content += f'<div class="zone-bar"><div class="zone-bar-fill" style="width: {percent:.1f}%; background: {color};"></div></div>'
+          content += f" <span>{percent:.1f}%</span>\n"
+          content += "</td>\n"
+          content += "</tr>\n"
+        content += "</table>\n"
+        content += '<div class="zone-scale">\n'
+        for label, (low_ratio, high_ratio), color in zip(
+          zone_labels, zone_ranges, zone_colors
+        ):
+          range_text = f"{int(low_ratio * 100)}-{int(high_ratio * 100)}%"
+          content += f'<div class="zone-chip" style="background: {color};">{label} {range_text}</div>\n'
+        content += "</div>\n"
+        content += "</div>\n"
 
       content += "</div>\n"
 
@@ -1010,57 +1442,117 @@ class ReportGenerator:
     return content
 
   def _create_sleep_section(
-    self, report: SleepAnalysisReport, include_charts: bool
+    self,
+    report: SleepAnalysisReport,
+    include_charts: bool,
+    translator: Translator,
   ) -> str:
     """Create sleep analysis section."""
     content = '<div class="section">\n'
-    content += "<h2>😴 睡眠分析</h2>\n"
+    content += f"<h2>😴 {translator.t('report.section.sleep')}</h2>\n"
 
     # Data range.
-    content += "<h3>数据概览</h3>\n"
-    content += f"<p>时间范围: {report.data_range[0]} 至 {report.data_range[1]}</p>\n"
-    content += f"<p>记录总数: {report.record_count}</p>\n"
-    content += f"<p>数据质量评分: {report.data_quality_score:.1%}</p>\n"
+    content += f"<h3>{translator.t('report.section.data_overview')}</h3>\n"
+    content += (
+      f"<p>{translator.t('report.metric.time_range')}: "
+      f"{report.data_range[0]} {translator.t('report.label.range_to')} "
+      f"{report.data_range[1]}</p>\n"
+    )
+    content += (
+      f"<p>{translator.t('report.metric.record_count')}: {report.record_count}</p>\n"
+    )
+    content += (
+      f"<p>{translator.t('report.label.data_quality_score')}: "
+      f"{report.data_quality_score:.1%}</p>\n"
+    )
 
     # Sleep quality metrics.
     if report.quality_metrics:
       quality = report.quality_metrics
-      content += "<h3>睡眠质量指标</h3>\n"
+      content += f"<h3>{translator.t('report.section.sleep_quality_metrics')}</h3>\n"
       content += '<div class="metric-grid">\n'
 
       duration_class = "danger" if quality.average_duration < 7 else ""
       content += f'<div class="metric-card {duration_class}">\n'
-      content += '<div class="metric-label">平均睡眠时长</div>\n'
       content += (
-        f'<div class="metric-value">{quality.average_duration:.1f} 小时</div>\n'
+        f'<div class="metric-label">'
+        f"{translator.t('report.metric.avg_sleep_duration')}</div>\n"
+      )
+      content += (
+        f'<div class="metric-value">{quality.average_duration:.1f} '
+        f"{translator.t('report.metric.avg_sleep_duration_unit')}</div>\n"
       )
       content += "</div>\n"
 
       efficiency_class = "warning" if quality.average_efficiency < 0.85 else ""
       content += f'<div class="metric-card {efficiency_class}">\n'
-      content += '<div class="metric-label">平均睡眠效率</div>\n'
+      content += (
+        f'<div class="metric-label">'
+        f"{translator.t('report.metric.sleep_efficiency')}</div>\n"
+      )
       content += f'<div class="metric-value">{quality.average_efficiency:.0%}</div>\n'
       content += "</div>\n"
 
       consistency_class = "warning" if quality.consistency_score < 0.7 else ""
       content += f'<div class="metric-card {consistency_class}">\n'
-      content += '<div class="metric-label">规律性评分</div>\n'
+      content += (
+        f'<div class="metric-label">'
+        f"{translator.t('report.metric.consistency_score')}</div>\n"
+      )
       content += f'<div class="metric-value">{quality.consistency_score:.0%}</div>\n'
       content += "</div>\n"
+
+      if quality.average_latency > 0:
+        content += '<div class="metric-card">\n'
+        content += (
+          f'<div class="metric-label">'
+          f"{translator.t('report.metric.avg_sleep_latency')}</div>\n"
+        )
+        content += (
+          f'<div class="metric-value">{quality.average_latency:.1f} '
+          f"{translator.t('report.metric.sleep_latency_unit')}</div>\n"
+        )
+        content += "</div>\n"
+
+      if quality.average_wake_after_onset > 0:
+        content += '<div class="metric-card">\n'
+        content += (
+          f'<div class="metric-label">'
+          f"{translator.t('report.metric.avg_wake_after_onset')}</div>\n"
+        )
+        content += (
+          f'<div class="metric-value">{quality.average_wake_after_onset:.1f} '
+          f"{translator.t('report.metric.wake_after_onset_unit')}</div>\n"
+        )
+        content += "</div>\n"
+
+      if quality.average_awakenings > 0:
+        content += '<div class="metric-card">\n'
+        content += (
+          f'<div class="metric-label">'
+          f"{translator.t('report.metric.avg_awakenings')}</div>\n"
+        )
+        content += (
+          f'<div class="metric-value">{quality.average_awakenings:.1f} '
+          f"{translator.t('report.metric.awakenings_unit')}</div>\n"
+        )
+        content += "</div>\n"
 
       content += "</div>\n"
 
     content += "</div>\n"
     return content
 
-  def _create_highlights_section(self, highlights: HealthHighlights) -> str:
+  def _create_highlights_section(
+    self, highlights: HealthHighlights, translator: Translator
+  ) -> str:
     """Create highlights section."""
     content = '<div class="section">\n'
-    content += "<h2>💡 关键发现与建议</h2>\n"
+    content += f"<h2>💡 {translator.t('report.section.key_findings')}</h2>\n"
 
     # Insight list.
     if highlights.insights:
-      content += "<h3>健康洞察</h3>\n"
+      content += f"<h3>{translator.t('report.section.insights')}</h3>\n"
       content += '<ul class="insight-list">\n'
 
       for insight in highlights.insights[:8]:  # Show the first 8 insights.
@@ -1079,7 +1571,7 @@ class ReportGenerator:
 
     # Recommendations.
     if highlights.recommendations:
-      content += "<h3>健康建议</h3>\n"
+      content += f"<h3>{translator.t('report.section.recommendations')}</h3>\n"
       content += '<div class="recommendations">\n'
       content += "<ol>\n"
       for rec in highlights.recommendations:
@@ -1094,36 +1586,59 @@ class ReportGenerator:
     self,
     heart_rate_report: HeartRateAnalysisReport | None,
     sleep_report: SleepAnalysisReport | None,
+    translator: Translator,
   ) -> str:
     """Create data quality section."""
     content = '<div class="section">\n'
-    content += "<h2>📋 数据质量信息</h2>\n"
+    content += f"<h2>📋 {translator.t('report.section.data_quality_info')}</h2>\n"
 
     if heart_rate_report:
-      content += "<h3>心率数据</h3>\n"
+      content += f"<h3>{translator.t('report.section.heart_rate')}</h3>\n"
       content += "<ul>\n"
-      content += f"<li>记录总数: {heart_rate_report.record_count:,}</li>\n"
-      content += f"<li>数据质量评分: {heart_rate_report.data_quality_score:.1%}</li>\n"
-      content += f"<li>时间范围: {heart_rate_report.data_range[0]} 至 {heart_rate_report.data_range[1]}</li>\n"
+      content += (
+        f"<li>{translator.t('report.metric.record_count')}: "
+        f"{heart_rate_report.record_count:,}</li>\n"
+      )
+      content += (
+        f"<li>{translator.t('report.label.data_quality_score')}: "
+        f"{heart_rate_report.data_quality_score:.1%}</li>\n"
+      )
+      content += (
+        f"<li>{translator.t('report.metric.time_range')}: "
+        f"{heart_rate_report.data_range[0]} "
+        f"{translator.t('report.label.range_to')} "
+        f"{heart_rate_report.data_range[1]}</li>\n"
+      )
       content += "</ul>\n"
 
     if sleep_report:
-      content += "<h3>睡眠数据</h3>\n"
+      content += f"<h3>{translator.t('report.section.sleep')}</h3>\n"
       content += "<ul>\n"
-      content += f"<li>记录总数: {sleep_report.record_count}</li>\n"
-      content += f"<li>数据质量评分: {sleep_report.data_quality_score:.1%}</li>\n"
-      content += f"<li>时间范围: {sleep_report.data_range[0]} 至 {sleep_report.data_range[1]}</li>\n"
+      content += (
+        f"<li>{translator.t('report.metric.record_count')}: "
+        f"{sleep_report.record_count}</li>\n"
+      )
+      content += (
+        f"<li>{translator.t('report.label.data_quality_score')}: "
+        f"{sleep_report.data_quality_score:.1%}</li>\n"
+      )
+      content += (
+        f"<li>{translator.t('report.metric.time_range')}: "
+        f"{sleep_report.data_range[0]} "
+        f"{translator.t('report.label.range_to')} "
+        f"{sleep_report.data_range[1]}</li>\n"
+      )
       content += "</ul>\n"
 
     content += "</div>\n"
     return content
 
-  def _close_html_structure(self) -> str:
+  def _close_html_structure(self, translator: Translator) -> str:
     """Close HTML structure."""
-    return """
+    footer_text = translator.t("report.footer.autogen_with_source")
+    return f"""
         <footer>
-            <p>本报告由 Apple Health Analyzer 自动生成</p>
-            <p>数据来源: Apple Health 导出数据</p>
+            <p>{footer_text}</p>
         </footer>
     </div>
 </body>

@@ -76,10 +76,10 @@ class TestDataCleaner:
 
   def test_init_default_priority(self, cleaner):
     """Test default initialization."""
-    assert cleaner.source_priority["🐙Watch"] == 1
+    assert cleaner.source_priority["🐙Watch"] == 3
     assert cleaner.source_priority["Xiaomi Health"] == 2
     assert cleaner.source_priority["小米运动健康"] == 2
-    assert cleaner.source_priority["🐙Phone"] == 3
+    assert cleaner.source_priority["🐙Phone"] == 1
     assert cleaner.default_window_seconds == 60
 
   def test_init_custom_priority(self):

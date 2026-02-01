@@ -14,6 +14,7 @@ from loguru import logger
 from rich.console import Console
 
 from src.config import get_config
+from src.i18n import Translator, resolve_locale
 
 # Global console instance for progress display
 console = Console()
@@ -68,7 +69,8 @@ def setup_logging() -> None:
       encoding="utf-8",
     )
 
-    logger.info(f"Logging to file: {log_file_path}")
+    translator = Translator(resolve_locale())
+    logger.info(translator.t("log.logger.file_logging", path=log_file_path))
 
   # Set loguru as the standard library logger
   import logging
@@ -91,9 +93,7 @@ def setup_logging() -> None:
         frame = frame.f_back
         depth += 1
 
-      logger.opt(depth=depth, exception=record.exc_info).log(
-        level, record.getMessage()
-      )
+      logger.opt(depth=depth, exception=record.exc_info).log(level, record.getMessage())
 
   # Replace standard library handlers
   logging.basicConfig(handlers=[InterceptHandler()], level=0)
@@ -116,10 +116,11 @@ def performance_logger(func: Callable[..., Any]) -> Callable[..., Any]:
   @functools.wraps(func)
   def wrapper(*args: Any, **kwargs: Any) -> Any:
     config = get_config()
+    translator = Translator(resolve_locale())
     start_time = time.time()
     start_memory = _get_memory_usage() if config.debug else 0
 
-    logger.debug(f"Starting {func.__name__}")
+    logger.debug(translator.t("log.performance.start", function=func.__name__))
 
     try:
       result = func(*args, **kwargs)
@@ -131,22 +132,41 @@ def performance_logger(func: Callable[..., Any]) -> Callable[..., Any]:
 
       if config.is_development:
         memory_info = (
-          f" (+{memory_delta:.1f}MB)"
+          translator.t("log.performance.memory", memory=memory_delta)
           if config.debug and memory_delta > 0
           else ""
         )
         logger.info(
-          f"Completed {func.__name__} in {duration:.3f}s{memory_info}"
+          translator.t(
+            "log.performance.completed",
+            function=func.__name__,
+            duration=duration,
+            memory=memory_info,
+          )
         )
       else:
-        logger.debug(f"Completed {func.__name__} in {duration:.3f}s")
+        logger.debug(
+          translator.t(
+            "log.performance.completed",
+            function=func.__name__,
+            duration=duration,
+            memory="",
+          )
+        )
 
       return result
 
     except Exception as e:
       end_time = time.time()
       duration = end_time - start_time
-      logger.error(f"Failed {func.__name__} after {duration:.3f}s: {e}")
+      logger.error(
+        translator.t(
+          "log.performance.failed",
+          function=func.__name__,
+          duration=duration,
+          error=e,
+        )
+      )
       raise
 
   return wrapper
@@ -182,7 +202,8 @@ class ProgressLogger:
 
   def __enter__(self):
     self.start_time = time.time()
-    self.logger.info(f"Starting {self.operation}")
+    translator = Translator(resolve_locale())
+    self.logger.info(translator.t("log.progress.start", operation=self.operation))
     return self
 
   def __exit__(
@@ -196,16 +217,35 @@ class ProgressLogger:
 
     if exc_type is None:
       if self.total:
+        translator = Translator(resolve_locale())
         self.logger.info(
-          f"Completed {self.operation}: {self.processed}/{self.total} items in {duration:.1f}s"
+          translator.t(
+            "log.progress.completed_total",
+            operation=self.operation,
+            processed=self.processed,
+            total=self.total,
+            duration=duration,
+          )
         )
       else:
+        translator = Translator(resolve_locale())
         self.logger.info(
-          f"Completed {self.operation}: {self.processed} items in {duration:.1f}s"
+          translator.t(
+            "log.progress.completed",
+            operation=self.operation,
+            processed=self.processed,
+            duration=duration,
+          )
         )
     else:
+      translator = Translator(resolve_locale())
       self.logger.error(
-        f"Failed {self.operation} after {duration:.1f}s: {exc_val}"
+        translator.t(
+          "log.progress.failed",
+          operation=self.operation,
+          duration=duration,
+          error=exc_val,
+        )
       )
       # Re-raise the exception so calling code can handle it
       return False
@@ -221,16 +261,30 @@ class ProgressLogger:
     if self.processed % self.log_interval == 0:
       elapsed = time.time() - (self.start_time or 0)
       rate = self.processed / elapsed if elapsed > 0 else 0
+      translator = Translator(resolve_locale())
 
       if self.total:
         percent = (self.processed / self.total) * 100
         eta = (self.total - self.processed) / rate if rate > 0 else 0
         self.logger.info(
-          f"{self.operation}: {self.processed}/{self.total} ({percent:.1f}%) at {rate:.0f} items/s, ETA: {eta:.0f}s"
+          translator.t(
+            "log.progress.update_total",
+            operation=self.operation,
+            processed=self.processed,
+            total=self.total,
+            percent=percent,
+            rate=rate,
+            eta=eta,
+          )
         )
       else:
         self.logger.info(
-          f"{self.operation}: {self.processed} items at {rate:.0f} items/s"
+          translator.t(
+            "log.progress.update",
+            operation=self.operation,
+            processed=self.processed,
+            rate=rate,
+          )
         )
 
 
@@ -318,7 +372,8 @@ class UnifiedProgress:
   def __enter__(self):
     self.start_time = time.time()
     if not self.quiet:
-      self.logger.info(f"Starting {self.operation}")
+      translator = Translator(resolve_locale())
+      self.logger.info(translator.t("log.progress.start", operation=self.operation))
 
     if self.progress:
       self.progress.__enter__()
@@ -339,13 +394,25 @@ class UnifiedProgress:
 
     if exc_type is None:
       if not self.quiet:
+        translator = Translator(resolve_locale())
         if self.total:
           self.logger.info(
-            f"Completed {self.operation}: {self.processed}/{self.total} items in {duration:.1f}s"
+            translator.t(
+              "log.progress.completed_total",
+              operation=self.operation,
+              processed=self.processed,
+              total=self.total,
+              duration=duration,
+            )
           )
         else:
           self.logger.info(
-            f"Completed {self.operation}: {self.processed} items in {duration:.1f}s"
+            translator.t(
+              "log.progress.completed",
+              operation=self.operation,
+              processed=self.processed,
+              duration=duration,
+            )
           )
 
       if self.progress and self.task_id is not None:
@@ -358,8 +425,14 @@ class UnifiedProgress:
 
     else:
       if not self.quiet:
+        translator = Translator(resolve_locale())
         self.logger.error(
-          f"Failed {self.operation} after {duration:.1f}s: {exc_val}"
+          translator.t(
+            "log.progress.failed",
+            operation=self.operation,
+            duration=duration,
+            error=exc_val,
+          )
         )
 
       if self.progress and self.task_id is not None:
@@ -380,11 +453,16 @@ class UnifiedProgress:
       self.current_step = step
       self.step_start_time = time.time()
       if not self.quiet:
-        self.logger.info(f"Step: {step}")
+        translator = Translator(resolve_locale())
+        self.logger.info(translator.t("log.progress.step", step=step))
 
     # Update console progress
     if self.progress and self.task_id is not None:
-      display_details = details or self.current_step or "Processing..."
+      display_details = (
+        details
+        or self.current_step
+        or Translator(resolve_locale()).t("log.progress.processing")
+      )
       self.progress.update(
         self.task_id, completed=self.processed, details=display_details
       )
@@ -397,16 +475,30 @@ class UnifiedProgress:
     ):
       elapsed = time.time() - (self.start_time or 0)
       rate = self.processed / elapsed if elapsed > 0 else 0
+      translator = Translator(resolve_locale())
 
       if self.total:
         percent = (self.processed / self.total) * 100
         eta = (self.total - self.processed) / rate if rate > 0 else 0
         self.logger.info(
-          f"{self.operation}: {self.processed}/{self.total} ({percent:.1f}%) at {rate:.0f} items/s, ETA: {eta:.0f}s"
+          translator.t(
+            "log.progress.update_total",
+            operation=self.operation,
+            processed=self.processed,
+            total=self.total,
+            percent=percent,
+            rate=rate,
+            eta=eta,
+          )
         )
       else:
         self.logger.info(
-          f"{self.operation}: {self.processed} items at {rate:.0f} items/s"
+          translator.t(
+            "log.progress.update",
+            operation=self.operation,
+            processed=self.processed,
+            rate=rate,
+          )
         )
 
   def set_step(self, step: str, details: str | None = None) -> None:
@@ -414,10 +506,12 @@ class UnifiedProgress:
     self.current_step = step
     self.step_start_time = time.time()
     if not self.quiet:
-      self.logger.info(f"Step: {step}")
+      translator = Translator(resolve_locale())
+      self.logger.info(translator.t("log.progress.step", step=step))
 
     if self.progress and self.task_id is not None:
-      display_details = details or f"Step: {step}"
+      translator = Translator(resolve_locale())
+      display_details = details or translator.t("log.progress.step", step=step)
       self.progress.update(self.task_id, details=display_details)
 
   def get_stats(self) -> dict[str, Any]:
@@ -436,9 +530,7 @@ class UnifiedProgress:
 
     if self.total:
       stats["percent_complete"] = (self.processed / self.total) * 100
-      stats["eta_seconds"] = (
-        (self.total - self.processed) / rate if rate > 0 else 0
-      )
+      stats["eta_seconds"] = (self.total - self.processed) / rate if rate > 0 else 0
 
     return stats
 

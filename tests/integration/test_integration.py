@@ -9,11 +9,14 @@ import pytest
 # Add src directory to Python path.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
+from src.analyzers.extended_analyzer import ExtendedHealthAnalyzer
 from src.analyzers.highlights import HighlightsGenerator
 from src.analyzers.statistical import StatisticalAnalyzer
 from src.core.xml_parser import parse_export_file
 from src.processors.cleaner import DataCleaner
 from src.processors.exporter import DataExporter
+from src.processors.heart_rate import HeartRateAnalyzer
+from src.processors.sleep import SleepAnalyzer
 from src.visualization.reports import ReportGenerator
 
 
@@ -84,6 +87,10 @@ def test_full_workflow(sample_xml_path, output_dir, reports_dir):
   # 7. Report generation.
   report_gen = ReportGenerator(reports_dir)
 
+  # Generate analyzer reports to exercise report paths.
+  sleep_report = SleepAnalyzer().analyze_comprehensive(cleaned_records)
+  heart_rate_report = HeartRateAnalyzer().analyze_comprehensive(cleaned_records)
+
   # Create a minimal report object.
   class SimpleReport:
     def __init__(self, records, stats_report, quality_report, highlights):
@@ -102,6 +109,15 @@ def test_full_workflow(sample_xml_path, output_dir, reports_dir):
   )
   html_report = report_gen.generate_comprehensive_report(simple_report)
   assert html_report is not None
+
+  detailed_report = report_gen.generate_html_report(
+    title="Integration Report",
+    heart_rate_report=heart_rate_report,
+    sleep_report=sleep_report,
+    highlights=highlights,
+    include_charts=False,
+  )
+  assert detailed_report is not None
 
 
 @pytest.mark.integration
@@ -222,6 +238,24 @@ def test_analysis_completeness(sample_xml_path):
   # Highlights should include required info.
   assert hasattr(highlights, "insights")
   assert hasattr(highlights, "recommendations")
+
+  # Specialized processors should return report objects.
+  sleep_analyzer = SleepAnalyzer()
+  sleep_report = sleep_analyzer.analyze_comprehensive(cleaned_records)
+  assert sleep_report is not None
+  assert sleep_report.record_count >= 0
+
+  heart_rate_analyzer = HeartRateAnalyzer()
+  hr_report = heart_rate_analyzer.analyze_comprehensive(cleaned_records)
+  assert hr_report is not None
+  assert hr_report.record_count >= 0
+
+  # Extended analyzer should produce a report with scores.
+  extended_analyzer = ExtendedHealthAnalyzer()
+  comprehensive_report = extended_analyzer.analyze_comprehensive_health(cleaned_records)
+  assert comprehensive_report is not None
+  assert comprehensive_report.overall_wellness_score >= 0
+  assert comprehensive_report.analysis_confidence >= 0
 
 
 @pytest.mark.integration

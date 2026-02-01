@@ -37,6 +37,9 @@ class Config(BaseModel):
   log_level: str = Field(default="INFO")
   log_file: Path | None = Field(default=None)
 
+  # Localization
+  locale: str = Field(default="en")
+
   # Performance settings
   batch_size: int = Field(default=1000, gt=0)
   memory_limit_mb: int = Field(default=500, gt=0)
@@ -52,11 +55,11 @@ class Config(BaseModel):
   def validate_export_xml_path(cls, v: Path) -> Path:
     """Validate that export XML path exists and is readable."""
     if not v.exists():
-      raise ValueError(f"Export XML file does not exist: {v}")
+      raise ValueError(f"config.error.export_xml_not_found:{v}")
     if not v.is_file():
-      raise ValueError(f"Export XML path is not a file: {v}")
+      raise ValueError(f"config.error.export_xml_not_file:{v}")
     if not os.access(v, os.R_OK):
-      raise ValueError(f"Export XML file is not readable: {v}")
+      raise ValueError(f"config.error.export_xml_not_readable:{v}")
     return v
 
   @field_validator("output_dir")
@@ -70,7 +73,7 @@ class Config(BaseModel):
       test_file.write_text("test")
       test_file.unlink()
     except Exception as e:
-      raise ValueError(f"Output directory is not writable: {v} ({e})") from e
+      raise ValueError(f"config.error.output_not_writable:{v}:{e}") from e
     return v
 
   @field_validator("log_level")
@@ -79,8 +82,18 @@ class Config(BaseModel):
     """Validate log level is a valid logging level."""
     valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
     if v.upper() not in valid_levels:
-      raise ValueError(f"Invalid log level '{v}'. Must be one of: {valid_levels}")
+      raise ValueError(f"config.error.invalid_log_level:{v}:{','.join(valid_levels)}")
     return v.upper()
+
+  @field_validator("locale")
+  @classmethod
+  def validate_locale(cls, v: str) -> str:
+    valid_locales = {"en", "zh"}
+    if v not in valid_locales:
+      raise ValueError(
+        f"config.error.invalid_locale:{v}:{','.join(sorted(valid_locales))}"
+      )
+    return v
 
   @property
   def source_priority_map(self) -> dict[str, int]:
@@ -145,6 +158,9 @@ def load_config() -> Config:
   log_file = os.getenv("LOG_FILE")
   if log_file:
     config_data["log_file"] = Path(log_file)
+
+  # Localization
+  config_data["locale"] = os.getenv("LOCALE", "en")
 
   # Performance
   config_data["batch_size"] = int(os.getenv("BATCH_SIZE", "1000"))

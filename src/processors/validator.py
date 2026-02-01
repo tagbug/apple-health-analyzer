@@ -21,6 +21,7 @@ from ..core.data_models import (
   WorkoutRecord,
 )
 from ..core.protocols import MeasurableRecord
+from ..i18n import Translator, resolve_locale
 from ..utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -29,7 +30,8 @@ logger = get_logger(__name__)
 class ValidationResult:
   """Result of data validation with detailed information."""
 
-  def __init__(self):
+  def __init__(self, translator: Translator):
+    self.translator = translator
     self.is_valid: bool = True
     self.errors: list[str] = []
     self.warnings: list[str] = []
@@ -41,19 +43,21 @@ class ValidationResult:
   def add_error(self, message: str, record_type: str = "general"):
     """Add a validation error."""
     self.errors.append(message)
-    self.issues_by_type[record_type].append(f"ERROR: {message}")
+    self.issues_by_type[record_type].append(
+      self.translator.t("validation.issue.error", message=message)
+    )
     self.is_valid = False
     self.quality_score = max(0.0, self.quality_score - 0.2)
 
   def add_warning(self, message: str, record_type: str = "general"):
     """Add a validation warning."""
     self.warnings.append(message)
-    self.issues_by_type[record_type].append(f"WARNING: {message}")
+    self.issues_by_type[record_type].append(
+      self.translator.t("validation.issue.warning", message=message)
+    )
     self.quality_score = max(0.0, self.quality_score - 0.05)
 
-  def add_outlier(
-    self, record: AnyRecord, reason: str, severity: str = "medium"
-  ):
+  def add_outlier(self, record: AnyRecord, reason: str, severity: str = "medium"):
     """Add an outlier detection result."""
     self.outliers_detected.append(
       {
@@ -102,7 +106,8 @@ class DataValidator:
   4. Cross-record validation
   """
 
-  def __init__(self):
+  def __init__(self, locale: str | None = None):
+    self.translator = Translator(resolve_locale(locale))
     # Define validation ranges for different data types
     self.validation_ranges = {
       "HKQuantityTypeIdentifierHeartRate": {
@@ -170,13 +175,18 @@ class DataValidator:
     Returns:
         ValidationResult with detailed validation information
     """
-    result = ValidationResult()
+    result = ValidationResult(self.translator)
 
     if not records:
-      result.add_warning("No records provided for validation")
+      result.add_warning(self.translator.t("validation.warning.no_records"))
       return result
 
-    logger.info(f"Starting comprehensive validation of {len(records)} records")
+    logger.info(
+      self.translator.t(
+        "log.validator.start",
+        count=len(records),
+      )
+    )
 
     # Group records by type for efficient processing
     records_by_type = defaultdict(list)
@@ -201,9 +211,13 @@ class DataValidator:
     self._validate_cross_record_consistency(records, result)
 
     logger.info(
-      f"Validation completed. Quality score: {result.quality_score:.3f}, "
-      f"Errors: {len(result.errors)}, Warnings: {len(result.warnings)}, "
-      f"Outliers: {len(result.outliers_detected)}"
+      self.translator.t(
+        "log.validator.completed",
+        score=result.quality_score,
+        errors=len(result.errors),
+        warnings=len(result.warnings),
+        outliers=len(result.outliers_detected),
+      )
     )
 
     return result
@@ -234,46 +248,64 @@ class DataValidator:
 
     except Exception as e:
       result.add_error(
-        f"Validation failed for {record_type}: {str(e)}", record_type
+        self.translator.t(
+          "validation.error.record_failed",
+          record_type=record_type,
+          error=e,
+        ),
+        record_type,
       )
 
-  def _validate_basic_fields(
-    self, record: AnyRecord, result: ValidationResult
-  ) -> None:
+  def _validate_basic_fields(self, record: AnyRecord, result: ValidationResult) -> None:
     """Validate basic required fields for any record."""
     record_type = getattr(record, "record_type", "unknown")
 
     # Check required fields
     if not hasattr(record, "source_name") or not record.source_name:
-      result.add_error("Missing or empty source_name", record_type)
+      result.add_error(
+        self.translator.t("validation.error.missing_source"),
+        record_type,
+      )
 
     if not hasattr(record, "start_date") or not record.start_date:
-      result.add_error("Missing or invalid start_date", record_type)
+      result.add_error(
+        self.translator.t("validation.error.invalid_start_date"),
+        record_type,
+      )
 
     if not hasattr(record, "end_date") or not record.end_date:
-      result.add_error("Missing or invalid end_date", record_type)
+      result.add_error(
+        self.translator.t("validation.error.invalid_end_date"),
+        record_type,
+      )
 
     # Validate date consistency
     if hasattr(record, "start_date") and hasattr(record, "end_date"):
       if record.start_date and record.end_date:
         if record.end_date < record.start_date:
-          result.add_error("end_date is before start_date", record_type)
+          result.add_error(
+            self.translator.t("validation.error.end_before_start"),
+            record_type,
+          )
         elif (record.end_date - record.start_date) > timedelta(days=1):
-          result.add_warning("Record spans more than 24 hours", record_type)
+          result.add_warning(
+            self.translator.t("validation.warning.span_over_24h"),
+            record_type,
+          )
 
     # Check for future dates
     now = datetime.now()
-    if (
-      hasattr(record, "start_date")
-      and record.start_date
-      and record.start_date > now
-    ):
-      result.add_warning("start_date is in the future", record_type)
+    if hasattr(record, "start_date") and record.start_date and record.start_date > now:
+      result.add_warning(
+        self.translator.t("validation.warning.start_future"),
+        record_type,
+      )
 
-    if (
-      hasattr(record, "end_date") and record.end_date and record.end_date > now
-    ):
-      result.add_warning("end_date is in the future", record_type)
+    if hasattr(record, "end_date") and record.end_date and record.end_date > now:
+      result.add_warning(
+        self.translator.t("validation.warning.end_future"),
+        record_type,
+      )
 
   def _validate_quantity_record(
     self, record: QuantityRecord, result: ValidationResult
@@ -293,12 +325,22 @@ class DataValidator:
       ):
         if record.value < min_val:
           result.add_warning(
-            f"Value {record.value} below minimum {min_val} {range_info['unit']}",
+            self.translator.t(
+              "validation.warning.value_below_min",
+              value=record.value,
+              min=min_val,
+              unit=range_info["unit"],
+            ),
             record_type,
           )
         elif record.value > max_val:
           result.add_warning(
-            f"Value {record.value} above maximum {max_val} {range_info['unit']}",
+            self.translator.t(
+              "validation.warning.value_above_max",
+              value=record.value,
+              max=max_val,
+              unit=range_info["unit"],
+            ),
             record_type,
           )
 
@@ -309,7 +351,11 @@ class DataValidator:
       and abs(record.value) < 0.001
     ):
       result.add_warning(
-        f"Value {record.value} has unrealistic precision", record_type
+        self.translator.t(
+          "validation.warning.unrealistic_precision",
+          value=record.value,
+        ),
+        record_type,
       )
 
   def _validate_category_record(
@@ -320,9 +366,15 @@ class DataValidator:
 
     # Validate category values are reasonable strings
     if not isinstance(record.value, str):
-      result.add_error("Invalid category value type", record_type)
+      result.add_error(
+        self.translator.t("validation.error.category_type"),
+        record_type,
+      )
     elif len(record.value.strip()) == 0:
-      result.add_error("Empty category value", record_type)
+      result.add_error(
+        self.translator.t("validation.error.category_empty"),
+        record_type,
+      )
 
   def _validate_heart_rate_record(
     self, record: HeartRateRecord, result: ValidationResult
@@ -334,11 +386,19 @@ class DataValidator:
     # Check for physiologically impossible values
     if value < 20:
       result.add_error(
-        f"Heart rate {value} BPM is physiologically impossible", "heart_rate"
+        self.translator.t(
+          "validation.error.hr_impossible",
+          value=value,
+        ),
+        "heart_rate",
       )
     elif value > 300:
       result.add_error(
-        f"Heart rate {value} BPM is dangerously high", "heart_rate"
+        self.translator.t(
+          "validation.error.hr_danger",
+          value=value,
+        ),
+        "heart_rate",
       )
 
     # Check for exercise vs resting context
@@ -347,17 +407,18 @@ class DataValidator:
       # Look for exercise indicators in metadata
       exercise_indicators = ["workout", "exercise", "running", "cycling"]
       is_exercise = any(
-        indicator in str(record.metadata).lower()
-        for indicator in exercise_indicators
+        indicator in str(record.metadata).lower() for indicator in exercise_indicators
       )
 
       if is_exercise and value < 100:
         result.add_warning(
-          "Low heart rate during apparent exercise", "heart_rate"
+          self.translator.t("validation.warning.hr_low_exercise"),
+          "heart_rate",
         )
       elif not is_exercise and value > 200:
         result.add_warning(
-          "Very high heart rate when not exercising", "heart_rate"
+          self.translator.t("validation.warning.hr_high_rest"),
+          "heart_rate",
         )
 
   def _validate_sleep_record(
@@ -375,14 +436,26 @@ class DataValidator:
     }
 
     if record.value not in valid_stages:
-      result.add_warning(f"Unknown sleep stage: {record.value}", "sleep")
+      result.add_warning(
+        self.translator.t(
+          "validation.warning.sleep_stage_unknown",
+          value=record.value,
+        ),
+        "sleep",
+      )
 
     # Check sleep duration
     duration_hours = record.duration_hours
     if duration_hours > 24:
-      result.add_error("Sleep session longer than 24 hours", "sleep")
+      result.add_error(
+        self.translator.t("validation.error.sleep_too_long"),
+        "sleep",
+      )
     elif duration_hours < 0.1:  # Less than 6 minutes
-      result.add_warning("Very short sleep session", "sleep")
+      result.add_warning(
+        self.translator.t("validation.warning.sleep_too_short"),
+        "sleep",
+      )
 
   def _validate_workout_record(
     self, record: WorkoutRecord, result: ValidationResult
@@ -390,23 +463,41 @@ class DataValidator:
     """Validate workout record specific rules."""
     # Validate workout duration
     if record.workout_duration_seconds <= 0:
-      result.add_error("Invalid workout duration", "workout")
+      result.add_error(
+        self.translator.t("validation.error.workout_duration"),
+        "workout",
+      )
     elif record.workout_duration_seconds > 86400:  # 24 hours
-      result.add_error("Workout duration exceeds 24 hours", "workout")
+      result.add_error(
+        self.translator.t("validation.error.workout_too_long"),
+        "workout",
+      )
 
     # Validate calories if present
     if record.calories is not None:
       if record.calories < 0:
-        result.add_error("Negative calorie value", "workout")
+        result.add_error(
+          self.translator.t("validation.error.workout_calories_negative"),
+          "workout",
+        )
       elif record.calories > 10000:  # Unrealistic for a single workout
-        result.add_warning("Unusually high calorie burn", "workout")
+        result.add_warning(
+          self.translator.t("validation.warning.workout_calories_high"),
+          "workout",
+        )
 
     # Validate distance if present
     if record.distance_km is not None:
       if record.distance_km < 0:
-        result.add_error("Negative distance value", "workout")
+        result.add_error(
+          self.translator.t("validation.error.workout_distance_negative"),
+          "workout",
+        )
       elif record.distance_km > 1000:  # Unrealistic for a single workout
-        result.add_warning("Unusually long distance", "workout")
+        result.add_warning(
+          self.translator.t("validation.warning.workout_distance_long"),
+          "workout",
+        )
 
   def _validate_activity_summary_record(
     self, record: ActivitySummaryRecord, result: ValidationResult
@@ -416,17 +507,32 @@ class DataValidator:
     for field in ["move_calories", "exercise_minutes", "stand_hours"]:
       value = getattr(record, field, None)
       if value is not None and value < 0:
-        result.add_error(f"Negative value for {field}", "activity_summary")
+        result.add_error(
+          self.translator.t(
+            "validation.error.activity_negative",
+            field=field,
+          ),
+          "activity_summary",
+        )
 
     # Validate goals are reasonable
     if record.move_goal and record.move_goal > 2000:
-      result.add_warning("Unusually high move goal", "activity_summary")
+      result.add_warning(
+        self.translator.t("validation.warning.move_goal_high"),
+        "activity_summary",
+      )
 
     if record.exercise_goal and record.exercise_goal > 200:
-      result.add_warning("Unusually high exercise goal", "activity_summary")
+      result.add_warning(
+        self.translator.t("validation.warning.exercise_goal_high"),
+        "activity_summary",
+      )
 
     if record.stand_goal and record.stand_goal > 24:
-      result.add_warning("Unusually high stand goal", "activity_summary")
+      result.add_warning(
+        self.translator.t("validation.warning.stand_goal_high"),
+        "activity_summary",
+      )
 
   def _detect_outliers(
     self, records: Sequence[AnyRecord], result: ValidationResult
@@ -455,9 +561,9 @@ class DataValidator:
       std_val = np.std(values_array)
       if std_val > 0:
         z_scores = np.abs((values_array - mean_val) / std_val)
-        zscore_outliers = np.where(
-          z_scores > self.outlier_params["zscore_threshold"]
-        )[0]
+        zscore_outliers = np.where(z_scores > self.outlier_params["zscore_threshold"])[
+          0
+        ]
       else:
         zscore_outliers = np.array([])
     except (ValueError, TypeError):
@@ -468,9 +574,7 @@ class DataValidator:
     iqr = q3 - q1
     iqr_lower = q1 - (self.outlier_params["iqr_multiplier"] * iqr)
     iqr_upper = q3 + (self.outlier_params["iqr_multiplier"] * iqr)
-    iqr_outliers = np.where(
-      (values_array < iqr_lower) | (values_array > iqr_upper)
-    )[0]
+    iqr_outliers = np.where((values_array < iqr_lower) | (values_array > iqr_upper))[0]
 
     # Combine outlier detections
     all_outliers = set(zscore_outliers) | set(iqr_outliers)
@@ -491,7 +595,12 @@ class DataValidator:
       # Type-safe call using MeasurableRecord protocol
       result.add_outlier(
         record,  # Type checker knows this is MeasurableRecord
-        f"Outlier value {value:.2f} {record.measurement_unit} (z-score: {z_score:.2f})",
+        self.translator.t(
+          "validation.warning.outlier",
+          value=value,
+          unit=record.measurement_unit,
+          z_score=z_score,
+        ),
         severity,
       )
 
@@ -512,12 +621,13 @@ class DataValidator:
       if len(records_list) > 1:
         duplicates_found += len(records_list) - 1
 
-    result.set_consistency_check(
-      "no_duplicate_timestamps", duplicates_found == 0
-    )
+    result.set_consistency_check("no_duplicate_timestamps", duplicates_found == 0)
     if duplicates_found > 0:
       result.add_warning(
-        f"Found {duplicates_found} records with duplicate timestamps"
+        self.translator.t(
+          "validation.warning.duplicate_timestamps",
+          count=duplicates_found,
+        )
       )
 
     # Check data source consistency
@@ -529,7 +639,10 @@ class DataValidator:
     result.set_consistency_check("reasonable_source_count", len(sources) <= 10)
     if len(sources) > 10:
       result.add_warning(
-        f"Unusually high number of data sources: {len(sources)}"
+        self.translator.t(
+          "validation.warning.source_count_high",
+          count=len(sources),
+        )
       )
 
     # Check date range consistency
@@ -548,7 +661,10 @@ class DataValidator:
       )  # 10 years
       if date_range_days > 3650:
         result.add_warning(
-          f"Data spans unusually long period: {date_range_days} days"
+          self.translator.t(
+            "validation.warning.date_range_long",
+            days=date_range_days,
+          )
         )
 
   def _validate_cross_record_consistency(
@@ -578,21 +694,21 @@ class DataValidator:
         hr_values = [
           getattr(r, "value", None)
           for r in heart_rates
-          if hasattr(r, "value")
-          and isinstance(getattr(r, "value", None), (int, float))
+          if hasattr(r, "value") and isinstance(getattr(r, "value", None), (int, float))
         ]
         if hr_values:
           # Filter out None values and ensure we have valid numbers
           valid_hr_values = [
-            v
-            for v in hr_values
-            if v is not None and isinstance(v, (int, float))
+            v for v in hr_values if v is not None and isinstance(v, (int, float))
           ]
           if valid_hr_values:
             max_hr = max(valid_hr_values)
             if max_hr > 0 and max_hr < 120:
               result.add_warning(
-                f"Low maximum heart rate ({max_hr}) on day with workouts",
+                self.translator.t(
+                  "validation.warning.low_hr_workout_day",
+                  value=max_hr,
+                ),
                 "cross_record",
               )
 
@@ -601,6 +717,7 @@ def validate_health_data(
   records: Sequence[AnyRecord],
   enable_outlier_detection: bool = True,
   enable_consistency_checks: bool = True,
+  locale: str | None = None,
 ) -> ValidationResult:
   """Convenience function for validating health data.
 
@@ -612,7 +729,7 @@ def validate_health_data(
   Returns:
       ValidationResult with detailed validation information
   """
-  validator = DataValidator()
+  validator = DataValidator(locale=locale)
   return validator.validate_records_comprehensive(
     records, enable_outlier_detection, enable_consistency_checks
   )

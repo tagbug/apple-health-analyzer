@@ -6,12 +6,14 @@ including sleep quality analysis, activity patterns, and health correlations.
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 import numpy as np
+import pandas as pd
 
 from ..core.data_models import HealthRecord, QuantityRecord, SleepRecord
+from ..i18n import Translator, resolve_locale
 from ..processors.optimized_processor import (
   MemoryOptimizer,
   OptimizedDataFrame,
@@ -19,6 +21,7 @@ from ..processors.optimized_processor import (
   StatisticalAggregator,
 )
 from ..utils.logger import get_logger
+from ..utils.type_conversion import numpy_to_python_scalar, safe_float
 
 logger = get_logger(__name__)
 
@@ -114,13 +117,14 @@ class ExtendedHealthAnalyzer:
   - Health correlations and predictive insights
   """
 
-  def __init__(self):
+  def __init__(self, locale: str | None = None):
     """Initialize extended health analyzer."""
+    self.translator = Translator(resolve_locale(locale))
     self.stat_aggregator = StatisticalAggregator()
     self.memory_optimizer = MemoryOptimizer()
     self.performance_monitor = PerformanceMonitor()
 
-    logger.info("ExtendedHealthAnalyzer initialized")
+    logger.info(self.translator.t("log.extended_analyzer.initialized"))
 
   def analyze_comprehensive_health(
     self,
@@ -144,10 +148,10 @@ class ExtendedHealthAnalyzer:
     """
     self.performance_monitor.start_operation("comprehensive_health_analysis")
 
-    logger.info("Starting comprehensive extended health analysis")
+    logger.info(self.translator.t("log.extended_analyzer.start_comprehensive"))
 
     if not all_records:
-      logger.warning("No health records provided for analysis")
+      logger.warning(self.translator.t("log.extended_analyzer.no_records"))
       return ComprehensiveHealthReport(
         analysis_date=datetime.now(),
         data_range=(datetime.now(), datetime.now()),
@@ -218,7 +222,7 @@ class ExtendedHealthAnalyzer:
     )
 
     self.performance_monitor.end_operation("comprehensive_health_analysis")
-    logger.info("Comprehensive extended health analysis completed")
+    logger.info(self.translator.t("log.extended_analyzer.completed"))
 
     return report
 
@@ -230,6 +234,7 @@ class ExtendedHealthAnalyzer:
       "sleep": [],
       "activity": [],
       "heart_rate": [],
+      "hrv": [],
       "body_metrics": [],
       "nutrition": [],
       "stress": [],
@@ -247,8 +252,11 @@ class ExtendedHealthAnalyzer:
       ):
         categories["activity"].append(record)
       # Heart rate records
-      elif "heartrate" in record_type or "hrv" in record_type:
+      elif "heartrate" in record_type:
         categories["heart_rate"].append(record)
+      # HRV records
+      elif "hrv" in record_type or "variability" in record_type:
+        categories["hrv"].append(record)
       # Body metrics
       elif any(
         keyword in record_type
@@ -271,68 +279,111 @@ class ExtendedHealthAnalyzer:
     if not sleep_records:
       return None
 
-    logger.info(f"Analyzing sleep quality from {len(sleep_records)} records")
+    logger.info(
+      self.translator.t(
+        "log.extended_analyzer.sleep_quality",
+        count=len(sleep_records),
+      )
+    )
 
     # Convert to optimized DataFrame for efficient processing
     odf = OptimizedDataFrame.from_records(sleep_records)
-    df = odf.to_pandas()
-
-    if df.empty:
+    if odf.record_count == 0:
       return None
 
-    # Calculate basic sleep metrics
-    sleep_durations = []
-    deep_sleep_ratios = []
-    rem_sleep_ratios = []
+    # Aggregate by day using actual stage durations
+    daily_sleep_hours: dict[date, float] = {}
+    daily_in_bed_hours: dict[date, float] = {}
+    daily_stage_hours: dict[date, dict[str, float]] = {}
+    bedtimes: list[float] = []
 
     for record in sleep_records:
-      if isinstance(record, SleepRecord):
-        # Calculate sleep duration and stages
-        if hasattr(record, "start_date") and hasattr(record, "end_date"):
-          duration_hours = (record.end_date - record.start_date).total_seconds() / 3600
-          sleep_durations.append(duration_hours)
+      if not isinstance(record, SleepRecord):
+        continue
 
-          # Calculate sleep stage ratios based on available data
-          # Note: Actual implementation would require detailed sleep stage data
-          # For now, use placeholders based on typical values
-          stage = record.sleep_stage.value.lower()
-          if "deep" in stage:
-            deep_sleep_ratios.append(
-              0.2 if len(deep_sleep_ratios) < 10 else np.mean(deep_sleep_ratios)
-            )
-          elif "rem" in stage:
-            rem_sleep_ratios.append(
-              0.25 if len(rem_sleep_ratios) < 10 else np.mean(rem_sleep_ratios)
-            )
+      duration_hours = (record.end_date - record.start_date).total_seconds() / 3600
+      if duration_hours <= 0:
+        continue
 
-    if not sleep_durations:
+      date_key = record.start_date.date()
+      daily_stage_hours.setdefault(
+        date_key,
+        {
+          "core": 0.0,
+          "deep": 0.0,
+          "rem": 0.0,
+          "asleep": 0.0,
+        },
+      )
+
+      if record.is_in_bed:
+        daily_in_bed_hours[date_key] = (
+          daily_in_bed_hours.get(date_key, 0.0) + duration_hours
+        )
+        bedtime_hour = record.start_date.hour + record.start_date.minute / 60
+        bedtimes.append(bedtime_hour)
+      elif record.is_awake:
+        # Awake time does not count toward sleep
+        pass
+      else:
+        daily_sleep_hours[date_key] = (
+          daily_sleep_hours.get(date_key, 0.0) + duration_hours
+        )
+        stage_value = record.sleep_stage.value.lower()
+        if "core" in stage_value:
+          daily_stage_hours[date_key]["core"] += duration_hours
+        elif "deep" in stage_value:
+          daily_stage_hours[date_key]["deep"] += duration_hours
+        elif "rem" in stage_value:
+          daily_stage_hours[date_key]["rem"] += duration_hours
+        else:
+          daily_stage_hours[date_key]["asleep"] += duration_hours
+
+    if not daily_sleep_hours:
       return None
 
-    # Calculate averages
-    average_duration = np.mean(sleep_durations)
-    # Calculate efficiency based on available data or default to 85% if insufficient data
-    if len(sleep_durations) > 5:  # Need minimum data for meaningful calculation
-      average_efficiency = 0.85  # Placeholder - actual calculation would require more detailed sleep stages
+    sleep_durations = list(daily_sleep_hours.values())
+    average_duration = float(np.mean(sleep_durations))
+    if daily_in_bed_hours:
+      efficiencies = []
+      for date_key, sleep_hours in daily_sleep_hours.items():
+        in_bed = daily_in_bed_hours.get(date_key, 0.0)
+        if in_bed > 0:
+          efficiencies.append(min(sleep_hours / in_bed, 1.0))
+      average_efficiency = float(np.mean(efficiencies)) if efficiencies else 0.85
     else:
-      average_efficiency = 0.85  # Default for insufficient data
+      average_efficiency = 0.85
 
     # Calculate consistency (lower standard deviation = higher consistency)
     duration_std = np.std(sleep_durations)
     consistency_score = max(0, 1 - (duration_std / average_duration))
 
-    # Sleep stage ratios - calculate from available data or use defaults
-    deep_sleep_ratio = np.mean(deep_sleep_ratios) if deep_sleep_ratios else 0.18
-    rem_sleep_ratio = np.mean(rem_sleep_ratios) if rem_sleep_ratios else 0.22
+    # Sleep stage ratios from aggregated stage data
+    total_core = sum(stage["core"] for stage in daily_stage_hours.values())
+    total_deep = sum(stage["deep"] for stage in daily_stage_hours.values())
+    total_rem = sum(stage["rem"] for stage in daily_stage_hours.values())
+    total_asleep = sum(stage["asleep"] for stage in daily_stage_hours.values())
+    total_stage_sleep = total_core + total_deep + total_rem + total_asleep
+    if total_stage_sleep > 0:
+      deep_sleep_ratio = total_deep / total_stage_sleep
+      rem_sleep_ratio = total_rem / total_stage_sleep
+    else:
+      deep_sleep_ratio = 0.18
+      rem_sleep_ratio = 0.22
 
     # Calculate sleep debt (assuming 8 hours is optimal)
     optimal_sleep = 8.0
     sleep_debt = max(0, optimal_sleep - average_duration)
 
-    # Circadian rhythm score (simplified)
-    circadian_rhythm_score = consistency_score * 0.8  # Consistency is key factor
+    # Circadian rhythm score based on bedtime consistency
+    if bedtimes:
+      bedtime_std = float(np.std(bedtimes))
+      circadian_rhythm_score = max(0.0, 1.0 - bedtime_std / 3.0)
+    else:
+      circadian_rhythm_score = consistency_score * 0.8
 
-    # Determine sleep quality trend (simplified)
-    sleep_quality_trend = "stable"  # Would need time-series analysis
+    # Determine sleep quality trend from daily sleep duration
+    sleep_quality_trend = self._calculate_trend_label(daily_sleep_hours)
 
     return SleepQualityAnalysis(
       average_duration_hours=float(round(average_duration, 1)),
@@ -352,17 +403,26 @@ class ExtendedHealthAnalyzer:
     if not activity_records:
       return None
 
-    logger.info(f"Analyzing activity patterns from {len(activity_records)} records")
+    logger.info(
+      self.translator.t(
+        "log.extended_analyzer.activity_patterns",
+        count=len(activity_records),
+      )
+    )
 
     # Convert to optimized DataFrame
     odf = OptimizedDataFrame.from_records(activity_records)
-    df = odf.to_pandas()
-
-    if df.empty:
+    if odf.record_count == 0:
       return None
 
-    # Calculate daily step average
-    daily_steps = df.groupby(df["timestamp"].dt.date)["value"].sum()
+    df = odf.to_pandas()
+
+    # Focus on step count where possible
+    step_df = df[df["type"].str.contains("step", case=False, na=False)].copy()
+    if step_df.empty:
+      step_df = df.copy()
+
+    daily_steps = step_df.groupby(step_df["timestamp"].dt.date)["value"].sum()
     daily_step_average = int(daily_steps.mean()) if not daily_steps.empty else 0
 
     # Calculate weekly exercise frequency from activity data
@@ -404,12 +464,25 @@ class ExtendedHealthAnalyzer:
     else:
       activity_consistency_score = 0.0
 
-    # Exercise intensity distribution
-    exercise_intensity_distribution = {
-      "light": 0.4,
-      "moderate": 0.4,
-      "vigorous": 0.2,
-    }
+    # Exercise intensity distribution derived from daily step quantiles
+    if len(daily_steps) >= 3:
+      p33 = float(daily_steps.quantile(0.33))
+      p66 = float(daily_steps.quantile(0.66))
+      light_days = int((daily_steps <= p33).sum())
+      moderate_days = int(((daily_steps > p33) & (daily_steps <= p66)).sum())
+      vigorous_days = int((daily_steps > p66).sum())
+      total_days = len(daily_steps)
+      exercise_intensity_distribution = {
+        "light": round(light_days / total_days, 2),
+        "moderate": round(moderate_days / total_days, 2),
+        "vigorous": round(vigorous_days / total_days, 2),
+      }
+    else:
+      exercise_intensity_distribution = {
+        "light": 0.4,
+        "moderate": 0.4,
+        "vigorous": 0.2,
+      }
 
     return ActivityPatternAnalysis(
       daily_step_average=daily_step_average,
@@ -435,7 +508,7 @@ class ExtendedHealthAnalyzer:
     if not body_metrics and not (weight_kg and height_cm and age):
       return None
 
-    logger.info("Analyzing metabolic health indicators")
+    logger.info(self.translator.t("log.extended_analyzer.metabolic_health"))
 
     # Calculate BMR if we have the required data
     basal_metabolic_rate = None
@@ -509,26 +582,30 @@ class ExtendedHealthAnalyzer:
     self, categorized_records: Mapping[str, Sequence[HealthRecord]]
   ) -> StressResilienceAnalysis | None:
     """Analyze stress resilience and recovery capacity."""
+    hrv_records = categorized_records.get("hrv", [])
     heart_rate_records = categorized_records.get("heart_rate", [])
 
-    if not heart_rate_records:
+    if not heart_rate_records and not hrv_records:
       return None
 
-    logger.info("Analyzing stress resilience and recovery")
+    logger.info(self.translator.t("log.extended_analyzer.stress_resilience"))
 
-    # Calculate stress accumulation score from heart rate variability
-    # Simplified: based on heart rate standard deviation as proxy for stress
-    odf_hr = OptimizedDataFrame.from_records(heart_rate_records)
-    df_hr = odf_hr.to_pandas()
-    if not df_hr.empty:
-      hr_std = df_hr["value"].std()
-      hr_mean = df_hr["value"].mean()
-      if hr_mean > 0 and np.isfinite(hr_std) and np.isfinite(hr_mean):
-        stress_accumulation_score = min(hr_std / hr_mean, 1.0)
-      else:
-        stress_accumulation_score = 0.3
-    else:
-      stress_accumulation_score = 0.3
+    # Prefer HRV-based stress scoring when available
+    stress_accumulation_score = 0.3
+    if hrv_records:
+      odf_hrv = OptimizedDataFrame.from_records(hrv_records)
+      if odf_hrv.record_count > 0:
+        hrv_mean = float(np.nanmean(odf_hrv.values))
+        if np.isfinite(hrv_mean) and hrv_mean > 0:
+          stress_accumulation_score = float(max(0.0, min(1.0, 1.0 - (hrv_mean / 100))))
+    elif heart_rate_records:
+      odf_hr = OptimizedDataFrame.from_records(heart_rate_records)
+      if odf_hr.record_count > 0:
+        hr_values = odf_hr.values
+        hr_std = float(np.nanstd(hr_values))
+        hr_mean = float(np.nanmean(hr_values))
+        if hr_mean > 0 and np.isfinite(hr_std) and np.isfinite(hr_mean):
+          stress_accumulation_score = min(hr_std / hr_mean, 1.0)
 
     # Recovery capacity score based on stress level
     recovery_capacity_score = 1.0 - stress_accumulation_score
@@ -548,9 +625,9 @@ class ExtendedHealthAnalyzer:
 
     # Recommended rest periods
     recommended_rest_periods = [
-      "建议每周安排1-2天完全休息日",
-      "每天保证7-8小时睡眠",
-      "每周进行1-2次冥想或放松练习",
+      self.translator.t("extended.recommendation.rest_days"),
+      self.translator.t("extended.recommendation.sleep_7_8"),
+      self.translator.t("extended.recommendation.meditation"),
     ]
 
     return StressResilienceAnalysis(
@@ -565,29 +642,113 @@ class ExtendedHealthAnalyzer:
     self, categorized_records: Mapping[str, Sequence[HealthRecord]]
   ) -> dict[str, Any]:
     """Analyze correlations between different health metrics."""
-    correlations = {}
+    correlations: dict[str, Any] = {}
 
-    # Sleep and activity correlation
     sleep_records = categorized_records.get("sleep", [])
     activity_records = categorized_records.get("activity", [])
-
-    if sleep_records and activity_records:
-      correlations["sleep_activity"] = {
-        "correlation": 0.6,  # Positive correlation between good sleep and activity
-        "insight": "良好的睡眠质量与更高的活动水平相关",
-      }
-
-    # Heart rate and stress correlation
     heart_rate_records = categorized_records.get("heart_rate", [])
-    stress_records = categorized_records.get("stress", [])
 
-    if heart_rate_records and stress_records:
-      correlations["hr_stress"] = {
-        "correlation": 0.7,  # Heart rate often correlates with stress
-        "insight": "心率变异性可反映压力水平",
-      }
+    sleep_daily = self._daily_sleep_hours(sleep_records)
+    activity_daily = self._daily_activity_values(activity_records)
+
+    if sleep_daily and activity_daily:
+      sleep_series = pd.Series(sleep_daily)
+      activity_series = pd.Series(activity_daily)
+      aligned = pd.concat([sleep_series, activity_series], axis=1).dropna()
+      if len(aligned) >= 3:
+        corr_val = safe_float(
+          numpy_to_python_scalar(aligned.corr(numeric_only=True).iloc[0, 1])
+        )
+        correlations["sleep_activity"] = {
+          "correlation": round(corr_val, 3),
+          "sample_size": len(aligned),
+          "confidence": self._correlation_confidence(len(aligned)),
+          "insight": self.translator.t("extended.correlation.sleep_activity"),
+        }
+
+    if sleep_daily and heart_rate_records:
+      hr_daily = self._daily_heart_rate_mean(heart_rate_records)
+      if hr_daily:
+        sleep_series = pd.Series(sleep_daily)
+        hr_series = pd.Series(hr_daily)
+        aligned = pd.concat([sleep_series, hr_series], axis=1).dropna()
+        if len(aligned) >= 3:
+          corr_val = safe_float(
+            numpy_to_python_scalar(aligned.corr(numeric_only=True).iloc[0, 1])
+          )
+          correlations["sleep_hr"] = {
+            "correlation": round(corr_val, 3),
+            "sample_size": len(aligned),
+            "confidence": self._correlation_confidence(len(aligned)),
+            "insight": self.translator.t("extended.correlation.hr_stress"),
+          }
 
     return correlations
+
+  def _daily_sleep_hours(
+    self, sleep_records: Sequence[HealthRecord]
+  ) -> dict[str, float]:
+    """Aggregate daily sleep hours from sleep records."""
+    daily: dict[str, float] = {}
+    for record in sleep_records:
+      if isinstance(record, SleepRecord) and record.is_asleep:
+        duration_hours = (record.end_date - record.start_date).total_seconds() / 3600
+        if duration_hours > 0:
+          key = record.start_date.date().isoformat()
+          daily[key] = daily.get(key, 0.0) + duration_hours
+    return daily
+
+  def _daily_activity_values(
+    self, activity_records: Sequence[HealthRecord]
+  ) -> dict[str, float]:
+    """Aggregate daily activity values from activity records."""
+    daily: dict[str, float] = {}
+    for record in activity_records:
+      if isinstance(record, QuantityRecord):
+        value = float(record.value)
+        if value >= 0:
+          key = record.start_date.date().isoformat()
+          daily[key] = daily.get(key, 0.0) + value
+    return daily
+
+  def _daily_heart_rate_mean(
+    self, heart_rate_records: Sequence[HealthRecord]
+  ) -> dict[str, float]:
+    """Aggregate daily mean heart rate."""
+    daily_values: dict[str, list[float]] = {}
+    for record in heart_rate_records:
+      if isinstance(record, QuantityRecord):
+        key = record.start_date.date().isoformat()
+        daily_values.setdefault(key, []).append(float(record.value))
+    return {
+      key: float(np.mean(values)) for key, values in daily_values.items() if values
+    }
+
+  def _correlation_confidence(self, sample_size: int) -> float:
+    """Estimate correlation confidence from sample size."""
+    if sample_size <= 3:
+      return 0.3
+    if sample_size <= 7:
+      return 0.5
+    if sample_size <= 14:
+      return 0.7
+    return 0.85
+
+  def _calculate_trend_label(self, daily_values: dict[date, float]) -> str:
+    """Calculate trend label for daily values."""
+    if len(daily_values) < 3:
+      return "stable"
+    df = pd.DataFrame(
+      {
+        "date": pd.to_datetime(list(daily_values.keys())),
+        "value": list(daily_values.values()),
+      }
+    ).sort_values("date")
+    df["index"] = np.arange(len(df))
+    slope = np.polyfit(df["index"], df["value"], 1)[0]
+    if abs(slope) < 0.02:
+      return "stable"
+    return "improving" if slope > 0 else "declining"
 
   def _generate_predictive_insights(
     self,
@@ -600,22 +761,22 @@ class ExtendedHealthAnalyzer:
     insights = []
 
     if sleep_quality and sleep_quality.sleep_debt_hours > 2:
-      insights.append("⚠️ 睡眠债积累过多，可能影响长期健康")
+      insights.append(self.translator.t("extended.predictive.sleep_debt"))
 
     if activity_patterns and activity_patterns.daily_step_average < 5000:
-      insights.append("📊 步数偏低，建议增加日常活动量")
+      insights.append(self.translator.t("extended.predictive.low_steps"))
 
     if metabolic_health and metabolic_health.metabolic_health_score < 0.6:
-      insights.append("🔬 代谢健康指标需要关注，建议咨询专业医师")
+      insights.append(self.translator.t("extended.predictive.metabolic_attention"))
 
     if stress_resilience and stress_resilience.burnout_risk_level in [
       "high",
       "critical",
     ]:
-      insights.append("😰  burnout风险较高，需要调整生活节奏")
+      insights.append(self.translator.t("extended.predictive.burnout_risk"))
 
     if not insights:
-      insights.append("✅ 整体健康状况良好，继续保持健康生活方式")
+      insights.append(self.translator.t("extended.predictive.overall_good"))
 
     return insights
 
@@ -680,16 +841,16 @@ class ExtendedHealthAnalyzer:
     actions = []
 
     if sleep_quality and sleep_quality.sleep_debt_hours > 1:
-      actions.append("立即改善睡眠习惯，优先偿还睡眠债")
+      actions.append(self.translator.t("extended.priority_actions.sleep_debt"))
 
     if stress_resilience and stress_resilience.burnout_risk_level == "critical":
-      actions.append("立即采取措施降低burnout风险")
+      actions.append(self.translator.t("extended.priority_actions.reduce_burnout"))
 
     if activity_patterns and activity_patterns.daily_step_average < 3000:
-      actions.append("增加日常步行，目标每天8000步")
+      actions.append(self.translator.t("extended.priority_actions.increase_steps"))
 
     if not actions:
-      actions.append("保持当前健康生活方式")
+      actions.append(self.translator.t("extended.priority_actions.maintain"))
 
     return actions
 
@@ -698,10 +859,10 @@ class ExtendedHealthAnalyzer:
   ) -> list[str]:
     """Generate lifestyle optimization recommendations."""
     optimizations = [
-      "建立规律的作息时间",
-      "增加有氧运动频率",
-      "改善饮食结构",
-      "学习压力管理技巧",
+      self.translator.t("extended.optimization.routine"),
+      self.translator.t("extended.optimization.aerobic"),
+      self.translator.t("extended.optimization.diet"),
+      self.translator.t("extended.optimization.stress_management"),
     ]
 
     return optimizations
@@ -714,6 +875,7 @@ class ExtendedHealthAnalyzer:
       "sleep",
       "activity",
       "heart_rate",
+      "hrv",
       "body_metrics",
       "nutrition",
       "stress",

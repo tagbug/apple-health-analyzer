@@ -7,7 +7,7 @@ import sys
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from pathlib import Path
-from typing import cast
+from typing import Literal, cast
 
 import click
 from rich.console import Console
@@ -20,29 +20,71 @@ from src.core.exceptions import HealthAnalyzerError
 from src.core.data_models import HealthRecord
 from src.core.xml_parser import StreamingXMLParser, get_export_file_info
 from src.utils.logger import UnifiedProgress, get_logger
+from src.i18n import Translator, resolve_locale
+from src.utils.record_categorizer import (
+  categorize_records,
+  HEART_RATE_TYPE,
+  RESTING_HR_TYPE,
+  HRV_TYPE,
+  VO2_MAX_TYPE,
+  SLEEP_TYPE,
+)
 
 console = Console()
 logger = get_logger(__name__)
 
 
-@click.group()
+def _t(locale: str | None = None) -> Translator:
+  return Translator(resolve_locale(locale))
+
+
+def _format_error(error: Exception | str, translator: Translator) -> str:
+  message = str(error)
+  if not message:
+    return message
+  try:
+    return translator.t(message)
+  except Exception:
+    return message
+
+
+def _resolve_xml_path(xml_path: str | None) -> Path:
+  if xml_path:
+    return Path(xml_path)
+  return get_config().export_xml_path
+
+
+@click.group(help=_t().t("cli.help.root"), add_help_option=False)
 @click.option(
   "--config",
   "config_path",
   type=click.Path(exists=True),
-  help="Path to configuration file",
+  help=_t().t("cli.help.config_path"),
 )
-@click.option("--verbose", "-v", is_flag=True, help="Enable verbose logging")
-@click.version_option()
-def cli(config_path: str | None, verbose: bool):
-  """Apple Health Data Analyzer
-
-  A comprehensive tool for parsing, analyzing, and visualizing Apple Health export data.
-  """
+@click.option(
+  "--verbose",
+  "-v",
+  is_flag=True,
+  help=_t().t("cli.help.verbose"),
+)
+@click.option(
+  "--locale",
+  type=click.Choice(["en", "zh"]),
+  help=_t().t("cli.help.locale"),
+)
+@click.version_option(help=_t().t("cli.help.version"))
+@click.help_option("--help", "-h", help=_t().t("cli.help.help_option"))
+def cli(config_path: str | None, verbose: bool, locale: str | None):
   if config_path:
     import os
 
     os.environ["CONFIG_FILE"] = config_path
+    reload_config()
+
+  if locale:
+    import os
+
+    os.environ["LOCALE"] = locale
     reload_config()
 
   if verbose:
@@ -51,70 +93,51 @@ def cli(config_path: str | None, verbose: bool):
     logging.getLogger().setLevel(logging.DEBUG)
 
 
-@cli.command()
-@click.argument("xml_path", type=click.Path(exists=True))
-@click.option("--output", "-o", type=click.Path(), help="Output directory for results")
+@cli.command(
+  help=_t().t("cli.help.parse_command"),
+  short_help=_t().t("cli.help.parse_command_short"),
+  add_help_option=False,
+)
+@click.argument("xml_path", type=click.Path(exists=True), required=False)
+@click.option(
+  "--output",
+  "-o",
+  type=click.Path(),
+  help=_t().t("cli.help.output_results"),
+)
 @click.option(
   "--types",
   "-t",
   multiple=True,
-  help="Record types to parse (can specify multiple)",
+  help=_t().t("cli.help.parse_types"),
 )
-@click.option("--preview", is_flag=True, help="Show preview of parsed data")
+@click.option(
+  "--preview",
+  is_flag=True,
+  help=_t().t("cli.help.preview"),
+)
+@click.help_option("--help", "-h", help=_t().t("cli.help.help_option"))
 def parse(xml_path: str, output: str | None, types: list[str], preview: bool):
-  """Parse Apple Health export XML file.
-
-  XML_PATH: Path to the export.xml file
-
-  Examples:\n
-      # Parse all records and save to default output directory\n
-      uv run python main.py parse export.xml --output ./parsed_data
-
-      # Parse only heart rate data with preview\n
-      uv run python main.py parse export.xml --types HeartRate --preview
-
-      # Parse specific record types\n
-      uv run python main.py parse export.xml --types HeartRate --types Sleep
-  """
+  translator = _t()
   try:
-    xml_file = Path(xml_path)
+    xml_file = _resolve_xml_path(xml_path)
 
     # Validate input file
-    if not xml_file.exists():
-      console.print(f"[bold red]Error:[/bold red] File not found: {xml_file}")
-      console.print("[yellow]Tip:[/yellow] Check the file path and try again")
-      sys.exit(1)
-
-    if xml_file.stat().st_size == 0:
-      console.print(f"[bold red]Error:[/bold red] File is empty: {xml_file}")
-      sys.exit(1)
+    _ensure_xml_file(xml_file)
 
     output_dir = Path(output) if output else get_config().output_dir
 
-    console.print(f"[bold blue]Parsing Apple Health export:[/bold blue] {xml_file}")
-    console.print(f"[bold blue]Output directory:[/bold blue] {output_dir}")
+    console.print(
+      f"[bold blue]{translator.t('cli.parse.parsing_export')}[/bold blue] {xml_file}"
+    )
+    console.print(
+      f"[bold blue]{translator.t('cli.common.output_dir')}[/bold blue] {output_dir}"
+    )
 
-    # Get file info with better error handling
-    try:
-      file_info = get_export_file_info(xml_file)
-      if file_info:
-        console.print(f"[green]File size:[/green] {file_info['file_size_mb']:.1f} MB")
-        console.print(
-          f"[green]Estimated records:[/green] {file_info['estimated_record_count']:,}"
-        )
-      else:
-        console.print("[yellow]Warning:[/yellow] Could not read file information")
-    except Exception as e:
-      console.print(f"[yellow]Warning:[/yellow] Could not analyze file: {e}")
-      console.print("[yellow]Continuing with parsing...[/yellow]")
+    _display_file_info(xml_file)
 
     # Initialize parser
-    try:
-      parser = StreamingXMLParser(xml_file)
-    except Exception as e:
-      console.print(f"[bold red]Error:[/bold red] Failed to initialize parser: {e}")
-      console.print("[yellow]Tip:[/yellow] Check if the file is a valid XML file")
-      sys.exit(1)
+    parser = _init_parser(xml_file)
 
     # Parse records with progress tracking
     record_types = list(types) if types else None
@@ -122,62 +145,25 @@ def parse(xml_path: str, output: str | None, types: list[str], preview: bool):
     stats = {}
 
     try:
-      # Create progress bar for parsing
-      # Note: We don't use estimated count as total since it may be inaccurate
-      # Instead, we use indeterminate progress for better UX
-
-      with UnifiedProgress(
-        "Parsing records",
-        total=None,  # Always use indeterminate progress for parsing
-        quiet=True,  # Disable logging for cleaner CLI output
-      ) as progress:
-        # Progress callback function
-        def update_progress(count: int) -> None:
-          progress.update(count, f"Parsed {count:,} records")
-
-        records_generator = parser.parse_records(
-          record_types=record_types,
-          progress_callback=update_progress,
-          quiet=True,
-        )
-        records = list(records_generator)
-        stats = parser.get_statistics()
-
-        # Final update
-        progress.update(len(records), f"Parsed {len(records):,} records")
-
+      records, stats = _parse_records_with_progress(parser, record_types)
     except Exception as e:
-      logger.error(f"Parsing failed: {e}")
-
-      # Provide helpful error messages based on error type
-      error_str = str(e).lower()
-      if "memory" in error_str:
-        console.print("[bold red]Error:[/bold red] Insufficient memory for parsing")
-        console.print(
-          "[yellow]Tip:[/yellow] Try processing a smaller file or increase system memory"
-        )
-      elif "permission" in error_str:
-        console.print("[bold red]Error:[/bold red] File permission denied")
-        console.print("[yellow]Tip:[/yellow] Check file permissions")
-      elif "encoding" in error_str:
-        console.print("[bold red]Error:[/bold red] File encoding issue")
-        console.print("[yellow]Tip:[/yellow] Ensure the file is UTF-8 encoded")
-      else:
-        console.print(f"[bold red]Error:[/bold red] Failed to parse records: {e}")
-        console.print("[yellow]Tip:[/yellow] Check the XML file format and try again")
-
-      sys.exit(1)
+      _handle_parsing_exception(e)
 
     # Validate parsing results
     if not records:
-      console.print("[yellow]Warning:[/yellow] No records were parsed from the file")
+      console.print(
+        f"[yellow]{translator.t('cli.common.warning')}:[/yellow] "
+        f"{translator.t('cli.parse.no_records')}"
+      )
       if record_types:
         console.print(
-          f"[yellow]Tip:[/yellow] Check if record types {record_types} exist in the file"
+          f"[yellow]{translator.t('cli.common.tip')}:[/yellow] "
+          f"{translator.t('cli.parse.check_types', types=record_types)}"
         )
       else:
         console.print(
-          "[yellow]Tip:[/yellow] Verify the file contains valid Apple Health data"
+          f"[yellow]{translator.t('cli.common.tip')}:[/yellow] "
+          f"{translator.t('cli.parse.verify_data')}"
         )
       sys.exit(1)
 
@@ -185,7 +171,7 @@ def parse(xml_path: str, output: str | None, types: list[str], preview: bool):
     _display_parsing_results(stats)
 
     if preview and records:
-      console.print("\n[bold]Data Preview:[/bold]")
+      console.print(f"\n[bold]{translator.t('cli.parse.data_preview')}:[/bold]")
       _display_records_preview(records[:10])
 
     # Save results if output specified
@@ -193,68 +179,80 @@ def parse(xml_path: str, output: str | None, types: list[str], preview: bool):
       try:
         _save_parsed_data(records, stats, output_dir)
       except Exception as e:
-        logger.error(f"Failed to save data: {e}")
-        console.print(f"[bold red]Error:[/bold red] Failed to save data: {e}")
+        logger.error(
+          translator.t("log.cli.save_failed", error=_format_error(e, translator))
+        )
         console.print(
-          f"[yellow]Tip:[/yellow] Check write permissions for directory: {output_dir}"
+          f"[bold red]{translator.t('cli.common.error')}:[/bold red] "
+          f"{translator.t('cli.parse.save_failed', error=_format_error(e, translator))}"
+        )
+        console.print(
+          f"[yellow]{translator.t('cli.common.tip')}:[/yellow] "
+          f"{translator.t('cli.parse.check_permissions', path=output_dir)}"
         )
         sys.exit(1)
 
-    # Success message with summary
-    success_rate = stats.get("success_rate", 0)
-    if success_rate >= 0.95:
-      console.print("[bold green]✓ Parsing completed successfully![/bold green]")
-    elif success_rate >= 0.80:
-      console.print("[bold yellow]⚠ Parsing completed with minor issues[/bold yellow]")
-    else:
-      console.print(
-        "[bold yellow]⚠ Parsing completed but with significant data loss[/bold yellow]"
-      )
-
-    console.print(
-      f"[green]Processed {stats.get('processed_records', 0):,} records with {success_rate:.1%} success rate[/green]"
-    )
+    _print_parsing_success(stats)
 
   except KeyboardInterrupt:
-    console.print("\n[yellow]Operation cancelled by user[/yellow]")
+    console.print(f"\n[yellow]{translator.t('cli.common.cancelled')}[/yellow]")
     sys.exit(1)
   except Exception as e:
-    logger.error(f"Unexpected error during parsing: {e}")
-    console.print(f"[bold red]Unexpected error:[/bold red] {e}")
+    logger.error(
+      translator.t("log.cli.parse_unexpected", error=_format_error(e, translator))
+    )
     console.print(
-      "[yellow]Tip:[/yellow] Please report this issue with the error details"
+      f"[bold red]{translator.t('cli.common.unexpected_error')}:[/bold red] "
+      f"{_format_error(e, translator)}"
+    )
+    console.print(
+      f"[yellow]{translator.t('cli.common.tip')}:[/yellow] "
+      f"{translator.t('cli.common.report_issue')}"
     )
     sys.exit(1)
 
 
-@cli.command()
-@click.argument("xml_path", type=click.Path(exists=True))
+@cli.command(
+  help=_t().t("cli.help.info_command"),
+  short_help=_t().t("cli.help.info_command_short"),
+  add_help_option=False,
+)
+@click.argument("xml_path", type=click.Path(exists=True), required=False)
+@click.help_option("--help", "-h", help=_t().t("cli.help.help_option"))
 def info(xml_path: str):
-  """Get information about an Apple Health export file.
-
-  XML_PATH: Path to the export.xml file
-  """
+  translator = _t()
   try:
-    xml_file = Path(xml_path)
+    xml_file = _resolve_xml_path(xml_path)
 
-    console.print(f"[bold blue]Analyzing file:[/bold blue] {xml_file}")
+    console.print(
+      f"[bold blue]{translator.t('cli.info.analyzing_file')}[/bold blue] {xml_file}"
+    )
 
     # Get file information
     file_info = get_export_file_info(xml_file)
 
     if not file_info:
-      console.print("[bold red]Failed to analyze file[/bold red]")
+      console.print(f"[bold red]{translator.t('cli.info.failed_analysis')}[/bold red]")
       return
 
     # Display file information
-    table = Table(title="File Information")
-    table.add_column("Property", style="cyan")
-    table.add_column("Value", style="magenta")
+    table = Table(title=translator.t("cli.info.file_info_title"))
+    table.add_column(translator.t("cli.info.column.property"), style="cyan")
+    table.add_column(translator.t("cli.info.column.value"), style="magenta")
 
-    table.add_row("File Path", str(file_info["file_path"]))
-    table.add_row("File Size", f"{file_info['file_size_mb']:.2f} MB")
-    table.add_row("Estimated Records", f"{file_info['estimated_record_count']:,}")
-    table.add_row("Last Modified", str(file_info["last_modified"]))
+    table.add_row(translator.t("cli.info.file_path"), str(file_info["file_path"]))
+    table.add_row(
+      translator.t("cli.info.file_size"),
+      translator.t("cli.common.file_size_mb", size=file_info["file_size_mb"]),
+    )
+    table.add_row(
+      translator.t("cli.info.estimated_records"),
+      f"{file_info['estimated_record_count']:,}",
+    )
+    table.add_row(
+      translator.t("cli.info.last_modified"),
+      str(file_info["last_modified"]),
+    )
 
     console.print(table)
 
@@ -287,14 +285,20 @@ def info(xml_path: str):
       root.clear()
 
     except Exception as parse_error:
-      logger.error(f"Error during parsing: {parse_error}")
+      logger.error(translator.t("log.cli.parse_error", error=parse_error))
       import traceback
 
-      logger.error(f"Traceback: {traceback.format_exc()}")
-      console.print(
-        f"[yellow]Warning: Could not parse all records: {parse_error}[/yellow]"
+      logger.error(
+        translator.t(
+          "log.cli.traceback",
+          error=traceback.format_exc(),
+        )
       )
-      console.print("[yellow]Showing partial results...[/yellow]")
+      console.print(
+        f"[yellow]{translator.t('cli.common.warning')}: "
+        f"{translator.t('cli.info.partial_parse', error=parse_error)}[/yellow]"
+      )
+      console.print(f"[yellow]{translator.t('cli.info.partial_results')}[/yellow]")
 
     if sample_records:
       dates = [r.start_date.date() for r in sample_records]
@@ -302,7 +306,8 @@ def info(xml_path: str):
       max_date = max(dates)
 
       console.print(
-        f"\n[green]Data date range (sample):[/green] {min_date} to {max_date}"
+        f"\n[green]{translator.t('cli.info.sample_range')}:[/green] "
+        f"{min_date} {translator.t('cli.info.range_to')} {max_date}"
       )
 
       # Show record type distribution in sample
@@ -310,73 +315,81 @@ def info(xml_path: str):
 
       type_counts = Counter(r.type for r in sample_records)
 
-      console.print("\n[bold]Record types in sample:[/bold]")
+      console.print(f"\n[bold]{translator.t('cli.info.sample_record_types')}:[/bold]")
       for record_type, count in sorted(
         type_counts.items(), key=lambda x: x[1], reverse=True
       )[:10]:
         console.print(f"  {record_type}: {count}")
     else:
-      console.print("[yellow]No records could be parsed from the file.[/yellow]")
+      console.print(f"[yellow]{translator.t('cli.info.no_records')}[/yellow]")
 
   except Exception as e:
-    logger.error(f"Info command failed: {e}")
-    console.print(f"[bold red]Error:[/bold red] {e}")
+    logger.error(
+      translator.t("log.cli.info_failed", error=_format_error(e, translator))
+    )
+    console.print(
+      f"[bold red]{translator.t('cli.common.error')}:[/bold red] "
+      f"{_format_error(e, translator)}"
+    )
     sys.exit(1)
 
 
-@cli.command()
-@click.argument("xml_path", type=click.Path(exists=True))
-@click.option("--output", "-o", type=click.Path(), help="Output directory")
+@cli.command(
+  help=_t().t("cli.help.export_command"),
+  short_help=_t().t("cli.help.export_command_short"),
+  add_help_option=False,
+)
+@click.argument("xml_path", type=click.Path(exists=True), required=False)
+@click.option(
+  "--output",
+  "-o",
+  type=click.Path(),
+  help=_t().t("cli.help.output_dir"),
+)
 @click.option(
   "--format",
   "-f",
   type=click.Choice(["csv", "json", "both"]),
   default="both",
-  help="Output format (csv, json, or both)",
+  help=_t().t("cli.help.export_format"),
 )
 @click.option(
   "--types",
   "-t",
   multiple=True,
-  help="Record types to export (can specify multiple)",
+  help=_t().t("cli.help.export_types"),
 )
 @click.option(
   "--clean/--no-clean",
   default=True,
-  help="Enable/disable data cleaning (default: enabled)",
+  help=_t().t("cli.help.export_clean"),
 )
+@click.help_option("--help", "-h", help=_t().t("cli.help.help_option"))
 def export(
   xml_path: str, output: str | None, format: str, types: list[str], clean: bool
 ):
-  """Export parsed data to CSV and/or JSON formats.
-
-  XML_PATH: Path to the export.xml file
-
-  Examples:\n
-      # Export all data to both CSV and JSON (with data cleaning)\n
-      uv run python main.py export export.xml
-
-      # Export only heart rate data to CSV\n
-      uv run python main.py export export.xml --format csv --types HeartRate
-
-      # Export specific record types to custom output directory\n
-      uv run python main.py export export.xml --output ./my_exports --types HeartRate --types Sleep
-
-      # Export without data cleaning (raw data)\n
-      uv run python main.py export export.xml --no-clean
-  """
+  translator = _t()
   try:
     from src.processors.exporter import DataExporter
 
-    xml_file = Path(xml_path)
+    xml_file = _resolve_xml_path(xml_path)
     output_dir = Path(output) if output else get_config().output_dir
 
-    console.print(f"[bold blue]Exporting data from:[/bold blue] {xml_file}")
-    console.print(f"[bold blue]Output directory:[/bold blue] {output_dir}")
-    console.print(f"[bold blue]Export format:[/bold blue] {format}")
+    console.print(
+      f"[bold blue]{translator.t('cli.export.exporting_from')}[/bold blue] {xml_file}"
+    )
+    console.print(
+      f"[bold blue]{translator.t('cli.common.output_dir')}[/bold blue] {output_dir}"
+    )
+    console.print(
+      f"[bold blue]{translator.t('cli.export.export_format')}[/bold blue] {format}"
+    )
 
     if types:
-      console.print(f"[bold blue]Record types:[/bold blue] {', '.join(types)}")
+      console.print(
+        f"[bold blue]{translator.t('cli.export.record_types')}[/bold blue] "
+        f"{', '.join(types)}"
+      )
 
     # Determine export formats
     if format == "both":
@@ -389,7 +402,7 @@ def export(
 
     # Perform export
     with UnifiedProgress(
-      "Exporting data", total=None
+      translator.t("cli.progress.exporting_data"), total=None
     ) as progress:  # Total unknown for export
       export_stats = exporter.export_by_category(
         xml_file,
@@ -397,7 +410,7 @@ def export(
         record_types=list(types) if types else None,
         enable_cleaning=clean,
       )
-      progress.update(1, "Export completed")
+      progress.update(1, translator.t("cli.progress.export_completed"))
 
     # Validate export results
     total_exported = sum(
@@ -406,27 +419,33 @@ def export(
     )
 
     if total_exported == 0:
-      console.print("[yellow]⚠ No records were exported![/yellow]")
-      console.print("\nPossible reasons:")
+      console.print(f"[yellow]⚠ {translator.t('cli.export.no_records')}[/yellow]")
+      console.print(f"\n{translator.t('cli.export.possible_reasons')}")
       if types:
-        console.print("• The specified record types may not exist in the data")
-        console.print("• Use full type names like 'HKQuantityTypeIdentifierHeartRate'")
-        console.print("• Run 'health-analyzer info <file>' to see available types")
+        console.print(f"• {translator.t('cli.export.reason_types_missing')}")
+        console.print(f"• {translator.t('cli.export.reason_use_full_types')}")
+        console.print(f"• {translator.t('cli.export.reason_run_info')}")
       else:
-        console.print("• The file may not contain valid Apple Health data")
-        console.print("• Check if the XML file is corrupted")
-      console.print("\n[yellow]Export completed but no data was saved.[/yellow]")
+        console.print(f"• {translator.t('cli.export.reason_invalid_data')}")
+        console.print(f"• {translator.t('cli.export.reason_xml_corrupt')}")
+      console.print(f"\n[yellow]{translator.t('cli.export.no_data_saved')}[/yellow]")
       sys.exit(1)
 
     # Display results
-    console.print("\n[bold green]✓ Export completed successfully![/bold green]")
+    console.print(f"\n[bold green]✓ {translator.t('cli.export.success')}[/bold green]")
 
     # Show export summary
-    table = Table(title="Export Summary")
-    table.add_column("Record Type", style="cyan")
-    table.add_column("CSV Records", style="green", justify="right")
-    table.add_column("JSON Records", style="blue", justify="right")
-    table.add_column("Total", style="magenta", justify="right")
+    table = Table(title=translator.t("cli.export.summary_title"))
+    table.add_column(translator.t("cli.export.column.record_type"), style="cyan")
+    table.add_column(
+      translator.t("cli.export.column.csv_records"), style="green", justify="right"
+    )
+    table.add_column(
+      translator.t("cli.export.column.json_records"), style="blue", justify="right"
+    )
+    table.add_column(
+      translator.t("cli.export.column.total"), style="magenta", justify="right"
+    )
 
     total_csv = 0
     total_json = 0
@@ -450,7 +469,7 @@ def export(
 
     # Add totals row
     table.add_row(
-      "[bold]TOTAL[/bold]",
+      f"[bold]{translator.t('cli.export.total')}[/bold]",
       f"[bold]{total_csv:,}[/bold]" if total_csv > 0 else "-",
       f"[bold]{total_json:,}[/bold]" if total_json > 0 else "-",
       f"[bold]{total_records:,}[/bold]",
@@ -460,22 +479,34 @@ def export(
     console.print(table)
 
     # Show file locations
-    console.print(f"\n[bold]Files saved to:[/bold] {output_dir}")
-    console.print(f"[bold]Manifest file:[/bold] {output_dir}/manifest.json")
+    console.print(
+      f"\n[bold]{translator.t('cli.export.files_saved_to')}[/bold] {output_dir}"
+    )
+    console.print(
+      f"[bold]{translator.t('cli.export.manifest_file')}[/bold] {output_dir}/manifest.json"
+    )
 
     # Show generated files
     if output_dir.exists():
       files = list(output_dir.glob("*"))
       if files:
-        console.print("\n[bold]Generated files:[/bold]")
+        console.print(f"\n[bold]{translator.t('cli.export.generated_files')}[/bold]")
         for file_path in sorted(files):
           if file_path.is_file():
             size_mb = file_path.stat().st_size / (1024 * 1024)
-            console.print(f"  • {file_path.name} ({size_mb:.2f} MB)")
+            console.print(
+              f"  • {file_path.name} "
+              f"({translator.t('cli.common.file_size_mb', size=size_mb)})"
+            )
 
   except Exception as e:
-    logger.error(f"Export failed: {e}")
-    console.print(f"[bold red]Error:[/bold red] {e}")
+    logger.error(
+      translator.t("log.cli.export_failed", error=_format_error(e, translator))
+    )
+    console.print(
+      f"[bold red]{translator.t('cli.common.error')}:[/bold red] "
+      f"{_format_error(e, translator)}"
+    )
     sys.exit(1)
 
 
@@ -483,73 +514,83 @@ cli.add_command(report_command, name="report")
 cli.add_command(visualize_command, name="visualize")
 
 
-@cli.command()
-@click.argument("xml_path", type=click.Path(exists=True))
+@cli.command(
+  help=_t().t("cli.help.benchmark_command"),
+  short_help=_t().t("cli.help.benchmark_command_short"),
+  add_help_option=False,
+)
+@click.argument("xml_path", type=click.Path(exists=True), required=False)
 @click.option(
   "--output",
   "-o",
   type=click.Path(),
-  help="Output directory for benchmark results",
+  help=_t().t("cli.help.benchmark_output"),
 )
 @click.option(
   "--timeout",
   type=int,
   default=30,
-  help="Timeout in seconds for each test module (default: 30)",
+  help=_t().t("cli.help.benchmark_timeout"),
 )
+@click.help_option("--help", "-h", help=_t().t("cli.help.help_option"))
 def benchmark(xml_path: str, output: str | None, timeout: int):
-  """Run performance benchmark tests on Apple Health data processing.
-
-  XML_PATH: Path to the export.xml file
-
-  Examples:\n
-      # Run benchmark with default settings (30s timeout)\n
-      uv run python main.py benchmark export.xml
-
-      # Run benchmark with custom output directory\n
-      uv run python main.py benchmark export.xml --output ./benchmark_results
-
-      # Run benchmark with longer timeout\n
-      uv run python main.py benchmark export.xml --timeout 60
-  """
+  translator = _t()
   try:
     from src.processors.benchmark import run_benchmark
 
-    xml_file = Path(xml_path)
+    xml_file = _resolve_xml_path(xml_path)
     output_dir = Path(output) if output else get_config().output_dir
 
     console.print(
-      f"[bold blue]Running performance benchmark on:[/bold blue] {xml_file}"
+      f"[bold blue]{translator.t('cli.benchmark.running')}[/bold blue] {xml_file}"
     )
-    console.print(f"[bold blue]Output directory:[/bold blue] {output_dir}")
-    console.print(f"[bold blue]Timeout per module:[/bold blue] {timeout} seconds")
+    console.print(
+      f"[bold blue]{translator.t('cli.common.output_dir')}[/bold blue] {output_dir}"
+    )
+    console.print(
+      f"[bold blue]{translator.t('cli.benchmark.timeout_per_module')}[/bold blue] "
+      f"{timeout} {translator.t('cli.benchmark.seconds')}"
+    )
 
     # Run benchmark
     run_benchmark(str(xml_file), str(output_dir), timeout=timeout)
 
   except Exception as e:
-    logger.error(f"Benchmark failed: {e}")
-    console.print(f"[bold red]Error:[/bold red] {e}")
+    logger.error(
+      translator.t("log.cli.benchmark_failed", error=_format_error(e, translator))
+    )
+    console.print(
+      f"[bold red]{translator.t('cli.common.error')}:[/bold red] "
+      f"{_format_error(e, translator)}"
+    )
     sys.exit(1)
 
 
-@cli.command()
-@click.argument("xml_path", type=click.Path(exists=True))
+@cli.command(
+  help=_t().t("cli.help.analyze_command"),
+  short_help=_t().t("cli.help.analyze_command_short"),
+  add_help_option=False,
+)
+@click.argument("xml_path", type=click.Path(exists=True), required=False)
 @click.option(
   "--output",
   "-o",
   type=click.Path(),
-  help="Output directory for analysis results",
+  help=_t().t("cli.help.analyze_output"),
 )
-@click.option("--age", type=int, help="User age (required for cardio fitness analysis)")
+@click.option(
+  "--age",
+  type=int,
+  help=_t().t("cli.help.analyze_age"),
+)
 @click.option(
   "--gender",
   type=click.Choice(["male", "female"]),
-  help="User gender (required for cardio fitness analysis)",
+  help=_t().t("cli.help.analyze_gender"),
 )
 @click.option(
   "--date-range",
-  help="Date range for analysis (format: YYYY-MM-DD:YYYY-MM-DD)",
+  help=_t().t("cli.help.analyze_date_range"),
 )
 @click.option(
   "--types",
@@ -559,20 +600,21 @@ def benchmark(xml_path: str, output: str | None, timeout: int):
     ["heart_rate", "sleep", "hrv", "resting_hr", "cardio_fitness", "all"]
   ),
   default=["all"],
-  help="Analysis types to perform (can specify multiple)",
+  help=_t().t("cli.help.analyze_types"),
 )
 @click.option(
   "--format",
   "-f",
   type=click.Choice(["json", "text", "both"]),
   default="both",
-  help="Output format for analysis results",
+  help=_t().t("cli.help.analyze_format"),
 )
 @click.option(
   "--generate-charts/--no-charts",
   default=True,
-  help="Generate analysis charts (default: enabled)",
+  help=_t().t("cli.help.analyze_charts"),
 )
+@click.help_option("--help", "-h", help=_t().t("cli.help.help_option"))
 def analyze(
   xml_path: str,
   output: str | None,
@@ -600,24 +642,30 @@ def analyze(
       # Analysis with custom output directory\n
       uv run python main.py analyze export.xml --output ./analysis_results
   """
+  translator = _t()
   try:
     from src.analyzers.highlights import HighlightsGenerator
     from src.processors.heart_rate import HeartRateAnalyzer
     from src.processors.sleep import SleepAnalyzer
 
-    xml_file = Path(xml_path)
+    xml_file = _resolve_xml_path(xml_path)
     output_dir = Path(output) if output else get_config().output_dir
 
-    console.print(f"[bold blue]Analyzing data from:[/bold blue] {xml_file}")
-    console.print(f"[bold blue]Output directory:[/bold blue] {output_dir}")
+    console.print(
+      f"[bold blue]{translator.t('cli.analyze.analyzing_from')}[/bold blue] {xml_file}"
+    )
+    console.print(
+      f"[bold blue]{translator.t('cli.common.output_dir')}[/bold blue] {output_dir}"
+    )
 
     # Validate parameters
     if "cardio_fitness" in types or "all" in types:
       if not age or not gender:
         console.print(
-          "[bold red]Error:[/bold red] Age and gender are required for cardio fitness analysis"
+          f"[bold red]{translator.t('cli.common.error')}:[/bold red] "
+          f"{translator.t('cli.analyze.age_gender_required')}"
         )
-        console.print("Use --age and --gender options")
+        console.print(translator.t("cli.analyze.use_age_gender"))
         sys.exit(1)
 
     # Parse date range
@@ -629,11 +677,13 @@ def analyze(
         start_date = datetime.fromisoformat(start_str)
         end_date = datetime.fromisoformat(end_str)
         console.print(
-          f"[bold blue]Date range:[/bold blue] {start_date.date()} to {end_date.date()}"
+          f"[bold blue]{translator.t('cli.analyze.date_range')}[/bold blue] "
+          f"{start_date.date()} {translator.t('cli.info.range_to')} {end_date.date()}"
         )
       except ValueError:
         console.print(
-          "[bold red]Error:[/bold red] Invalid date range format. Use YYYY-MM-DD:YYYY-MM-DD"
+          f"[bold red]{translator.t('cli.common.error')}:[/bold red] "
+          f"{translator.t('cli.analyze.invalid_date_range')}"
         )
         sys.exit(1)
 
@@ -649,19 +699,30 @@ def analyze(
     else:
       analysis_types = types
 
-    console.print(f"[bold blue]Analysis types:[/bold blue] {', '.join(analysis_types)}")
+    console.print(
+      f"[bold blue]{translator.t('cli.analyze.types')}[/bold blue] "
+      f"{', '.join(analysis_types)}"
+    )
 
     # Initialize analyzers
+    gender_value: Literal["male", "female"] | None
+    if gender in ("male", "female"):
+      gender_value = cast(Literal["male", "female"], gender)
+    else:
+      gender_value = None
+
     heart_rate_analyzer = HeartRateAnalyzer(
       age=age,
-      gender=cast("Literal['male', 'female'] | None", gender),
+      gender=gender_value,
     )
     sleep_analyzer = SleepAnalyzer()
     highlights_generator = HighlightsGenerator()
 
     # Parse data with progress
-    console.print("\n[bold]Step 1: Parsing health data...[/bold]")
-    with UnifiedProgress("Parsing health data", total=None) as progress:
+    console.print(f"\n[bold]{translator.t('cli.analyze.step_parse')}[/bold]")
+    with UnifiedProgress(
+      translator.t("cli.progress.parsing_health_data"), total=None
+    ) as progress:
       hr_records = []
       resting_hr_records = []
       hrv_records = []
@@ -673,35 +734,27 @@ def analyze(
         t in analysis_types
         for t in ["heart_rate", "resting_hr", "hrv", "cardio_fitness"]
       ):
-        record_types.append("HKQuantityTypeIdentifierHeartRate")
+        record_types.append(HEART_RATE_TYPE)
         if "resting_hr" in analysis_types:
-          record_types.append("HKQuantityTypeIdentifierRestingHeartRate")
+          record_types.append(RESTING_HR_TYPE)
         if "hrv" in analysis_types:
-          record_types.append("HKQuantityTypeIdentifierHeartRateVariabilitySDNN")
+          record_types.append(HRV_TYPE)
         if "cardio_fitness" in analysis_types:
-          record_types.append("HKQuantityTypeIdentifierVO2Max")
+          record_types.append(VO2_MAX_TYPE)
 
       if "sleep" in analysis_types:
-        record_types.append("HKCategoryTypeIdentifierSleepAnalysis")
+        record_types.append(SLEEP_TYPE)
 
       if record_types:
         parser = StreamingXMLParser(xml_file)
         all_records = list(parser.parse_records(record_types=record_types))
 
-        # Categorize records by type
-        # Algorithm: Single-pass classification based on HK record type identifiers
-        for record in all_records:
-          record_type = getattr(record, "type", "")
-          if record_type == "HKQuantityTypeIdentifierHeartRate":
-            hr_records.append(record)
-          elif record_type == "HKQuantityTypeIdentifierRestingHeartRate":
-            resting_hr_records.append(record)
-          elif record_type == "HKQuantityTypeIdentifierHeartRateVariabilitySDNN":
-            hrv_records.append(record)
-          elif record_type == "HKQuantityTypeIdentifierVO2Max":
-            vo2_max_records.append(record)
-          elif record_type == "HKCategoryTypeIdentifierSleepAnalysis":
-            sleep_records.append(record)
+        categorized = categorize_records(all_records)
+        hr_records = categorized["heart_rate"]
+        resting_hr_records = categorized["resting_hr"]
+        hrv_records = categorized["hrv"]
+        vo2_max_records = categorized["vo2_max"]
+        sleep_records = categorized["sleep"]
 
       # Filter by date range if specified
       if start_date and end_date:
@@ -717,11 +770,15 @@ def analyze(
 
       progress.update(
         1,
-        f"Parsed {len(hr_records)} heart rate, {len(sleep_records)} sleep records",
+        translator.t(
+          "cli.analyze.parsed_records",
+          heart_rate=len(hr_records),
+          sleep=len(sleep_records),
+        ),
       )
 
     console.print(
-      f"[green]✓ Parsed {len(hr_records)} heart rate, {len(sleep_records)} sleep records[/green]"
+      f"[green]✓ {translator.t('cli.analyze.parsed_records', heart_rate=len(hr_records), sleep=len(sleep_records))}[/green]"
     )
 
     # Perform analyses
@@ -732,8 +789,10 @@ def analyze(
     if any(
       t in analysis_types for t in ["heart_rate", "resting_hr", "hrv", "cardio_fitness"]
     ):
-      console.print("\n[bold]Step 2: Analyzing heart rate data...[/bold]")
-      with UnifiedProgress("Analyzing heart rate data", total=None) as progress:
+      console.print(f"\n[bold]{translator.t('cli.analyze.step_hr')}[/bold]")
+      with UnifiedProgress(
+        translator.t("cli.progress.analyzing_hr_data"), total=None
+      ) as progress:
         heart_rate_report = heart_rate_analyzer.analyze_comprehensive(
           heart_rate_records=hr_records,
           resting_hr_records=resting_hr_records
@@ -744,36 +803,46 @@ def analyze(
           if "cardio_fitness" in analysis_types
           else None,
         )
-        progress.update(1, "Heart rate analysis completed")
-      console.print("[green]✓ Heart rate analysis completed[/green]")
+        progress.update(1, translator.t("cli.analyze.hr_completed"))
+      console.print(f"[green]✓ {translator.t('cli.analyze.hr_completed')}[/green]")
 
     # Sleep analysis
     if "sleep" in analysis_types and sleep_records:
-      console.print("\n[bold]Step 3: Analyzing sleep data...[/bold]")
-      with UnifiedProgress("Analyzing sleep data", total=None) as progress:
+      console.print(f"\n[bold]{translator.t('cli.analyze.step_sleep')}[/bold]")
+      with UnifiedProgress(
+        translator.t("cli.progress.analyzing_sleep_data"), total=None
+      ) as progress:
         sleep_report = sleep_analyzer.analyze_comprehensive(
           cast(list[HealthRecord], sleep_records)
         )
-        progress.update(1, "Sleep analysis completed")
-      console.print("[green]✓ Sleep analysis completed[/green]")
+        progress.update(1, translator.t("cli.analyze.sleep_completed"))
+      console.print(f"[green]✓ {translator.t('cli.analyze.sleep_completed')}[/green]")
 
     # Generate highlights
-    console.print("\n[bold]Step 4: Generating health insights...[/bold]")
-    with UnifiedProgress("Generating health insights", total=None) as progress:
+    console.print(f"\n[bold]{translator.t('cli.analyze.step_insights')}[/bold]")
+    with UnifiedProgress(
+      translator.t("cli.progress.generating_insights"), total=None
+    ) as progress:
       highlights = highlights_generator.generate_comprehensive_highlights(
         heart_rate_report=heart_rate_report,
         sleep_report=sleep_report,
       )
       progress.update(
         1,
-        f"Generated {len(highlights.insights)} insights and {len(highlights.recommendations)} recommendations",
+        translator.t(
+          "cli.analyze.generated_insights",
+          insights=len(highlights.insights),
+          recommendations=len(highlights.recommendations),
+        ),
       )
     console.print(
-      f"[green]✓ Generated {len(highlights.insights)} insights and {len(highlights.recommendations)} recommendations[/green]"
+      f"[green]✓ {translator.t('cli.analyze.generated_insights', insights=len(highlights.insights), recommendations=len(highlights.recommendations))}[/green]"
     )
 
     # Display results
-    console.print("\n[bold green]🎯 Analysis Results[/bold green]")
+    console.print(
+      f"\n[bold green]🎯 {translator.t('cli.analyze.results_title')}[/bold green]"
+    )
 
     # Display heart rate results
     if heart_rate_report:
@@ -798,38 +867,52 @@ def analyze(
       )
 
     console.print(
-      f"\n[bold green]✓ Analysis completed! Results saved to: {output_dir}[/bold green]"
+      f"\n[bold green]✓ {translator.t('cli.analyze.completed', path=output_dir)}[/bold green]"
     )
 
   except Exception as e:
-    logger.error(f"Analysis failed: {e}")
-    console.print(f"[bold red]Error:[/bold red] {e}")
+    logger.error(
+      translator.t("log.cli.analyze_failed", error=_format_error(e, translator))
+    )
+    console.print(
+      f"[bold red]{translator.t('cli.common.error')}:[/bold red] "
+      f"{_format_error(e, translator)}"
+    )
     sys.exit(1)
 
 
 def _display_parsing_results(stats: dict):
   """Display parsing results in a formatted table."""
-  table = Table(title="Parsing Results")
-  table.add_column("Metric", style="cyan")
-  table.add_column("Value", style="magenta", justify="right")
+  translator = _t()
+  table = Table(title=translator.t("cli.parse.results_title"))
+  table.add_column(translator.t("cli.parse.column.metric"), style="cyan")
+  table.add_column(
+    translator.t("cli.parse.column.value"), style="magenta", justify="right"
+  )
 
-  table.add_row("Total Records", f"{stats['total_records']:,}")
-  table.add_row("Processed", f"{stats['processed_records']:,}")
-  table.add_row("Skipped", f"{stats['skipped_records']:,}")
-  table.add_row("Invalid", f"{stats['invalid_records']:,}")
-  table.add_row("Success Rate", f"{stats['success_rate']:.1%}")
+  table.add_row(translator.t("cli.parse.total_records"), f"{stats['total_records']:,}")
+  table.add_row(
+    translator.t("cli.parse.processed_records"), f"{stats['processed_records']:,}"
+  )
+  table.add_row(
+    translator.t("cli.parse.skipped_records"), f"{stats['skipped_records']:,}"
+  )
+  table.add_row(
+    translator.t("cli.parse.invalid_records"), f"{stats['invalid_records']:,}"
+  )
+  table.add_row(translator.t("cli.parse.success_rate"), f"{stats['success_rate']:.1%}")
 
   if stats["date_range"]["start"] and stats["date_range"]["end"]:
     table.add_row(
-      "Date Range",
-      f"{stats['date_range']['start']} to {stats['date_range']['end']}",
+      translator.t("cli.parse.date_range"),
+      f"{stats['date_range']['start']} {translator.t('cli.info.range_to')} {stats['date_range']['end']}",
     )
 
   console.print(table)
 
   # Show top record types
   if stats["record_types"]:
-    console.print("\n[bold]Top Record Types:[/bold]")
+    console.print(f"\n[bold]{translator.t('cli.parse.top_record_types')}:[/bold]")
     sorted_types = sorted(
       stats["record_types"].items(), key=lambda x: x[1], reverse=True
     )
@@ -838,7 +921,7 @@ def _display_parsing_results(stats: dict):
 
   # Show top sources
   if stats["sources"]:
-    console.print("\n[bold]Top Data Sources:[/bold]")
+    console.print(f"\n[bold]{translator.t('cli.parse.top_sources')}:[/bold]")
     sorted_sources = sorted(stats["sources"].items(), key=lambda x: x[1], reverse=True)
     for i, (source, count) in enumerate(sorted_sources[:5]):
       console.print(f"  {i + 1:2d}. {source}: {count:,}")
@@ -849,11 +932,12 @@ def _display_records_preview(records: list):
   if not records:
     return
 
-  table = Table(title="Records Preview")
-  table.add_column("Type", style="cyan")
-  table.add_column("Source", style="green")
-  table.add_column("Start Date", style="yellow")
-  table.add_column("Value", style="magenta")
+  translator = _t()
+  table = Table(title=translator.t("cli.parse.records_preview"))
+  table.add_column(translator.t("cli.parse.column.type"), style="cyan")
+  table.add_column(translator.t("cli.parse.column.source"), style="green")
+  table.add_column(translator.t("cli.parse.column.start_date"), style="yellow")
+  table.add_column(translator.t("cli.parse.column.value_label"), style="magenta")
 
   for record in records[:10]:
     value_str = ""
@@ -881,26 +965,33 @@ def _save_parsed_data(records: list, stats: dict, output_dir: Path):
 
   output_dir.mkdir(parents=True, exist_ok=True)
 
+  translator = _t()
   if not records:
-    console.print("[yellow]No records to save[/yellow]")
+    console.print(f"[yellow]{translator.t('cli.parse.no_records_to_save')}[/yellow]")
     return
 
   console.print(
-    f"[bold blue]Saving {len(records)} records to: {output_dir}[/bold blue]"
+    f"[bold blue]{translator.t('cli.parse.saving_records', count=len(records), path=output_dir)}[/bold blue]"
   )
 
   # Validate data quality before saving
-  console.print("[bold]Validating data quality...[/bold]")
+  console.print(f"[bold]{translator.t('cli.parse.validating_data')}[/bold]")
   try:
     from src.processors.validator import validate_health_data
 
     validation_result = validate_health_data(records)
     validation_summary = validation_result.get_summary()
 
-    console.print("[green]✓ Data validation completed[/green]")
-    console.print(f"  Quality Score: {validation_summary['quality_score']:.1%}")
-    console.print(f"  Warnings: {validation_summary['total_warnings']}")
-    console.print(f"  Outliers: {validation_summary['outliers_count']}")
+    console.print(f"[green]✓ {translator.t('cli.parse.validation_completed')}[/green]")
+    console.print(
+      f"  {translator.t('cli.parse.validation_quality')}: {validation_summary['quality_score']:.1%}"
+    )
+    console.print(
+      f"  {translator.t('cli.parse.validation_warnings')}: {validation_summary['total_warnings']}"
+    )
+    console.print(
+      f"  {translator.t('cli.parse.validation_outliers')}: {validation_summary['outliers_count']}"
+    )
 
     # Save validation report
     validation_file = output_dir / "data_validation_report.json"
@@ -922,11 +1013,17 @@ def _save_parsed_data(records: list, stats: dict, output_dir: Path):
         default=str,
       )
 
-    console.print(f"[green]✓ Validation report saved to: {validation_file}[/green]")
+    console.print(
+      f"[green]✓ {translator.t('cli.parse.validation_report_saved', path=validation_file)}[/green]"
+    )
 
   except Exception as e:
-    logger.warning(f"Data validation failed: {e}")
-    console.print(f"[yellow]⚠ Data validation skipped: {e}[/yellow]")
+    logger.warning(
+      translator.t("log.cli.validation_failed", error=_format_error(e, translator))
+    )
+    console.print(
+      f"[yellow]⚠ {translator.t('cli.parse.validation_skipped', error=_format_error(e, translator))}[/yellow]"
+    )
 
   # Group records by type for organized saving
   records_by_type = {}
@@ -964,14 +1061,16 @@ def _save_parsed_data(records: list, stats: dict, output_dir: Path):
       total_files += 1
       csv_size = csv_path.stat().st_size
       console.print(
-        f"  [green]✓ {clean_type}.csv:[/green] {csv_count:,} records ({csv_size:,} bytes)"
+        f"  [green]✓ {clean_type}.csv:[/green] {csv_count:,} "
+        f"{translator.t('cli.parse.records_unit')} ({csv_size:,} {translator.t('cli.parse.bytes_unit')})"
       )
 
     if json_count > 0:
       total_files += 1
       json_size = json_path.stat().st_size
       console.print(
-        f"  [green]✓ {clean_type}.json:[/green] {json_count:,} records ({json_size:,} bytes)"
+        f"  [green]✓ {clean_type}.json:[/green] {json_count:,} "
+        f"{translator.t('cli.parse.records_unit')} ({json_size:,} {translator.t('cli.parse.bytes_unit')})"
       )
 
   # Save parsing statistics
@@ -981,86 +1080,129 @@ def _save_parsed_data(records: list, stats: dict, output_dir: Path):
 
     json.dump(stats, f, indent=2, ensure_ascii=False, default=str)
 
-  console.print("  [green]✓ parsing_stats.json:[/green] parsing statistics")
+  console.print(f"  [green]✓ {translator.t('cli.parse.stats_saved')}[/green]")
 
   # Create a simple manifest
   manifest_file = output_dir / "data_manifest.txt"
   with open(manifest_file, "w", encoding="utf-8") as f:
-    f.write("Apple Health Data Export Manifest\n")
+    f.write(f"{translator.t('cli.parse.manifest_title')}\n")
     f.write("=" * 40 + "\n\n")
-    f.write(f"Export Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-    f.write(f"Total Records: {total_saved:,}\n")
-    f.write(f"Total Files: {total_files + 1}\n")  # +1 for stats file
-    f.write(f"Record Types: {len(records_by_type)}\n\n")
+    f.write(
+      f"{translator.t('cli.parse.manifest_export_date')}: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+    )
+    f.write(f"{translator.t('cli.parse.manifest_total_records')}: {total_saved:,}\n")
+    f.write(
+      f"{translator.t('cli.parse.manifest_total_files')}: {total_files + 1}\n"
+    )  # +1 for stats file
+    f.write(
+      f"{translator.t('cli.parse.manifest_record_types')}: {len(records_by_type)}\n\n"
+    )
 
-    f.write("Files Generated:\n")
+    f.write(f"{translator.t('cli.parse.manifest_files_generated')}:\n")
     f.write("-" * 20 + "\n")
     for record_type, type_records in records_by_type.items():
       clean_type = record_type.replace("HKQuantityTypeIdentifier", "").replace(
         "HKCategoryTypeIdentifier", ""
       )
-      f.write(f"• {clean_type}.csv ({len(type_records)} records)\n")
-      f.write(f"• {clean_type}.json ({len(type_records)} records)\n")
+      f.write(
+        f"• {clean_type}.csv ({len(type_records)} {translator.t('cli.parse.records_unit')})\n"
+      )
+      f.write(
+        f"• {clean_type}.json ({len(type_records)} {translator.t('cli.parse.records_unit')})\n"
+      )
 
-    f.write("• parsing_stats.json (statistics)\n")
-    f.write("• data_manifest.txt (this file)\n")
+    f.write(f"• {translator.t('cli.parse.manifest_statistics_file')}\n")
+    f.write(f"• {translator.t('cli.parse.manifest_manifest_file')}\n")
 
-  console.print("  [green]✓ data_manifest.txt:[/green] export manifest")
+  console.print(f"  [green]✓ {translator.t('cli.parse.manifest_saved')}[/green]")
   console.print(
-    f"[bold green]✓ Successfully saved {total_saved:,} records to {total_files + 1} files[/bold green]"
+    f"[bold green]✓ {translator.t('cli.parse.saved_records_summary', records=f'{total_saved:,}', files=total_files + 1)}[/bold green]"
   )
 
 
 def _display_heart_rate_results(report):
   """Display heart rate analysis results."""
-  console.print("\n[bold blue]❤️ Heart Rate Analysis[/bold blue]")
+  translator = _t()
+  console.print(f"\n[bold blue]❤️ {translator.t('cli.analyze.hr_section')}[/bold blue]")
 
   if report.resting_hr_analysis:
     resting = report.resting_hr_analysis
-    console.print(f"  [cyan]Resting HR:[/cyan] {resting.current_value:.1f} bpm")
-    console.print(f"  [cyan]Trend:[/cyan] {resting.trend_direction}")
-    console.print(f"  [cyan]Health Rating:[/cyan] {resting.health_rating}")
+    console.print(
+      f"  [cyan]{translator.t('cli.analyze.resting_hr')}:[/cyan] {resting.current_value:.1f} bpm"
+    )
+    console.print(
+      f"  [cyan]{translator.t('cli.analyze.trend')}:[/cyan] {resting.trend_direction}"
+    )
+    console.print(
+      f"  [cyan]{translator.t('cli.analyze.health_rating')}:[/cyan] {resting.health_rating}"
+    )
 
   if report.hrv_analysis:
     hrv = report.hrv_analysis
-    console.print(f"  [cyan]HRV (SDNN):[/cyan] {hrv.current_sdnn:.1f} ms")
-    console.print(f"  [cyan]Stress Level:[/cyan] {hrv.stress_level}")
-    console.print(f"  [cyan]Recovery Status:[/cyan] {hrv.recovery_status}")
+    console.print(
+      f"  [cyan]{translator.t('cli.analyze.hrv')}:[/cyan] {hrv.current_sdnn:.1f} ms"
+    )
+    console.print(
+      f"  [cyan]{translator.t('cli.analyze.stress_level')}:[/cyan] {hrv.stress_level}"
+    )
+    console.print(
+      f"  [cyan]{translator.t('cli.analyze.recovery_status')}:[/cyan] {hrv.recovery_status}"
+    )
 
   if report.cardio_fitness:
     cardio = report.cardio_fitness
-    console.print(f"  [cyan]VO2 Max:[/cyan] {cardio.current_vo2_max:.1f} ml/min·kg")
-    console.print(f"  [cyan]Fitness Rating:[/cyan] {cardio.age_adjusted_rating}")
+    console.print(
+      f"  [cyan]{translator.t('cli.analyze.vo2_max')}:[/cyan] {cardio.current_vo2_max:.1f} ml/min·kg"
+    )
+    console.print(
+      f"  [cyan]{translator.t('cli.analyze.fitness_rating')}:[/cyan] {cardio.age_adjusted_rating}"
+    )
 
-  console.print(f"  [cyan]Data Quality:[/cyan] {report.data_quality_score:.1%}")
-  console.print(f"  [cyan]Total Records:[/cyan] {report.record_count:,}")
+  console.print(
+    f"  [cyan]{translator.t('cli.analyze.data_quality')}:[/cyan] {report.data_quality_score:.1%}"
+  )
+  console.print(
+    f"  [cyan]{translator.t('cli.analyze.total_records')}:[/cyan] {report.record_count:,}"
+  )
 
 
 def _display_sleep_results(report):
   """Display sleep analysis results."""
-  console.print("\n[bold blue]😴 Sleep Analysis[/bold blue]")
+  translator = _t()
+  console.print(
+    f"\n[bold blue]😴 {translator.t('cli.analyze.sleep_section')}[/bold blue]"
+  )
 
   if report.quality_metrics:
     quality = report.quality_metrics
     console.print(
-      f"  [cyan]Average Duration:[/cyan] {quality.average_duration:.1f} hours"
+      f"  [cyan]{translator.t('cli.analyze.avg_duration')}:[/cyan] {quality.average_duration:.1f} hours"
     )
     console.print(
-      f"  [cyan]Average Efficiency:[/cyan] {quality.average_efficiency:.1%}"
+      f"  [cyan]{translator.t('cli.analyze.avg_efficiency')}:[/cyan] {quality.average_efficiency:.1%}"
     )
-    console.print(f"  [cyan]Consistency Score:[/cyan] {quality.consistency_score:.1%}")
+    console.print(
+      f"  [cyan]{translator.t('cli.analyze.consistency_score')}:[/cyan] {quality.consistency_score:.1%}"
+    )
 
-  console.print(f"  [cyan]Data Quality:[/cyan] {report.data_quality_score:.1%}")
-  console.print(f"  [cyan]Total Records:[/cyan] {report.record_count:,}")
+  console.print(
+    f"  [cyan]{translator.t('cli.analyze.data_quality')}:[/cyan] {report.data_quality_score:.1%}"
+  )
+  console.print(
+    f"  [cyan]{translator.t('cli.analyze.total_records')}:[/cyan] {report.record_count:,}"
+  )
 
 
 def _display_highlights(highlights):
   """Display health highlights and recommendations."""
-  console.print("\n[bold blue]💡 Health Insights[/bold blue]")
+  translator = _t()
+  console.print(
+    f"\n[bold blue]💡 {translator.t('cli.analyze.insights_title')}[/bold blue]"
+  )
 
   # Display insights
   if highlights.insights:
-    console.print("\n[bold]Key Insights:[/bold]")
+    console.print(f"\n[bold]{translator.t('cli.analyze.key_insights')}:[/bold]")
     for i, insight in enumerate(highlights.insights[:5], 1):  # Show top 5
       priority_colors = {"high": "red", "medium": "yellow", "low": "green"}
       color = priority_colors.get(insight.priority, "white")
@@ -1069,7 +1211,7 @@ def _display_highlights(highlights):
 
   # Display recommendations
   if highlights.recommendations:
-    console.print("\n[bold]Recommendations:[/bold]")
+    console.print(f"\n[bold]{translator.t('cli.analyze.recommendations')}:[/bold]")
     for i, rec in enumerate(highlights.recommendations[:3], 1):  # Show top 3
       console.print(f"  {i}. {rec}")
 
@@ -1106,7 +1248,10 @@ def _save_analysis_results_json(
   with open(output_file, "w", encoding="utf-8") as f:
     json.dump(results, f, indent=2, ensure_ascii=False, default=str)
 
-  console.print(f"[green]✓ JSON results saved to: {output_file}[/green]")
+  translator = _t()
+  console.print(
+    f"[green]✓ {translator.t('cli.analyze.json_saved', path=output_file)}[/green]"
+  )
 
 
 def _save_analysis_results_text(
@@ -1118,54 +1263,82 @@ def _save_analysis_results_text(
   output_file = output_dir / "analysis_results.txt"
 
   with open(output_file, "w", encoding="utf-8") as f:
-    f.write("Apple Health Analysis Report\n")
+    translator = _t()
+    f.write(f"{translator.t('cli.analyze.report_title')}\n")
     f.write("=" * 50 + "\n\n")
-    f.write(f"Analysis Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+    f.write(
+      f"{translator.t('cli.analyze.analysis_date')}: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+    )
 
     if heart_rate_report:
-      f.write("HEART RATE ANALYSIS\n")
+      f.write(f"{translator.t('cli.analyze.heart_rate_section')}\n")
       f.write("-" * 20 + "\n")
       if heart_rate_report.resting_hr_analysis:
         resting = heart_rate_report.resting_hr_analysis
-        f.write(f"Resting HR: {resting.current_value:.1f} bpm\n")
-        f.write(f"Trend: {resting.trend_direction}\n")
-        f.write(f"Health Rating: {resting.health_rating}\n")
+        f.write(
+          f"{translator.t('cli.analyze.resting_hr')}: {resting.current_value:.1f} bpm\n"
+        )
+        f.write(f"{translator.t('cli.analyze.trend')}: {resting.trend_direction}\n")
+        f.write(
+          f"{translator.t('cli.analyze.health_rating')}: {resting.health_rating}\n"
+        )
       if heart_rate_report.hrv_analysis:
         hrv = heart_rate_report.hrv_analysis
-        f.write(f"HRV (SDNN): {hrv.current_sdnn:.1f} ms\n")
-        f.write(f"Stress Level: {hrv.stress_level}\n")
+        f.write(f"{translator.t('cli.analyze.hrv')}: {hrv.current_sdnn:.1f} ms\n")
+        f.write(f"{translator.t('cli.analyze.stress_level')}: {hrv.stress_level}\n")
       if heart_rate_report.cardio_fitness:
         cardio = heart_rate_report.cardio_fitness
-        f.write(f"VO2 Max: {cardio.current_vo2_max:.1f} ml/min·kg\n")
-        f.write(f"Fitness Rating: {cardio.age_adjusted_rating}\n")
-      f.write(f"Data Quality: {heart_rate_report.data_quality_score:.1%}\n")
-      f.write(f"Total Records: {heart_rate_report.record_count:,}\n\n")
+        f.write(
+          f"{translator.t('cli.analyze.vo2_max')}: {cardio.current_vo2_max:.1f} ml/min·kg\n"
+        )
+        f.write(
+          f"{translator.t('cli.analyze.fitness_rating')}: {cardio.age_adjusted_rating}\n"
+        )
+      f.write(
+        f"{translator.t('cli.analyze.data_quality')}: {heart_rate_report.data_quality_score:.1%}\n"
+      )
+      f.write(
+        f"{translator.t('cli.analyze.total_records')}: {heart_rate_report.record_count:,}\n\n"
+      )
 
     if sleep_report:
-      f.write("SLEEP ANALYSIS\n")
+      f.write(f"{translator.t('cli.analyze.sleep_section_upper')}\n")
       f.write("-" * 15 + "\n")
       if sleep_report.quality_metrics:
         quality = sleep_report.quality_metrics
-        f.write(f"Average Duration: {quality.average_duration:.1f} hours\n")
-        f.write(f"Average Efficiency: {quality.average_efficiency:.1%}\n")
-        f.write(f"Consistency Score: {quality.consistency_score:.1%}\n")
-      f.write(f"Data Quality: {sleep_report.data_quality_score:.1%}\n")
-      f.write(f"Total Records: {sleep_report.record_count:,}\n\n")
+        f.write(
+          f"{translator.t('cli.analyze.avg_duration')}: {quality.average_duration:.1f} hours\n"
+        )
+        f.write(
+          f"{translator.t('cli.analyze.avg_efficiency')}: {quality.average_efficiency:.1%}\n"
+        )
+        f.write(
+          f"{translator.t('cli.analyze.consistency_score')}: {quality.consistency_score:.1%}\n"
+        )
+      f.write(
+        f"{translator.t('cli.analyze.data_quality')}: {sleep_report.data_quality_score:.1%}\n"
+      )
+      f.write(
+        f"{translator.t('cli.analyze.total_records')}: {sleep_report.record_count:,}\n\n"
+      )
 
     if highlights.insights:
-      f.write("KEY INSIGHTS\n")
+      f.write(f"{translator.t('cli.analyze.key_insights_upper')}\n")
       f.write("-" * 12 + "\n")
       for i, insight in enumerate(highlights.insights[:5], 1):
         f.write(f"{i}. {insight.title}\n")
         f.write(f"   {insight.message}\n\n")
 
     if highlights.recommendations:
-      f.write("RECOMMENDATIONS\n")
+      f.write(f"{translator.t('cli.analyze.recommendations_upper')}\n")
       f.write("-" * 15 + "\n")
       for i, rec in enumerate(highlights.recommendations, 1):
         f.write(f"{i}. {rec}\n")
 
-  console.print(f"[green]✓ Text results saved to: {output_file}[/green]")
+  translator = _t()
+  console.print(
+    f"[green]✓ {translator.t('cli.analyze.text_saved', path=output_file)}[/green]"
+  )
 
 
 def _report_to_dict(report):
@@ -1189,19 +1362,202 @@ def _report_to_dict(report):
   }
 
 
+def _ensure_xml_file(xml_file: Path) -> None:
+  """Validate XML file existence and size."""
+  if not xml_file.exists():
+    translator = _t()
+    console.print(
+      f"[bold red]{translator.t('cli.common.error')}:[/bold red] "
+      f"{translator.t('cli.parse.file_not_found', path=xml_file)}"
+    )
+    console.print(
+      f"[yellow]{translator.t('cli.common.tip')}:[/yellow] "
+      f"{translator.t('cli.parse.check_file_path')}"
+    )
+    sys.exit(1)
+
+  if xml_file.stat().st_size == 0:
+    translator = _t()
+    console.print(
+      f"[bold red]{translator.t('cli.common.error')}:[/bold red] "
+      f"{translator.t('cli.parse.file_empty', path=xml_file)}"
+    )
+    sys.exit(1)
+
+
+def _display_file_info(xml_file: Path) -> None:
+  """Display export file information with guardrails."""
+  translator = _t()
+  try:
+    file_info = get_export_file_info(xml_file)
+    if file_info:
+      console.print(
+        f"[green]{translator.t('cli.info.file_size')}:[/green] "
+        f"{translator.t('cli.common.file_size_mb', size=file_info['file_size_mb'])}"
+      )
+      console.print(
+        f"[green]{translator.t('cli.info.estimated_records')}:[/green] "
+        f"{file_info['estimated_record_count']:,}"
+      )
+    else:
+      console.print(
+        f"[yellow]{translator.t('cli.common.warning')}:[/yellow] "
+        f"{translator.t('cli.info.cannot_read_file_info')}"
+      )
+  except Exception as e:
+    console.print(
+      f"[yellow]{translator.t('cli.common.warning')}:[/yellow] "
+      f"{translator.t('cli.info.cannot_analyze_file', error=_format_error(e, translator))}"
+    )
+    console.print(f"[yellow]{translator.t('cli.info.continuing_parse')}[/yellow]")
+
+
+def _init_parser(xml_file: Path) -> StreamingXMLParser:
+  """Initialize the streaming parser with error handling."""
+  try:
+    return StreamingXMLParser(xml_file)
+  except Exception as e:
+    translator = _t()
+    console.print(
+      f"[bold red]{translator.t('cli.common.error')}:[/bold red] "
+      f"{translator.t('cli.parse.init_parser_failed', error=_format_error(e, translator))}"
+    )
+    console.print(
+      f"[yellow]{translator.t('cli.common.tip')}:[/yellow] "
+      f"{translator.t('cli.parse.invalid_xml_tip')}"
+    )
+    sys.exit(1)
+
+
+def _parse_records_with_progress(
+  parser: StreamingXMLParser, record_types: list[str] | None
+) -> tuple[list, dict]:
+  """Parse records with CLI progress feedback."""
+  with UnifiedProgress(
+    _t().t("cli.parse.parsing_records"),
+    total=None,  # Always use indeterminate progress for parsing
+    quiet=True,  # Disable logging for cleaner CLI output
+  ) as progress:
+
+    def update_progress(count: int) -> None:
+      progress.update(
+        count,
+        _t().t("cli.parse.parsed_records", count=f"{count:,}"),
+      )
+
+    records_generator = parser.parse_records(
+      record_types=record_types,
+      progress_callback=update_progress,
+      quiet=True,
+    )
+    records = list(records_generator)
+    stats = parser.get_statistics()
+
+    progress.update(
+      len(records),
+      _t().t("cli.parse.parsed_records", count=f"{len(records):,}"),
+    )
+
+  return records, stats
+
+
+def _handle_parsing_exception(error: Exception) -> None:
+  """Handle parsing errors with user-friendly messages."""
+  translator = _t()
+  logger.error(
+    translator.t("log.cli.parse_failed", error=_format_error(error, translator))
+  )
+
+  error_str = str(error).lower()
+  if "memory" in error_str:
+    console.print(
+      f"[bold red]{translator.t('cli.common.error')}:[/bold red] "
+      f"{translator.t('cli.parse.memory_error')}"
+    )
+    console.print(
+      f"[yellow]{translator.t('cli.common.tip')}:[/yellow] "
+      f"{translator.t('cli.parse.memory_tip')}"
+    )
+  elif "permission" in error_str:
+    console.print(
+      f"[bold red]{translator.t('cli.common.error')}:[/bold red] "
+      f"{translator.t('cli.parse.permission_error')}"
+    )
+    console.print(
+      f"[yellow]{translator.t('cli.common.tip')}:[/yellow] "
+      f"{translator.t('cli.parse.permission_tip')}"
+    )
+  elif "encoding" in error_str:
+    console.print(
+      f"[bold red]{translator.t('cli.common.error')}:[/bold red] "
+      f"{translator.t('cli.parse.encoding_error')}"
+    )
+    console.print(
+      f"[yellow]{translator.t('cli.common.tip')}:[/yellow] "
+      f"{translator.t('cli.parse.encoding_tip')}"
+    )
+  else:
+    console.print(
+      f"[bold red]{translator.t('cli.common.error')}:[/bold red] "
+      f"{translator.t('cli.parse.failed_to_parse', error=_format_error(error, translator))}"
+    )
+    console.print(
+      f"[yellow]{translator.t('cli.common.tip')}:[/yellow] "
+      f"{translator.t('cli.parse.check_xml_format')}"
+    )
+
+  sys.exit(1)
+
+
+def _print_parsing_success(stats: dict) -> None:
+  """Print parsing summary and success indicator."""
+  success_rate = stats.get("success_rate", 0)
+  if success_rate >= 0.95:
+    translator = _t()
+    console.print(
+      f"[bold green]✓ {translator.t('cli.parse.completed_success')}[/bold green]"
+    )
+  elif success_rate >= 0.80:
+    translator = _t()
+    console.print(
+      f"[bold yellow]⚠ {translator.t('cli.parse.completed_minor')}[/bold yellow]"
+    )
+  else:
+    translator = _t()
+    console.print(
+      f"[bold yellow]⚠ {translator.t('cli.parse.completed_loss')}[/bold yellow]"
+    )
+
+  translator = _t()
+  processed_count = f"{stats.get('processed_records', 0):,}"
+  success_rate_str = f"{success_rate:.1%}"
+  console.print(
+    f"[green]{translator.t('cli.parse.processed_summary', processed=processed_count, success_rate=success_rate_str)}[/green]"
+  )
+
+
 def main():
   """Main entry point for the CLI."""
   try:
     cli()
   except KeyboardInterrupt:
-    console.print("\n[bold yellow]Operation cancelled by user[/bold yellow]")
+    translator = _t()
+    console.print(f"\n[bold yellow]{translator.t('cli.main.cancelled')}[/bold yellow]")
     sys.exit(1)
   except HealthAnalyzerError as e:
-    console.print(f"[bold red]Health Analyzer Error:[/bold red] {e}")
+    translator = _t()
+    console.print(
+      f"[bold red]{translator.t('cli.main.health_error')}:[/bold red] "
+      f"{_format_error(e, translator)}"
+    )
     sys.exit(1)
   except Exception as e:
-    logger.exception("Unexpected error")
-    console.print(f"[bold red]Unexpected error:[/bold red] {e}")
+    translator = _t()
+    logger.exception(translator.t("log.cli.unexpected_error"))
+    console.print(
+      f"[bold red]{translator.t('cli.common.unexpected_error')}:[/bold red] "
+      f"{_format_error(e, translator)}"
+    )
     sys.exit(1)
 
 

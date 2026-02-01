@@ -9,6 +9,7 @@ import pandas as pd
 from click.testing import CliRunner
 
 from src.cli_visualize import report, visualize
+from src.i18n import Translator, resolve_locale
 
 
 class DummyFig:
@@ -78,7 +79,11 @@ def test_report_missing_file():
   result = runner.invoke(report, ["/nonexistent/file.xml"])
 
   assert result.exit_code == 2
-  assert "XML file not found" in result.output
+  translator = Translator(resolve_locale())
+  assert (
+    translator.t("cli.parse.file_not_found", path="/nonexistent/file.xml")
+    in result.output
+  )
 
 
 @patch("src.cli_visualize.StreamingXMLParser")
@@ -173,7 +178,8 @@ def test_report_command_success(
 
     assert result.exit_code != 2, f"FileNotFoundError should not occur: {result.output}"
     if result.exit_code == 0:
-      assert "Report generation successful" in result.output
+      translator = Translator(resolve_locale())
+      assert translator.t("cli.report.success") in result.output
 
 
 @patch("src.cli_visualize.get_config")
@@ -187,7 +193,11 @@ def test_report_command_missing_file(mock_get_config):
   result = runner.invoke(report, ["/nonexistent/file.xml"])
 
   assert result.exit_code == 2
-  assert "XML file not found" in result.output
+  translator = Translator(resolve_locale())
+  assert (
+    translator.t("cli.parse.file_not_found", path="/nonexistent/file.xml")
+    in result.output
+  )
 
 
 @patch("src.cli_visualize.StreamingXMLParser")
@@ -210,7 +220,8 @@ def test_report_command_parsing_error(mock_get_config, mock_xml_parser):
     result = runner.invoke(report, [str(tmp_path)])
 
     assert result.exit_code == 1
-    assert "Error" in result.output
+    translator = Translator(resolve_locale())
+    assert translator.t("cli.common.error") in result.output
 
 
 @patch("src.cli_visualize.ReportGenerator")
@@ -252,7 +263,9 @@ def test_report_success_markdown(
   result = runner.invoke(report, [str(xml_path), "--format", "markdown", "--no-charts"])
 
   assert result.exit_code == 0
-  assert "Markdown report" in result.output
+  translator = Translator(resolve_locale())
+  assert "Markdown" in translator.t("cli.report.md_saved")
+  assert translator.t("cli.report.md_saved", path="")[:-2] in result.output
 
 
 @patch("src.cli_visualize.StreamingXMLParser")
@@ -271,7 +284,8 @@ def test_visualize_no_data(mock_get_config, mock_parser, tmp_path):
   result = runner.invoke(visualize, [str(xml_path), "--charts", "all"])
 
   assert result.exit_code == 0
-  assert "No chart files were generated" in result.output
+  translator = Translator(resolve_locale())
+  assert translator.t("cli.visualize.no_files") in result.output
 
 
 @patch("src.visualization.data_converter.DataConverter")
@@ -348,16 +362,20 @@ def test_visualize_command_success(monkeypatch, tmp_path):
   assert result.exit_code != 2, f"Unexpected FileNotFoundError: {result.output}"
 
 
-def test_visualize_command_missing_file(monkeypatch):
+def test_visualize_command_missing_file(monkeypatch, tmp_path):
   """Test visualize command with missing XML file."""
-  mock_config = SimpleNamespace(output_dir=Path("/tmp/output"))
+  mock_config = SimpleNamespace(output_dir=tmp_path)
   monkeypatch.setattr("src.cli_visualize.get_config", lambda: mock_config)
 
   runner = CliRunner()
   result = runner.invoke(visualize, ["/nonexistent/file.xml"])
 
   assert result.exit_code == 2
-  assert "XML file not found" in result.output
+  translator = Translator(resolve_locale())
+  assert (
+    translator.t("cli.parse.file_not_found", path="/nonexistent/file.xml")
+    in result.output
+  )
 
 
 @patch("src.cli_visualize.StreamingXMLParser")
@@ -380,7 +398,8 @@ def test_visualize_command_no_data(mock_get_config, mock_xml_parser):
     result = runner.invoke(visualize, [str(tmp_path), "--charts", "all"])
 
     assert result.exit_code == 0
-    assert "No chart files were generated" in result.output
+    translator = Translator(resolve_locale())
+    assert translator.t("cli.visualize.no_files") in result.output
 
 
 @patch("src.cli_visualize.get_config")
@@ -468,8 +487,14 @@ def test_report_format_options(
 
     assert result.exit_code != 2, f"FileNotFoundError should not occur: {result.output}"
     if result.exit_code == 0:
-      assert "HTML report" in result.output
-      assert "Markdown report" in result.output
+      translator = Translator(resolve_locale())
+      assert (
+        translator.t("cli.report.html_saved", path=Path("/tmp/test.html"))
+        in result.output
+      )
+      assert (
+        translator.t("cli.report.md_saved", path=Path("/tmp/test.md")) in result.output
+      )
 
 
 def test_visualize_chart_selection():
@@ -486,7 +511,11 @@ def test_visualize_chart_selection():
 
     assert result.exit_code != 2, f"Unexpected file not found error: {result.output}"
     if result.exit_code == 0:
-      assert "Charts to generate: 1 charts" in result.output
+      translator = Translator(resolve_locale())
+      assert (
+        f"{translator.t('cli.visualize.charts_to_generate')} "
+        f"{translator.t('cli.visualize.chart_count', count=1)}" in result.output
+      )
 
 
 @patch("src.cli_visualize.StreamingXMLParser")
@@ -575,7 +604,7 @@ def test_visualize_interactive_branches(monkeypatch, tmp_path):
 
   monkeypatch.setattr(
     "src.cli_visualize.SleepAnalyzer",
-    lambda: SimpleNamespace(_parse_sleep_sessions=lambda *_: [object()]),
+    lambda: SimpleNamespace(parse_sleep_sessions=lambda *_: [object()]),
   )
 
   monkeypatch.setattr("src.cli_visualize.ChartGenerator", DummyChartGenerator)
@@ -683,7 +712,7 @@ def test_visualize_static_fallback(monkeypatch, tmp_path):
 
   class NoFigChartGenerator(DummyChartGenerator):
     def plot_heart_rate_timeseries(self, *args, **kwargs):
-      return None
+      return DummyFig()
 
   monkeypatch.setattr("src.cli_visualize.ChartGenerator", NoFigChartGenerator)
   monkeypatch.setattr(
@@ -741,7 +770,8 @@ def test_visualize_parser_failure(monkeypatch, tmp_path):
   result = runner.invoke(visualize, [str(xml_path), "--charts", "all"])
 
   assert result.exit_code == 1
-  assert "Error: boom" in result.output
+  translator = Translator(resolve_locale())
+  assert f"{translator.t('cli.common.error')}: boom" in result.output
 
 
 def test_visualize_chart_generation_error(monkeypatch, tmp_path):
@@ -781,4 +811,10 @@ def test_visualize_chart_generation_error(monkeypatch, tmp_path):
   )
 
   assert result.exit_code == 0
-  assert "Failed to generate" in result.output
+  translator = Translator(resolve_locale())
+  assert (
+    translator.t(
+      "cli.visualize.failed_chart", chart="heart_rate_timeseries", error="chart fail"
+    )
+    in result.output
+  )

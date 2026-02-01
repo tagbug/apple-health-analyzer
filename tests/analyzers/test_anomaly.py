@@ -12,6 +12,7 @@ from src.analyzers.anomaly import (
   AnomalyReport,
 )
 from src.core.data_models import QuantityRecord
+from src.i18n import Translator, resolve_locale
 
 
 class TestAnomalyDetector:
@@ -26,6 +27,10 @@ class TestAnomalyDetector:
     assert detector.config["iqr_multiplier"] == 1.5
     assert detector.config["ma_threshold"] == 2.0
     assert detector.config["context_threshold"] == 2.5
+    assert detector.config["sleep_threshold_delta"] == -0.3
+    assert detector.config["wake_threshold_delta"] == 0.3
+    assert detector.config["rest_threshold_delta"] == -0.2
+    assert detector.config["exercise_threshold_delta"] == 0.4
     assert "severity_thresholds" in detector.config
 
   def test_initialization_custom_config(self):
@@ -512,11 +517,12 @@ class TestAnomalyDetector:
     ]
 
     recommendations = detector._generate_recommendations(anomalies_high_rate, 0.15)
-    assert any("Anomaly rate is high" in rec for rec in recommendations)
+    translator = Translator(resolve_locale())
+    assert translator.t("anomaly.recommendation.high_rate") in recommendations
 
     # Test low anomaly rate
     recommendations_low = detector._generate_recommendations([], 0.0001)
-    assert any("Few anomalies detected" in rec for rec in recommendations_low)
+    assert translator.t("anomaly.recommendation.low_rate") in recommendations_low
 
     # Test high severity concentration
     anomalies_high_severity = [
@@ -548,7 +554,9 @@ class TestAnomalyDetector:
     recommendations_severity = detector._generate_recommendations(
       anomalies_high_severity, 0.1
     )
-    assert any("High-severity anomalies are frequent" in rec for rec in recommendations_severity)
+    assert (
+      translator.t("anomaly.recommendation.high_severity") in recommendations_severity
+    )
 
   def test_records_to_dataframe(self):
     """Test conversion of records to DataFrame."""
