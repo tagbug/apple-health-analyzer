@@ -2,7 +2,7 @@
 
 面向心率与睡眠洞察的 Apple Health 数据分析工具。
 
-语言: 中文 | [English](docs/README.en.md)
+语言: 中文 | [English](/docs/README.en.md)
 
 ## 亮点
 - 流式解析 Apple Health XML 导出文件。
@@ -167,7 +167,7 @@ uv run python -m pdb src/cli.py info ./export_data/export.xml
 ```
 
 ### 贡献
-欢迎贡献！请参阅 [CONTRIBUTING.zh.md](CONTRIBUTING.zh.md) 了解详情。
+欢迎贡献！请参阅 [贡献指南](/docs/CONTRIBUTING.zh.md) 了解详情。
 
 ## 常见问题
 ### 数据安全吗？

@@ -2,7 +2,7 @@
 
 Analyze Apple Health exports with reliable heart-rate and sleep insights.
 
-Language: English | [Chinese](docs/README.zh.md)
+Language: English | [Chinese](/docs/README.zh.md)
 
 ## Highlights
 - Streaming parser for Apple Health XML exports.
@@ -167,7 +167,7 @@ uv run python -m pdb src/cli.py info ./export_data/export.xml
 ```
 
 ### Contributing
-Contributions are welcome! Please review the [CONTRIBUTING.en.md](CONTRIBUTING.en.md) for details.
+Contributions are welcome! Please review the [CONTRIBUTING](/docs/CONTRIBUTING.en.md) for details.
 
 ## FAQ
 ### Is my data safe?
