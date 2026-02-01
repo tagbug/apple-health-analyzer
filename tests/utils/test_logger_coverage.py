@@ -1,6 +1,5 @@
 """Coverage for logger utilities and progress helpers."""
 
-import logging
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 

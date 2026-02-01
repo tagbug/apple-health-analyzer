@@ -255,9 +255,7 @@ class TestStatisticalAnalyzer:
     assert isinstance(report, dict)
     assert report == {}  # Should return empty dict
 
-  def test_generate_report_as_dataframe(
-    self, analyzer, sample_heart_rate_records
-  ):
+  def test_generate_report_as_dataframe(self, analyzer, sample_heart_rate_records):
     """Test generating report as DataFrame."""
     report = analyzer.generate_report(
       sample_heart_rate_records, output_format="dataframe"
@@ -267,9 +265,7 @@ class TestStatisticalAnalyzer:
     assert len(report) > 0
     assert "interval" in report.columns
 
-  def test_records_to_dataframe_conversion(
-    self, analyzer, sample_heart_rate_records
-  ):
+  def test_records_to_dataframe_conversion(self, analyzer, sample_heart_rate_records):
     """Test converting records to DataFrame."""
     df = analyzer._records_to_dataframe(sample_heart_rate_records)
 
@@ -307,18 +303,14 @@ class TestStatisticalAnalyzer:
   def test_data_quality_score_with_outliers(self, analyzer):
     """Test data quality score with outliers."""
     # Create data with extreme outliers (500 bpm is clearly unreasonable for heart rate)
-    values = pd.Series(
-      [70, 75, 80, 85, 500]
-    )  # 500 is extreme outlier for heart rate
+    values = pd.Series([70, 75, 80, 85, 500])  # 500 is extreme outlier for heart rate
     data = pd.DataFrame({"value": values})
     record_type = "HKQuantityTypeIdentifierHeartRate"
 
     score = analyzer._calculate_data_quality_score(values, data, record_type)
 
     assert isinstance(score, float)
-    assert (
-      0.6 < score < 0.8
-    )  # Should be lower than perfect data but not too low
+    assert 0.6 < score < 0.8  # Should be lower than perfect data but not too low
 
   def test_normality_score_calculation(self, analyzer):
     """Test normality score calculation."""
@@ -340,9 +332,7 @@ class TestStatisticalAnalyzer:
     # Small samples should return default score
     assert score == 0.5
 
-  def test_report_to_dataframe_conversion(
-    self, analyzer, sample_heart_rate_records
-  ):
+  def test_report_to_dataframe_conversion(self, analyzer, sample_heart_rate_records):
     """Test converting report to DataFrame."""
     # Create a mock report
     mock_report = {
@@ -489,14 +479,10 @@ class TestStatisticalAnalyzerEdgeCases:
       ),
     ]
 
-  def test_aggregate_invalid_interval(
-    self, analyzer, sample_heart_rate_records
-  ):
+  def test_aggregate_invalid_interval(self, analyzer, sample_heart_rate_records):
     """Test aggregating with invalid interval."""
     # Should default to "D" (day) for invalid interval
-    result = analyzer.aggregate_by_interval(
-      sample_heart_rate_records, "invalid"
-    )
+    result = analyzer.aggregate_by_interval(sample_heart_rate_records, "invalid")
 
     assert isinstance(result, pd.DataFrame)
     # Should still work with default frequency

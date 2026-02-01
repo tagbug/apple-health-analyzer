@@ -3,28 +3,26 @@
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Literal, cast
 
 import click
 import pandas as pd
-from typing import Literal, cast
 from rich.console import Console
 
 from src.analyzers.highlights import HighlightsGenerator
 from src.config import get_config
 from src.core.xml_parser import StreamingXMLParser
+from src.i18n import Translator, resolve_locale
 from src.processors.heart_rate import HeartRateAnalyzer
 from src.processors.sleep import SleepAnalyzer
 from src.utils.logger import get_logger
-from src.i18n import Translator, resolve_locale
-
 from src.utils.record_categorizer import (
-  categorize_chart_records,
-  categorize_records,
   HEART_RATE_TYPE,
   HRV_TYPE,
   RESTING_HR_TYPE,
   SLEEP_TYPE,
-  VO2_MAX_TYPE,
+  categorize_chart_records,
+  categorize_records,
 )
 from src.visualization.charts import ChartGenerator
 from src.visualization.reports import ReportGenerator

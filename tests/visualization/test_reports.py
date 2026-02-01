@@ -8,10 +8,10 @@ from unittest.mock import Mock, patch
 import pytest
 
 from src.analyzers.highlights import HealthHighlights
+from src.i18n import Translator, resolve_locale
 from src.processors.heart_rate import HeartRateAnalysisReport
 from src.processors.sleep import SleepAnalysisReport
 from src.visualization.reports import ReportGenerator
-from src.i18n import Translator, resolve_locale
 
 
 class TestReportGenerator:

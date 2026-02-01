@@ -1,11 +1,10 @@
 """Tests for CLI helpers and guard paths."""
 
-"""Tests for CLI helpers and guard paths."""
-
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -86,10 +85,17 @@ def test_report_to_dict_serializes_fields():
     data_quality_score=0.9,
   )
 
-  payload = cli_module._report_to_dict(report)
+  payload = cast(dict[str, object], cli_module._report_to_dict(report))
 
-  assert payload["analysis_date"] is not None
-  assert payload["data_range"][0].startswith("2024-01-01")
+  assert payload is not None
+  analysis_date = payload["analysis_date"]
+  data_range = payload["data_range"]
+  assert analysis_date is not None
+  assert data_range is not None
+  data_range = cast(list[str], data_range)
+  first_range = data_range[0]
+  assert isinstance(first_range, str)
+  assert first_range.startswith("2024-01-01")
   assert payload["record_count"] == 5
   assert payload["data_quality_score"] == 0.9
 
@@ -101,8 +107,9 @@ def test_report_to_dict_handles_none():
 
 def test_report_to_dict_handles_missing_fields():
   """Ensure missing fields are handled safely."""
-  payload = cli_module._report_to_dict(SimpleNamespace())
+  payload = cast(dict[str, object], cli_module._report_to_dict(SimpleNamespace()))
 
+  assert payload is not None
   assert payload["analysis_date"] is None
   assert payload["data_range"] is None
   assert payload["record_count"] == 0

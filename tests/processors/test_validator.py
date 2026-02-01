@@ -11,12 +11,12 @@ from src.core.data_models import (
   SleepRecord,
   WorkoutRecord,
 )
+from src.i18n import Translator, resolve_locale
 from src.processors.validator import (
   DataValidator,
   ValidationResult,
   validate_health_data,
 )
-from src.i18n import Translator, resolve_locale
 
 
 class TestValidationResult:

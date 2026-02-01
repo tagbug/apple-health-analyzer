@@ -1,5 +1,3 @@
-"""Tests for CLI command flows."""
-
 """End-to-end CLI command tests."""
 
 from datetime import datetime

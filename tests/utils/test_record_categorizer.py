@@ -3,13 +3,13 @@
 from types import SimpleNamespace
 
 from src.utils.record_categorizer import (
-  categorize_chart_records,
-  categorize_records,
   HEART_RATE_TYPE,
   HRV_TYPE,
   RESTING_HR_TYPE,
   SLEEP_TYPE,
   VO2_MAX_TYPE,
+  categorize_chart_records,
+  categorize_records,
 )
 
 

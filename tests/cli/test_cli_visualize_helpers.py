@@ -1,5 +1,3 @@
-"""Tests for cli_visualize helper logic."""
-
 """Chart helper tests for visualize CLI."""
 
 from datetime import datetime
@@ -23,7 +21,8 @@ def test_plot_sleep_quality_trend_with_efficiency():
   fig = generator.plot_sleep_quality_trend(data)
 
   assert fig is not None
-  assert len(fig.data) == 2
+  data_series = fig.to_dict().get("data", [])
+  assert len(data_series) == 2
 
 
 def test_plot_sleep_quality_trend_without_efficiency():
@@ -39,7 +38,8 @@ def test_plot_sleep_quality_trend_without_efficiency():
   fig = generator.plot_sleep_quality_trend(data)
 
   assert fig is not None
-  assert len(fig.data) == 1
+  data_series = fig.to_dict().get("data", [])
+  assert len(data_series) == 1
 
 
 def test_plot_sleep_stages_distribution_with_data():
@@ -56,7 +56,8 @@ def test_plot_sleep_stages_distribution_with_data():
   fig = generator.plot_sleep_stages_distribution(data)
 
   assert fig is not None
-  assert len(fig.data) == 3
+  data_series = fig.to_dict().get("data", [])
+  assert len(data_series) == 3
 
 
 def test_plot_sleep_consistency_with_times():
@@ -79,7 +80,8 @@ def test_plot_sleep_consistency_with_times():
   fig = generator.plot_sleep_consistency(data)
 
   assert fig is not None
-  assert len(fig.data) == 2
+  data_series = fig.to_dict().get("data", [])
+  assert len(data_series) == 2
 
 
 def test_plot_weekday_vs_weekend_sleep():
@@ -96,7 +98,8 @@ def test_plot_weekday_vs_weekend_sleep():
   fig = generator.plot_weekday_vs_weekend_sleep(data)
 
   assert fig is not None
-  assert len(fig.data) == 2
+  data_series = fig.to_dict().get("data", [])
+  assert len(data_series) == 2
 
 
 def test_plot_sleep_timeline_renders():
@@ -113,4 +116,5 @@ def test_plot_sleep_timeline_renders():
   fig = generator.plot_sleep_timeline(data)
 
   assert fig is not None
-  assert len(fig.data) == 1
+  data_series = fig.to_dict().get("data", [])
+  assert len(data_series) == 1

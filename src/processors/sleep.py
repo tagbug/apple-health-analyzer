@@ -16,8 +16,8 @@ import pandas as pd
 from ..analyzers.anomaly import AnomalyDetector
 from ..analyzers.statistical import StatisticalAnalyzer
 from ..core.data_models import CategoryRecord, HealthRecord, QuantityRecord
-from ..utils.logger import get_logger
 from ..i18n import Translator, resolve_locale
+from ..utils.logger import get_logger
 from ..utils.type_conversion import safe_float
 
 logger = get_logger(__name__)

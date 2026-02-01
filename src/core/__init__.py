@@ -3,7 +3,7 @@
 from .protocols import CategoricalRecord, MeasurableRecord, TemporalRecord
 
 __all__ = [
-    "MeasurableRecord",
-    "CategoricalRecord",
-    "TemporalRecord",
+  "MeasurableRecord",
+  "CategoricalRecord",
+  "TemporalRecord",
 ]

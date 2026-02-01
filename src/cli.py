@@ -16,18 +16,18 @@ from rich.table import Table
 from src.cli_visualize import report as report_command
 from src.cli_visualize import visualize as visualize_command
 from src.config import get_config, reload_config
-from src.core.exceptions import HealthAnalyzerError
 from src.core.data_models import HealthRecord
+from src.core.exceptions import HealthAnalyzerError
 from src.core.xml_parser import StreamingXMLParser, get_export_file_info
-from src.utils.logger import UnifiedProgress, get_logger
 from src.i18n import Translator, resolve_locale
+from src.utils.logger import UnifiedProgress, get_logger
 from src.utils.record_categorizer import (
-  categorize_records,
   HEART_RATE_TYPE,
-  RESTING_HR_TYPE,
   HRV_TYPE,
-  VO2_MAX_TYPE,
+  RESTING_HR_TYPE,
   SLEEP_TYPE,
+  VO2_MAX_TYPE,
+  categorize_records,
 )
 
 console = Console()
@@ -1347,15 +1347,19 @@ def _report_to_dict(report):
     return None
 
   # Simple conversion - in production, you'd want more sophisticated serialization
+  analysis_date = getattr(report, "analysis_date", None)
+  data_range = getattr(report, "data_range", None)
   return {
-    "analysis_date": report.analysis_date.isoformat()
-    if hasattr(report, "analysis_date")
+    "analysis_date": analysis_date.isoformat()
+    if isinstance(analysis_date, datetime)
     else None,
     "data_range": [
-      report.data_range[0].isoformat(),
-      report.data_range[1].isoformat(),
+      data_range[0].isoformat(),
+      data_range[1].isoformat(),
     ]
-    if hasattr(report, "data_range")
+    if isinstance(data_range, tuple)
+    and len(data_range) == 2
+    and all(isinstance(item, datetime) for item in data_range)
     else None,
     "record_count": getattr(report, "record_count", 0),
     "data_quality_score": getattr(report, "data_quality_score", 0.0),
