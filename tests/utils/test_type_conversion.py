@@ -186,9 +186,7 @@ class TestTypeConversionEdgeCases:
   def test_numpy_to_python_scalar_with_complex(self):
     """Test numpy_to_python_scalar with complex numbers."""
     complex_value = np.complex64(1 + 2j)
-    with pytest.raises(
-      TypeError, match="Cannot convert complex number to float"
-    ):
+    with pytest.raises(TypeError, match="Cannot convert complex number to float"):
       numpy_to_python_scalar(complex_value)
 
   def test_large_numpy_int(self):

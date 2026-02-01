@@ -3,17 +3,18 @@
 Provides in-depth analysis of heart rate related data, including resting heart rate, HRV, exercise heart rate, and cardio fitness.
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Literal, Sequence
+from typing import Any, Literal
 
 import pandas as pd
 
 from ..analyzers.anomaly import AnomalyDetector, AnomalyReport
 from ..analyzers.statistical import StatisticalAnalyzer
 from ..core.data_models import HealthRecord, QuantityRecord
-from ..utils.logger import get_logger
 from ..i18n import Translator, resolve_locale
+from ..utils.logger import get_logger
 from ..utils.type_conversion import safe_float
 
 logger = get_logger(__name__)
@@ -531,23 +532,18 @@ class HeartRateAnalyzer:
     aggregated["interval_start"] = aggregated.index
 
     try:
+      interval_index = pd.DatetimeIndex(aggregated.index)
+      offset = pd.Timedelta(seconds=1)
       if freq == "ME":
-        aggregated["interval_end"] = aggregated.index + pd.offsets.MonthEnd(1)
-        aggregated["interval_end"] = aggregated["interval_end"] - pd.Timedelta(
-          seconds=1
-        )
+        interval_end = interval_index + pd.offsets.MonthEnd(1)
       elif freq == "W":
-        aggregated["interval_end"] = (
-          aggregated.index + pd.Timedelta(weeks=1) - pd.Timedelta(seconds=1)
-        )
+        interval_end = interval_index + pd.Timedelta(weeks=1)
       elif freq == "D":
-        aggregated["interval_end"] = (
-          aggregated.index + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
-        )
+        interval_end = interval_index + pd.Timedelta(days=1)
       else:
-        aggregated["interval_end"] = (
-          aggregated.index + pd.Timedelta(hours=1) - pd.Timedelta(seconds=1)
-        )
+        interval_end = interval_index + pd.Timedelta(hours=1)
+      interval_end = pd.DatetimeIndex(interval_end) + (-offset)
+      aggregated["interval_end"] = interval_end
     except Exception:
       aggregated["interval_end"] = aggregated.index
 

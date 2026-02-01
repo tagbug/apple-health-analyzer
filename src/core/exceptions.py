@@ -3,34 +3,50 @@
 Provides specific exception types for different error conditions.
 """
 
+
 class HealthAnalyzerError(Exception):
-    """Base exception for all health analyzer errors."""
-    pass
+  """Base exception for all health analyzer errors."""
+
+  pass
+
 
 class ConfigurationError(HealthAnalyzerError):
-    """Raised when there are configuration-related errors."""
-    pass
+  """Raised when there are configuration-related errors."""
+
+  pass
+
 
 class XMLParseError(HealthAnalyzerError):
-    """Raised when XML parsing fails."""
-    pass
+  """Raised when XML parsing fails."""
+
+  pass
+
 
 class DataValidationError(HealthAnalyzerError):
-    """Raised when data validation fails."""
-    pass
+  """Raised when data validation fails."""
+
+  pass
+
 
 class FileOperationError(HealthAnalyzerError):
-    """Raised when file operations fail."""
-    pass
+  """Raised when file operations fail."""
+
+  pass
+
 
 class DataProcessingError(HealthAnalyzerError):
-    """Raised when data processing operations fail."""
-    pass
+  """Raised when data processing operations fail."""
+
+  pass
+
 
 class AnalysisError(HealthAnalyzerError):
-    """Raised when analysis operations fail."""
-    pass
+  """Raised when analysis operations fail."""
+
+  pass
+
 
 class VisualizationError(HealthAnalyzerError):
-    """Raised when visualization operations fail."""
-    pass
+  """Raised when visualization operations fail."""
+
+  pass

@@ -5,10 +5,10 @@ from pathlib import Path
 from typing import Any
 
 from ..analyzers.highlights import HealthHighlights
+from ..i18n import Translator, resolve_locale
 from ..processors.heart_rate import HeartRateAnalysisReport
 from ..processors.sleep import SleepAnalysisReport
 from ..utils.logger import get_logger
-from ..i18n import Translator, resolve_locale
 from .charts import ChartGenerator
 
 logger = get_logger(__name__)
@@ -1413,7 +1413,7 @@ class ReportGenerator:
           f"<th>Range</th><th>%</th></tr>\n"
         )
         for label, (low_ratio, high_ratio), percent, color in zip(
-          zone_labels, zone_ranges, zone_values, zone_colors
+          zone_labels, zone_ranges, zone_values, zone_colors, strict=False
         ):
           low_bpm = int(round(low_ratio * max_hr))
           high_bpm = int(round(high_ratio * max_hr))
@@ -1429,7 +1429,7 @@ class ReportGenerator:
         content += "</table>\n"
         content += '<div class="zone-scale">\n'
         for label, (low_ratio, high_ratio), color in zip(
-          zone_labels, zone_ranges, zone_colors
+          zone_labels, zone_ranges, zone_colors, strict=False
         ):
           range_text = f"{int(low_ratio * 100)}-{int(high_ratio * 100)}%"
           content += f'<div class="zone-chip" style="background: {color};">{label} {range_text}</div>\n'

@@ -1,19 +1,18 @@
 # Apple Health Analyzer
 
-Apple Health data analysis tooling for heart-rate and sleep insights.
+Analyze Apple Health exports with reliable heart-rate and sleep insights.
 
-Language: English | `docs/README.zh.md` (Chinese)
+Language: English | [Chinese](/docs/README.zh.md)
 
-## Core Features
-- **Streaming parser** for Apple Health XML exports.
-- **Heart rate analysis** with trends, anomaly signals, HRV evaluation, and advanced daily/diurnal metrics.
-- **Sleep analysis** with quality scoring, latency/awakenings, and stage summaries.
-- **Data export** to CSV or JSON.
-- **Visual reports** with interactive or static charts, including distributions and zone breakdowns.
-- **i18n output** for CLI, logs, reports, and charts (English/Chinese).
+## Highlights
+- Streaming parser for Apple Health XML exports.
+- Heart rate analytics: trends, anomalies, HRV, daily/diurnal metrics.
+- Sleep analytics: quality score, latency, awakenings, stage summary.
+- Export data to CSV or JSON.
+- Reports and charts (interactive or static) with i18n support.
 
-## Installation
-### Using uv (recommended)
+## Getting Started
+### Install (uv recommended)
 ```bash
 git clone https://github.com/tagbug/apple-health-analyzer.git
 cd apple-health-analyzer
@@ -22,16 +21,22 @@ source .venv/bin/activate  # Linux/Mac
 .venv\Scripts\activate     # Windows
 ```
 
-### Using pip
+### Install (pip)
 ```bash
 pip install -e .
 ```
 
-## Quick Start
 ### Export Apple Health Data
 1. Open the Health app on iPhone.
 2. Tap your profile photo and choose "Export All Health Data".
-3. Transfer `export.xml` into the repository (for example, `export_data`).
+3. Copy `export.xml` into the repo (for example, `export_data`).
+
+### First Run
+```bash
+uv run python main.py info export_data/export.xml
+uv run python main.py analyze export_data/export.xml
+uv run python main.py report export_data/export.xml --age 30 --gender male
+```
 
 ### Generate Sample Data
 ```bash
@@ -39,22 +44,21 @@ python example/create_example_xml.py --count 2000
 python example/create_example_xml.py --count 5000 --seed 12345
 ```
 
-### First Run
+## Configuration
+Create a `.env` file when you want defaults:
 ```bash
-uv run python main.py info example/example.xml
-uv run python main.py report example/example.xml --age 30 --gender male
-uv run python main.py visualize example/example.xml -c all --interactive
-```
-
-## Locale and i18n
-You can set the locale globally via `.env` or per-command with `--locale`.
-
-```bash
-# .env
+ENVIRONMENT=dev
+DEBUG=true
+EXPORT_XML_PATH=./export_data/export.xml
+OUTPUT_DIR=./output
+APPLE_WATCH_PRIORITY=3
+XIAOMI_HEALTH_PRIORITY=2
+IPHONE_PRIORITY=1
+LOG_LEVEL=INFO
+LOG_FILE=./logs/health_analyzer.log
+BATCH_SIZE=1000
+MEMORY_LIMIT_MB=500
 LOCALE=en
-
-# CLI override
-uv run python main.py --locale zh info example/example.xml
 ```
 
 ## CLI Usage
@@ -79,7 +83,7 @@ Commands:
 ```
 
 ## Common Tasks
-### Parse Data
+### Parse
 ```bash
 uv run python main.py parse export_data/export.xml
 uv run python main.py parse export_data/export.xml --types HKQuantityTypeIdentifierHeartRate
@@ -87,20 +91,20 @@ uv run python main.py parse export_data/export.xml --preview
 uv run python main.py parse export_data/export.xml --output ./my_output
 ```
 
-### Export Data
+### Export
 ```bash
 uv run python main.py export export_data/export.xml --format csv
 uv run python main.py export export_data/export.xml --format json
 uv run python main.py export export_data/export.xml --format both
 ```
 
-### Analyze Data
+### Analyze
 ```bash
 uv run python main.py analyze export_data/export.xml
 uv run python main.py analyze export_data/export.xml --output ./analysis_results
 ```
 
-### Generate Reports
+### Report
 ```bash
 uv run python main.py report export_data/export.xml --age 30 --gender male
 uv run python main.py report export_data/export.xml --format markdown --age 30 --gender male
@@ -108,35 +112,28 @@ uv run python main.py report export_data/export.xml --format both --age 30 --gen
 uv run python main.py report export_data/export.xml --format html --age 30 --gender male --locale zh
 ```
 
-### Generate Charts
+### Visualize
 ```bash
 uv run python main.py visualize export_data/export.xml -c all --interactive
 uv run python main.py visualize export_data/export.xml -c heart_rate_timeseries -c sleep_quality_trend --interactive
 uv run python main.py visualize export_data/export.xml --static
 ```
 
-### Performance Benchmarks
+### Benchmark
 ```bash
 uv run python main.py benchmark export_data/export.xml
 uv run python main.py benchmark export_data/export.xml --output ./benchmark_results
 uv run python main.py benchmark export_data/export.xml --timeout 60
 ```
 
-## Configuration
-Create a `.env` file:
+## Locale and i18n
+Set locale globally via `.env` or per-command with `--locale`.
 ```bash
-ENVIRONMENT=dev
-DEBUG=true
-EXPORT_XML_PATH=./export_data/export.xml
-OUTPUT_DIR=./output
-APPLE_WATCH_PRIORITY=3
-XIAOMI_HEALTH_PRIORITY=2
-IPHONE_PRIORITY=1
-LOG_LEVEL=INFO
-LOG_FILE=./logs/health_analyzer.log
-BATCH_SIZE=1000
-MEMORY_LIMIT_MB=500
+# .env
 LOCALE=en
+
+# CLI override
+uv run python main.py --locale zh info export_data/export.xml
 ```
 
 ## Development
@@ -168,3 +165,13 @@ uv run pyright --level error
 ```bash
 uv run python -m pdb src/cli.py info ./export_data/export.xml
 ```
+
+### Contributing
+Contributions are welcome! Please review the [CONTRIBUTING](/docs/CONTRIBUTING.en.md) for details.
+
+## FAQ
+### Is my data safe?
+Your Apple Health export stays local. Do not commit `export_data` or `.env` to Git.
+
+### The export is huge. Can I limit memory?
+Set `BATCH_SIZE` and `MEMORY_LIMIT_MB` in `.env`, then rerun the CLI.

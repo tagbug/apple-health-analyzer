@@ -9,8 +9,8 @@ import pandas as pd
 import pytest
 
 from src.core.data_models import HeartRateRecord, SleepRecord, WorkoutRecord
-from src.processors.exporter import DataExporter, ExportManifest
 from src.i18n import Translator, resolve_locale
+from src.processors.exporter import DataExporter, ExportManifest
 
 
 class TestExportManifest:

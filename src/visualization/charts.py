@@ -2,7 +2,6 @@
 
 from pathlib import Path
 from typing import Any
-from collections.abc import Sequence
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -11,10 +10,10 @@ import plotly.graph_objects as go
 import seaborn as sns
 from plotly.subplots import make_subplots
 
+from ..i18n import Translator, resolve_locale
 from ..processors.heart_rate import HeartRateAnalysisReport
 from ..processors.sleep import SleepAnalysisReport
 from ..utils.logger import get_logger
-from ..i18n import Translator, resolve_locale
 
 logger = get_logger(__name__)
 
@@ -997,7 +996,7 @@ class ChartGenerator:
                 HEALTH_COLORS["danger"],
               ]
             },
-            hovertemplate=f"<b>%{{label}}</b><br>"
+            hovertemplate="<b>%{label}</b><br>"
             + f"{self.translator.t('chart.label.records')}: %{{value}}<br>"
             + f"{self.translator.t('chart.label.percent')}: %{{percent}}<br>"
             + "<extra></extra>",
@@ -1087,7 +1086,7 @@ class ChartGenerator:
             y=[day_mean or 0, night_mean or 0],
             marker_color=[HEALTH_COLORS["primary"], HEALTH_COLORS["info"]],
             name=self.translator.t("chart.label.diurnal_profile"),
-            hovertemplate=f"<b>%{{x}}</b><br>%{{y:.1f}} bpm<extra></extra>",
+            hovertemplate="<b>%{x}</b><br>%{y:.1f} bpm<extra></extra>",
           ),
           row=1,
           col=1,
@@ -1115,7 +1114,7 @@ class ChartGenerator:
             y=[hr_mean_7d or 0, hr_mean_30d or 0],
             marker_color=[HEALTH_COLORS["secondary"], HEALTH_COLORS["neutral"]],
             name=self.translator.t("report.metric.hr_mean_7d"),
-            hovertemplate=f"<b>%{{x}}</b><br>%{{y:.1f}} bpm<extra></extra>",
+            hovertemplate="<b>%{x}</b><br>%{y:.1f} bpm<extra></extra>",
           ),
           row=2,
           col=1,
@@ -1148,7 +1147,7 @@ class ChartGenerator:
               HEALTH_COLORS["danger"],
             ],
             name=self.translator.t("report.metric.hr_zones"),
-            hovertemplate=f"<b>%{{x}}</b><br>%{{y:.1f}}%<extra></extra>",
+            hovertemplate="<b>%{x}</b><br>%{y:.1f}%<extra></extra>",
           ),
           row=2,
           col=2,

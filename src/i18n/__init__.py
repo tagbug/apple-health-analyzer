@@ -1,6 +1,6 @@
-from .translator import Translator
-from .store import DEFAULT_LOCALE, SUPPORTED_LOCALES
 from .locale import resolve_locale
+from .store import DEFAULT_LOCALE, SUPPORTED_LOCALES
+from .translator import Translator
 
 __all__ = [
   "Translator",

@@ -55,9 +55,7 @@ class TestLoggerSetup:
 
     try:
       # Mock config for production
-      config = Config(
-        export_xml_path=Path(tmp_path), environment=Environment.PROD
-      )
+      config = Config(export_xml_path=Path(tmp_path), environment=Environment.PROD)
       config.log_level = "INFO"
       config.log_file = None
       mock_get_config.return_value = config
@@ -138,9 +136,7 @@ class TestLoggerSetup:
 
       try:
         # Mock config for production mode with console-only logging
-        config = Config(
-          export_xml_path=Path(tmp_path), environment=Environment.PROD
-        )
+        config = Config(export_xml_path=Path(tmp_path), environment=Environment.PROD)
         config.log_level = "INFO"
         config.log_file = None  # No file logging
         mock_get_config.return_value = config
@@ -222,9 +218,7 @@ class TestPerformanceLogger:
 
   @patch("src.utils.logger.get_config")
   @patch("src.utils.logger._get_memory_usage")
-  def test_performance_logger_with_memory(
-    self, mock_get_memory, mock_get_config
-  ):
+  def test_performance_logger_with_memory(self, mock_get_memory, mock_get_config):
     """Test performance logger with memory tracking."""
     # Create a temporary file for the required export_xml_path
     import tempfile
@@ -307,9 +301,7 @@ class TestUnifiedProgress:
 
   def test_unified_progress_context_manager(self):
     """Test UnifiedProgress as context manager."""
-    with UnifiedProgress(
-      "test_operation", total=100, show_progress=False
-    ) as progress:
+    with UnifiedProgress("test_operation", total=100, show_progress=False) as progress:
       assert progress.operation == "test_operation"
       assert progress.processed == 0
 
@@ -376,9 +368,7 @@ class TestUnifiedProgress:
       mock_progress_instance = MagicMock()
       mock_progress_class.return_value = mock_progress_instance
 
-      progress = UnifiedProgress(
-        "test_operation", total=100, show_progress=True
-      )
+      progress = UnifiedProgress("test_operation", total=100, show_progress=True)
 
       with progress:
         progress.update(50)

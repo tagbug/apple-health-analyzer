@@ -71,13 +71,11 @@ def create_example_xml(
   )
 
   # Calculate sampling strategy
-  type_counts = {
-    rtype: len(records) for rtype, records in records_by_type.items()
-  }
+  type_counts = {rtype: len(records) for rtype, records in records_by_type.items()}
   logger.info("Record type distribution:")
-  for rtype, count in sorted(
-    type_counts.items(), key=lambda x: x[1], reverse=True
-  )[:10]:
+  for rtype, count in sorted(type_counts.items(), key=lambda x: x[1], reverse=True)[
+    :10
+  ]:
     logger.info(f"  {rtype}: {count}")
 
   # Sample records to reach target count with diverse representation
@@ -121,15 +119,11 @@ def create_example_xml(
         if remaining_for_type > 0:
           # Calculate how many more to take from this type
           proportion = remaining_for_type / total_remaining_records
-          take_count = min(
-            remaining_for_type, int(remaining_slots * proportion)
-          )
+          take_count = min(remaining_for_type, int(remaining_slots * proportion))
 
           if take_count > 0:
             available_indices = [
-              i
-              for i in range(len(records))
-              if i not in selected_indices[record_type]
+              i for i in range(len(records)) if i not in selected_indices[record_type]
             ]
             if available_indices:
               sampled_indices = sample(
@@ -195,9 +189,7 @@ def create_example_xml(
 
   # Add Me element (required by Apple Health format)
   me = ET.SubElement(root, "Me")
-  ET.SubElement(
-    me, "HKCharacteristicTypeIdentifierDateOfBirth"
-  ).text = "1980-01-01"
+  ET.SubElement(me, "HKCharacteristicTypeIdentifierDateOfBirth").text = "1980-01-01"
   ET.SubElement(
     me, "HKCharacteristicTypeIdentifierBiologicalSex"
   ).text = "HKBiologicalSexMale"
@@ -222,9 +214,7 @@ def create_example_xml(
   # Write XML file
   logger.info(f"Writing example XML to {output_xml_path}")
   tree = ET.ElementTree(root)
-  tree.write(
-    output_xml_path, encoding="utf-8", xml_declaration=True, method="xml"
-  )
+  tree.write(output_xml_path, encoding="utf-8", xml_declaration=True, method="xml")
 
   # Collect statistics
   final_type_counts = defaultdict(int)
