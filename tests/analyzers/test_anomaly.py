@@ -27,6 +27,10 @@ class TestAnomalyDetector:
     assert detector.config["iqr_multiplier"] == 1.5
     assert detector.config["ma_threshold"] == 2.0
     assert detector.config["context_threshold"] == 2.5
+    assert detector.config["sleep_threshold_delta"] == -0.3
+    assert detector.config["wake_threshold_delta"] == 0.3
+    assert detector.config["rest_threshold_delta"] == -0.2
+    assert detector.config["exercise_threshold_delta"] == 0.4
     assert "severity_thresholds" in detector.config
 
   def test_initialization_custom_config(self):

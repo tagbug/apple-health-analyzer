@@ -357,6 +357,7 @@ class TestSleepAnalyzer:
         efficiency=0.875,
         deep_sleep=90,
         rem_sleep=60,
+        light_sleep=150,
         sleep_latency=30,
         awakenings_count=2,
       ),
@@ -370,6 +371,7 @@ class TestSleepAnalyzer:
         efficiency=0.875,
         deep_sleep=90,
         rem_sleep=60,
+        light_sleep=150,
         sleep_latency=30,
         awakenings_count=2,
       ),
@@ -382,6 +384,7 @@ class TestSleepAnalyzer:
     assert "total_duration" in summary.columns
     assert "sleep_duration" in summary.columns
     assert "efficiency" in summary.columns
+    assert "light_sleep" in summary.columns
 
   def test_generate_weekly_summary(self, analyzer):
     """Test weekly summary generation."""
@@ -397,6 +400,7 @@ class TestSleepAnalyzer:
       "awakenings": [2] * 7,
       "deep_sleep": [90] * 7,
       "rem_sleep": [60] * 7,
+      "light_sleep": [150] * 7,
     }
     daily_df = pd.DataFrame(daily_data)
 

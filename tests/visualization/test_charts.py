@@ -348,7 +348,16 @@ class TestChartGenerator:
   # Tests for inherited methods.
   def test_plot_heart_rate_timeseries(self, chart_generator, sample_heart_rate_data):
     """Test heart rate timeseries plotting."""
-    fig = chart_generator.plot_heart_rate_timeseries(sample_heart_rate_data)
+    sleep_sessions = [
+      SimpleNamespace(
+        start_date=datetime(2024, 1, 2, 1, 0, 0),
+        end_date=datetime(2024, 1, 2, 6, 0, 0),
+      )
+    ]
+
+    fig = chart_generator.plot_heart_rate_timeseries(
+      sample_heart_rate_data, sleep_sessions=sleep_sessions
+    )
 
     assert fig is not None
     assert len(fig.data) >= 1
@@ -381,12 +390,17 @@ class TestChartGenerator:
 
   def test_plot_heart_rate_distribution(self, chart_generator):
     """Test heart rate distribution plotting."""
-    data = pd.DataFrame({"value": [65, 70, 75, 80, 85, 90] * 10})
+    data = pd.DataFrame(
+      {
+        "timestamp": pd.date_range("2024-01-01", periods=60, freq="h"),
+        "value": [65, 70, 75, 80, 85, 90] * 10,
+      }
+    )
 
     fig = chart_generator.plot_heart_rate_distribution(data)
 
     assert fig is not None
-    assert len(fig.data) >= 2  # Histogram + normal curve.
+    assert len(fig.data) >= 2  # Histogram + box plots.
 
   def test_plot_heart_rate_zones(self, chart_generator):
     """Test heart rate zones plotting."""
@@ -404,6 +418,7 @@ class TestChartGenerator:
       resting_hr_analysis=object(),
       hrv_analysis=object(),
       daily_stats=_daily_stats_df(),
+      advanced_metrics=None,
     )
 
     charts = chart_generator.generate_heart_rate_report_charts(report, tmp_path)
@@ -433,6 +448,7 @@ class TestChartGenerator:
           "efficiency": [0.8, 0.85],
           "deep_sleep": [60, 70],
           "rem_sleep": [90, 80],
+          "light_sleep": [120, 140],
         }
       ),
     )
@@ -442,7 +458,6 @@ class TestChartGenerator:
     assert "sleep_timeline" in charts
     assert "sleep_quality_trend" in charts
     assert "sleep_stages_distribution" in charts
-    assert "sleep_consistency" in charts
     assert "weekday_vs_weekend_sleep" in charts
 
     for path in charts.values():

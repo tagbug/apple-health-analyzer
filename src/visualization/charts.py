@@ -823,8 +823,12 @@ class ChartGenerator:
       data_copy = data.copy()
       if "start_date" in data_copy.columns:
         data_copy["date"] = pd.to_datetime(data_copy["start_date"]).dt.date
-      else:
+      elif "timestamp" in data_copy.columns:
         data_copy["date"] = pd.to_datetime(data_copy["timestamp"]).dt.date
+      else:
+        data_copy["date"] = pd.date_range(
+          "1970-01-01", periods=len(data_copy), freq="D"
+        )
 
       daily_mean = data_copy.groupby("date")["value"].mean().dropna()
       daily_mean = data_copy.groupby("date")["value"].mean().dropna()
@@ -931,6 +935,94 @@ class ChartGenerator:
         self.translator.t(
           "log.chart_no_data",
           chart=self.translator.t("chart.title.heart_rate_zones"),
+        )
+      )
+      return None
+
+    logger.info(
+      self.translator.t(
+        "log.chart_generating",
+        chart=self.translator.t("chart.title.heart_rate_zones"),
+        count=len(data),
+      )
+    )
+    chart_title = title or self.translator.t("chart.title.heart_rate_zones")
+
+    try:
+      # Compute age-adjusted maximum heart rate.
+      max_hr_adjusted = max_hr - age
+
+      # Define heart rate zones.
+      zones = {
+        self.translator.t("chart.zone.rest"): (
+          0.5 * max_hr_adjusted,
+          0.6 * max_hr_adjusted,
+        ),
+        self.translator.t("chart.zone.fat_burn"): (
+          0.6 * max_hr_adjusted,
+          0.7 * max_hr_adjusted,
+        ),
+        self.translator.t("chart.zone.aerobic"): (
+          0.7 * max_hr_adjusted,
+          0.8 * max_hr_adjusted,
+        ),
+        self.translator.t("chart.zone.anaerobic"): (
+          0.8 * max_hr_adjusted,
+          0.9 * max_hr_adjusted,
+        ),
+        self.translator.t("chart.zone.peak"): (
+          0.9 * max_hr_adjusted,
+          max_hr_adjusted,
+        ),
+      }
+
+      # Count records per zone.
+      zone_counts = {}
+      for zone_name, (lower, upper) in zones.items():
+        count = len(data[(data["value"] >= lower) & (data["value"] < upper)])
+        zone_counts[zone_name] = count
+
+      # Create pie chart.
+      fig = go.Figure(
+        data=[
+          go.Pie(
+            labels=list(zone_counts.keys()),
+            values=list(zone_counts.values()),
+            marker={
+              "colors": [
+                HEALTH_COLORS["success"],
+                HEALTH_COLORS["primary"],
+                HEALTH_COLORS["info"],
+                HEALTH_COLORS["warning"],
+                HEALTH_COLORS["danger"],
+              ]
+            },
+            hovertemplate=f"<b>%{{label}}</b><br>"
+            + f"{self.translator.t('chart.label.records')}: %{{value}}<br>"
+            + f"{self.translator.t('chart.label.percent')}: %{{percent}}<br>"
+            + "<extra></extra>",
+          )
+        ]
+      )
+
+      fig.update_layout(
+        title=chart_title,
+        width=self.width,
+        height=self.height,
+        template=PLOTLY_TEMPLATE,
+      )
+
+      if output_path:
+        self._save_plotly_figure(fig, output_path)
+
+      return fig
+
+    except Exception as e:
+      logger.error(
+        self.translator.t(
+          "log.chart_error",
+          chart=self.translator.t("chart.title.heart_rate_zones"),
+          error=str(e),
         )
       )
       return None
@@ -1080,94 +1172,6 @@ class ChartGenerator:
         self.translator.t(
           "log.chart_error",
           chart=self.translator.t("chart.title.heart_rate_advanced"),
-          error=str(e),
-        )
-      )
-      return None
-
-    logger.info(
-      self.translator.t(
-        "log.chart_generating",
-        chart=self.translator.t("chart.title.heart_rate_zones"),
-        count=len(data),
-      )
-    )
-    chart_title = title or self.translator.t("chart.title.heart_rate_zones")
-
-    try:
-      # Compute age-adjusted maximum heart rate.
-      max_hr_adjusted = max_hr - age
-
-      # Define heart rate zones.
-      zones = {
-        self.translator.t("chart.zone.rest"): (
-          0.5 * max_hr_adjusted,
-          0.6 * max_hr_adjusted,
-        ),
-        self.translator.t("chart.zone.fat_burn"): (
-          0.6 * max_hr_adjusted,
-          0.7 * max_hr_adjusted,
-        ),
-        self.translator.t("chart.zone.aerobic"): (
-          0.7 * max_hr_adjusted,
-          0.8 * max_hr_adjusted,
-        ),
-        self.translator.t("chart.zone.anaerobic"): (
-          0.8 * max_hr_adjusted,
-          0.9 * max_hr_adjusted,
-        ),
-        self.translator.t("chart.zone.peak"): (
-          0.9 * max_hr_adjusted,
-          max_hr_adjusted,
-        ),
-      }
-
-      # Count records per zone.
-      zone_counts = {}
-      for zone_name, (lower, upper) in zones.items():
-        count = len(data[(data["value"] >= lower) & (data["value"] < upper)])
-        zone_counts[zone_name] = count
-
-      # Create pie chart.
-      fig = go.Figure(
-        data=[
-          go.Pie(
-            labels=list(zone_counts.keys()),
-            values=list(zone_counts.values()),
-            marker={
-              "colors": [
-                HEALTH_COLORS["success"],
-                HEALTH_COLORS["primary"],
-                HEALTH_COLORS["info"],
-                HEALTH_COLORS["warning"],
-                HEALTH_COLORS["danger"],
-              ]
-            },
-            hovertemplate=f"<b>%{{label}}</b><br>"
-            + f"{self.translator.t('chart.label.records')}: %{{value}}<br>"
-            + f"{self.translator.t('chart.label.percent')}: %{{percent}}<br>"
-            + "<extra></extra>",
-          )
-        ]
-      )
-
-      fig.update_layout(
-        title=chart_title,
-        width=self.width,
-        height=self.height,
-        template=PLOTLY_TEMPLATE,
-      )
-
-      if output_path:
-        self._save_plotly_figure(fig, output_path)
-
-      return fig
-
-    except Exception as e:
-      logger.error(
-        self.translator.t(
-          "log.chart_error",
-          chart=self.translator.t("chart.title.heart_rate_zones"),
           error=str(e),
         )
       )
