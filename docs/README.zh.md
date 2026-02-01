@@ -6,10 +6,10 @@
 
 ## 核心特性
 - **流式解析器**，支持 Apple Health XML 导出文件。
-- **心率分析**，包含趋势、异常信号与 HRV 评估。
-- **睡眠分析**，包含质量评分与睡眠阶段汇总。
+- **心率分析**，包含趋势、异常信号、HRV 评估与高级日/昼夜指标。
+- **睡眠分析**，包含质量评分、入睡延迟/觉醒与睡眠阶段汇总。
 - **数据导出**，支持 CSV 与 JSON。
-- **可视化报告**，支持交互式或静态图表。
+- **可视化报告**，支持交互式或静态图表，包含分布与区间分析。
 - **i18n 输出**，CLI/日志/报告/图表支持中英双语。
 
 ## 安装
@@ -154,6 +154,8 @@ uv run pytest --cov=src --cov-report=html
 uv run pytest tests/test_xml_parser.py
 uv run pytest --pdb tests/test_data_models.py::TestHealthRecord::test_valid_record_creation
 ```
+
+覆盖率报告输出至 `htmlcov/index.html`。
 
 ### 代码质量
 ```bash

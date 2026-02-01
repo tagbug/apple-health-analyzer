@@ -6,10 +6,10 @@ Language: English | `docs/README.zh.md` (Chinese)
 
 ## Core Features
 - **Streaming parser** for Apple Health XML exports.
-- **Heart rate analysis** with trends, anomaly signals, and HRV evaluation.
-- **Sleep analysis** with quality scoring and stage summaries.
+- **Heart rate analysis** with trends, anomaly signals, HRV evaluation, and advanced daily/diurnal metrics.
+- **Sleep analysis** with quality scoring, latency/awakenings, and stage summaries.
 - **Data export** to CSV or JSON.
-- **Visual reports** with interactive or static charts.
+- **Visual reports** with interactive or static charts, including distributions and zone breakdowns.
 - **i18n output** for CLI, logs, reports, and charts (English/Chinese).
 
 ## Installation
@@ -154,6 +154,8 @@ uv run pytest --cov=src --cov-report=html
 uv run pytest tests/test_xml_parser.py
 uv run pytest --pdb tests/test_data_models.py::TestHealthRecord::test_valid_record_creation
 ```
+
+Coverage reports are written to `htmlcov/index.html`.
 
 ### Code Quality
 ```bash
