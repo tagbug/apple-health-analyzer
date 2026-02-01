@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from typing import Any
+from collections.abc import Sequence
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -95,6 +96,7 @@ class ChartGenerator:
     title: str | None = None,
     output_path: Path | None = None,
     interactive: bool = True,
+    sleep_sessions: list[Any] | None = None,
   ) -> go.Figure | None:
     """Plot heart rate timeseries.
 
@@ -141,28 +143,124 @@ class ChartGenerator:
         # Generate interactive chart with Plotly.
         fig = go.Figure()
 
+        data_sorted = data.sort_values("timestamp")
+        if len(data_sorted) > 1:
+          resample_rule = "h" if len(data_sorted) > 2000 else "30min"
+          resampled = (
+            data_sorted.set_index("timestamp")["value"]
+            .resample(resample_rule)
+            .mean()
+            .dropna()
+            .reset_index()
+          )
+        else:
+          resampled = data_sorted
+
+        # Background shading for sleep sessions.
+        merged_sleep_intervals: list[tuple[pd.Timestamp, pd.Timestamp]] = []
+        if sleep_sessions:
+          sorted_sessions = sorted(sleep_sessions, key=lambda s: s.start_date)
+          for session in sorted_sessions:
+            start = pd.Timestamp(session.start_date)
+            end = pd.Timestamp(session.end_date)
+            if not merged_sleep_intervals:
+              merged_sleep_intervals.append((start, end))
+              continue
+            last_start, last_end = merged_sleep_intervals[-1]
+            if start <= last_end:
+              merged_sleep_intervals[-1] = (last_start, max(last_end, end))
+            else:
+              merged_sleep_intervals.append((start, end))
+
+          if len(merged_sleep_intervals) <= 200:
+            for start, end in merged_sleep_intervals:
+              fig.add_vrect(
+                x0=start,
+                x1=end,
+                fillcolor="#0A84FF",
+                opacity=0.06,
+                line_width=0,
+                layer="below",
+              )
+
+        # Smoothed trend line.
         fig.add_trace(
           go.Scatter(
-            x=data["timestamp"],
-            y=data["value"],
+            x=resampled["timestamp"],
+            y=resampled["value"],
             mode="lines",
-            name=self.translator.t("chart.label.heart_rate"),
-            line={"color": HEALTH_COLORS["primary"], "width": 1.5},
+            name=self.translator.t("chart.label.heart_rate_trend"),
+            line={"color": HEALTH_COLORS["neutral"], "width": 2},
             hovertemplate=f"<b>{self.translator.t('chart.label.time')}</b>: %{{x}}<br>"
             + f"<b>{self.translator.t('chart.label.heart_rate')}</b>: %{{y:.0f}} bpm<br>"
             + "<extra></extra>",
           )
         )
 
-        # Add mean line.
-        mean_hr = data["value"].mean()
-        fig.add_hline(
-          y=mean_hr,
-          line_dash="dash",
-          line_color=HEALTH_COLORS["secondary"],
-          annotation_text=f"{self.translator.t('chart.label.mean_value')}: {mean_hr:.0f} bpm",
-          annotation_position="right",
-        )
+        if not resampled.empty:
+          if sleep_sessions and merged_sleep_intervals:
+            sleep_intervals = pd.IntervalIndex.from_tuples(
+              merged_sleep_intervals,
+              closed="both",
+            )
+            ts_index = pd.Index(pd.to_datetime(resampled["timestamp"]).to_numpy())
+            idx, _ = sleep_intervals.get_indexer_non_unique(ts_index)
+            resampled["is_sleep"] = idx >= 0
+          else:
+            resampled["hour"] = pd.to_datetime(resampled["timestamp"]).dt.hour
+            resampled["is_sleep"] = (resampled["hour"] >= 22) | (resampled["hour"] < 6)
+
+          def _hr_bucket(value: float, is_sleep: bool) -> str:
+            if is_sleep:
+              if value < 45:
+                return "sleep_low"
+              if value > 90:
+                return "sleep_high"
+              return "sleep_normal"
+            if value < 50:
+              return "wake_low"
+            if value > 120:
+              return "wake_high"
+            return "wake_normal"
+
+          resampled["bucket"] = resampled.apply(
+            lambda row: _hr_bucket(row["value"], bool(row["is_sleep"])), axis=1
+          )
+
+          bucket_colors = {
+            "sleep_low": "#64D2FF",
+            "sleep_normal": "#0A84FF",
+            "sleep_high": "#FF9F0A",
+            "wake_low": "#5AC8FA",
+            "wake_normal": "#34C759",
+            "wake_high": "#FF453A",
+          }
+          bucket_labels = {
+            "sleep_low": self.translator.t("chart.label.sleep_low"),
+            "sleep_normal": self.translator.t("chart.label.sleep_normal"),
+            "sleep_high": self.translator.t("chart.label.sleep_high"),
+            "wake_low": self.translator.t("chart.label.wake_low"),
+            "wake_normal": self.translator.t("chart.label.wake_normal"),
+            "wake_high": self.translator.t("chart.label.wake_high"),
+          }
+
+          for bucket, subset in resampled.groupby("bucket"):
+            fig.add_trace(
+              go.Scatter(
+                x=subset["timestamp"],
+                y=subset["value"],
+                mode="markers",
+                name=bucket_labels.get(str(bucket), str(bucket)),
+                marker={
+                  "size": 7,
+                  "color": bucket_colors.get(str(bucket), HEALTH_COLORS["neutral"]),
+                  "opacity": 0.85,
+                },
+                hovertemplate=f"<b>{self.translator.t('chart.label.time')}</b>: %{{x}}<br>"
+                + f"<b>{self.translator.t('chart.label.heart_rate')}</b>: %{{y:.0f}} bpm<br>"
+                + "<extra></extra>",
+              )
+            )
 
         fig.update_layout(
           title=chart_title,
@@ -172,6 +270,7 @@ class ChartGenerator:
           height=self.height,
           template=PLOTLY_TEMPLATE,
           hovermode="x unified",
+          legend={"orientation": "h", "y": -0.2},
         )
 
         if output_path:
@@ -244,6 +343,16 @@ class ChartGenerator:
       )
       return None
 
+    date_col = "start_date" if "start_date" in data.columns else "timestamp"
+    if date_col not in data.columns:
+      logger.warning(
+        self.translator.t(
+          "log.chart_no_data",
+          chart=self.translator.t("chart.title.resting_hr_trend"),
+        )
+      )
+      return None
+
     logger.info(
       self.translator.t(
         "log.chart_generating",
@@ -257,23 +366,35 @@ class ChartGenerator:
       fig = go.Figure()
 
       # Actual data points.
+      data_sorted = data.sort_values(date_col)
       fig.add_trace(
         go.Scatter(
-          x=data["start_date"],
-          y=data["value"],
+          x=data_sorted[date_col],
+          y=data_sorted["value"],
           mode="markers+lines",
           name=self.translator.t("report.section.resting_hr"),
-          marker={"size": 6, "color": HEALTH_COLORS["primary"], "opacity": 0.7},
+          marker={
+            "size": 6,
+            "color": data_sorted["value"].apply(
+              lambda value: HEALTH_COLORS["danger"]
+              if value > 90
+              else HEALTH_COLORS["info"]
+              if value < 50
+              else HEALTH_COLORS["success"]
+            ),
+            "opacity": 0.8,
+          },
           line={"color": HEALTH_COLORS["primary"], "width": 2},
+          hovertemplate=f"%{{x}}<br>{self.translator.t('chart.label.resting_hr_bpm')}: %{{y:.0f}} bpm<extra></extra>",
         )
       )
 
       # Add trend line (moving average).
-      if len(data) > 7:
-        ma_7 = data["value"].rolling(window=7, center=True).mean()
+      if len(data_sorted) > 7:
+        ma_7 = data_sorted["value"].rolling(window=7, center=True).mean()
         fig.add_trace(
           go.Scatter(
-            x=data["start_date"],
+            x=data_sorted[date_col],
             y=ma_7,
             mode="lines",
             name=self.translator.t("chart.label.moving_avg_7d"),
@@ -282,6 +403,7 @@ class ChartGenerator:
               "width": 2,
               "dash": "dash",
             },
+            hovertemplate=f"%{{x}}<br>{self.translator.t('chart.label.moving_avg_7d')}: %{{y:.0f}} bpm<extra></extra>",
           )
         )
 
@@ -297,6 +419,22 @@ class ChartGenerator:
         annotation_position="right",
       )
 
+      # Add mean +/- std reference band.
+      if "value" in data.columns and len(data) >= 3:
+        mean_val = float(data["value"].mean())
+        std_val = float(data["value"].std())
+        if np.isfinite(mean_val) and np.isfinite(std_val) and std_val > 0:
+          fig.add_hrect(
+            y0=mean_val - std_val,
+            y1=mean_val + std_val,
+            fillcolor=HEALTH_COLORS["info"],
+            opacity=0.08,
+            layer="below",
+            line_width=0,
+            annotation_text=self.translator.t("chart.label.reference_band"),
+            annotation_position="right",
+          )
+
       fig.update_layout(
         title=chart_title,
         xaxis_title=self.translator.t("chart.label.date"),
@@ -305,6 +443,18 @@ class ChartGenerator:
         height=self.height,
         template=PLOTLY_TEMPLATE,
         hovermode="x unified",
+      )
+
+      fig.update_xaxes(
+        rangeslider_visible=True,
+        rangeselector={
+          "buttons": [
+            {"count": 7, "label": "7d", "step": "day", "stepmode": "backward"},
+            {"count": 1, "label": "1m", "step": "month", "stepmode": "backward"},
+            {"count": 3, "label": "3m", "step": "month", "stepmode": "backward"},
+            {"step": "all", "label": "All"},
+          ]
+        },
       )
 
       if output_path:
@@ -347,6 +497,16 @@ class ChartGenerator:
       )
       return None
 
+    date_col = "start_date" if "start_date" in data.columns else "timestamp"
+    if date_col not in data.columns:
+      logger.warning(
+        self.translator.t(
+          "log.chart_no_data",
+          chart=self.translator.t("chart.title.hrv_analysis"),
+        )
+      )
+      return None
+
     logger.info(
       self.translator.t(
         "log.chart_generating",
@@ -370,25 +530,50 @@ class ChartGenerator:
       )
 
       # HRV timeseries.
+      data_sorted = data.sort_values(date_col)
       fig.add_trace(
         go.Scatter(
-          x=data["start_date"],
-          y=data["value"],
+          x=data_sorted[date_col],
+          y=data_sorted["value"],
           mode="lines+markers",
           name=self.translator.t("chart.label.sdnn_ms"),
           line={"color": HEALTH_COLORS["info"], "width": 2},
           marker={"size": 4},
+          hovertemplate=f"%{{x}}<br>{self.translator.t('chart.label.sdnn_ms')}: %{{y:.0f}} ms<extra></extra>",
         ),
         row=1,
         col=1,
       )
 
+      if len(data_sorted) >= 5:
+        low_threshold = data_sorted["value"].quantile(0.2)
+        low_mask = data_sorted["value"] <= low_threshold
+        if low_mask.any():
+          fig.add_trace(
+            go.Scatter(
+              x=data_sorted.loc[low_mask, date_col],
+              y=data_sorted.loc[low_mask, "value"],
+              mode="markers",
+              name=self.translator.t("chart.label.hrv_low"),
+              marker={
+                "size": 7,
+                "color": HEALTH_COLORS["danger"],
+                "symbol": "x",
+              },
+              hovertemplate=(
+                f"{self.translator.t('chart.label.sdnn_ms')}: %{{y:.0f}}<extra></extra>"
+              ),
+            ),
+            row=1,
+            col=1,
+          )
+
       # Add moving average.
-      if len(data) > 7:
-        ma = data["value"].rolling(window=7, center=True).mean()
+      if len(data_sorted) > 7:
+        ma = data_sorted["value"].rolling(window=7, center=True).mean()
         fig.add_trace(
           go.Scatter(
-            x=data["start_date"],
+            x=data_sorted[date_col],
             y=ma,
             mode="lines",
             name=self.translator.t("chart.label.moving_avg_7d"),
@@ -410,6 +595,7 @@ class ChartGenerator:
           marker_color=HEALTH_COLORS["info"],
           opacity=0.7,
           nbinsx=30,
+          hovertemplate=f"{self.translator.t('chart.label.sdnn_ms')}: %{{x:.0f}} ms<br>{self.translator.t('chart.label.frequency')}: %{{y}}<extra></extra>",
         ),
         row=2,
         col=1,
@@ -433,6 +619,18 @@ class ChartGenerator:
         height=self.height,
         template=PLOTLY_TEMPLATE,
         showlegend=True,
+      )
+
+      fig.update_xaxes(
+        rangeslider_visible=True,
+        rangeselector={
+          "buttons": [
+            {"count": 7, "label": "7d", "step": "day", "stepmode": "backward"},
+            {"count": 1, "label": "1m", "step": "month", "stepmode": "backward"},
+            {"count": 3, "label": "3m", "step": "month", "stepmode": "backward"},
+            {"step": "all", "label": "All"},
+          ]
+        },
       )
 
       if output_path:
@@ -581,76 +779,108 @@ class ChartGenerator:
     try:
       # Create subplots: histogram + box plot.
       fig = make_subplots(
-        rows=1,
-        cols=2,
-        column_widths=[0.7, 0.3],
+        rows=2,
+        cols=1,
+        row_heights=[0.6, 0.4],
         subplot_titles=(
           self.translator.t("chart.subtitle.heart_rate_hist"),
-          self.translator.t("chart.subtitle.box_plot"),
+          self.translator.t("chart.label.daily_weekly_monthly"),
         ),
-        horizontal_spacing=0.1,
+        vertical_spacing=0.15,
       )
 
-      # Histogram.
+      # Prepare zone bins.
+      max_hr = 200
+      bins = [0, max_hr * 0.6, max_hr * 0.7, max_hr * 0.8, max_hr * 0.9, max_hr * 1.0]
+      bin_labels = [
+        self.translator.t("report.metric.hr_zone1"),
+        self.translator.t("report.metric.hr_zone2"),
+        self.translator.t("report.metric.hr_zone3"),
+        self.translator.t("report.metric.hr_zone4"),
+        self.translator.t("report.metric.hr_zone5"),
+      ]
+      hist, edges = np.histogram(data["value"].dropna(), bins=bins)
+      # Zone-colored histogram.
       fig.add_trace(
-        go.Histogram(
-          x=data["value"],
+        go.Bar(
+          x=bin_labels,
+          y=hist,
+          marker_color=[
+            "#34C759",
+            "#0A84FF",
+            "#5AC8FA",
+            "#FF9F0A",
+            "#FF453A",
+          ],
           name=self.translator.t("chart.label.distribution"),
-          marker_color=HEALTH_COLORS["primary"],
-          opacity=0.7,
-          nbinsx=50,
-          hovertemplate=f"{self.translator.t('chart.label.heart_rate_bpm')}: %{{x}}<br>"
-          + f"{self.translator.t('chart.label.frequency')}: %{{y}}<extra></extra>",
+          hovertemplate=f"%{{x}}<br>{self.translator.t('chart.label.frequency')}: %{{y}}<extra></extra>",
         ),
         row=1,
         col=1,
       )
 
-      # Add normal distribution curve.
-      mean = data["value"].mean()
-      std = data["value"].std()
-      x_range = np.linspace(data["value"].min(), data["value"].max(), 100)
-      normal_dist = (
-        len(data)
-        * (data["value"].max() - data["value"].min())
-        / 50
-        * (1 / (std * np.sqrt(2 * np.pi)))
-        * np.exp(-0.5 * ((x_range - mean) / std) ** 2)
+      # Daily summary histogram.
+      data_copy = data.copy()
+      if "start_date" in data_copy.columns:
+        data_copy["date"] = pd.to_datetime(data_copy["start_date"]).dt.date
+      else:
+        data_copy["date"] = pd.to_datetime(data_copy["timestamp"]).dt.date
+
+      daily_mean = data_copy.groupby("date")["value"].mean().dropna()
+      daily_mean = data_copy.groupby("date")["value"].mean().dropna()
+      weekly_mean = (
+        data_copy.set_index(pd.to_datetime(data_copy["date"]))
+        .resample("W")["value"]
+        .mean()
+        .dropna()
+      )
+      monthly_mean = (
+        data_copy.set_index(pd.to_datetime(data_copy["date"]))
+        .resample("ME")["value"]
+        .mean()
+        .dropna()
       )
 
-      fig.add_trace(
-        go.Scatter(
-          x=x_range,
-          y=normal_dist,
-          mode="lines",
-          name=self.translator.t("chart.label.normal_distribution"),
-          line={"color": HEALTH_COLORS["secondary"], "width": 2, "dash": "dash"},
-        ),
-        row=1,
-        col=1,
-      )
-
-      # Box plot.
       fig.add_trace(
         go.Box(
-          y=data["value"],
-          name=self.translator.t("chart.label.heart_rate"),
-          marker_color=HEALTH_COLORS["primary"],
-          boxmean="sd",  # Show mean and standard deviation.
+          y=daily_mean,
+          name=self.translator.t("chart.label.daily_mean"),
+          marker_color="#0A84FF",
+          boxmean=True,
+          hovertemplate=f"{self.translator.t('chart.label.heart_rate_bpm')}: %{{y:.0f}} bpm<extra></extra>",
         ),
-        row=1,
-        col=2,
+        row=2,
+        col=1,
+      )
+      fig.add_trace(
+        go.Box(
+          y=weekly_mean,
+          name=self.translator.t("chart.label.weekly_mean"),
+          marker_color="#34C759",
+          boxmean=True,
+          hovertemplate=f"{self.translator.t('chart.label.heart_rate_bpm')}: %{{y:.0f}} bpm<extra></extra>",
+        ),
+        row=2,
+        col=1,
+      )
+      fig.add_trace(
+        go.Box(
+          y=monthly_mean,
+          name=self.translator.t("chart.label.monthly_mean"),
+          marker_color="#5AC8FA",
+          boxmean=True,
+          hovertemplate=f"{self.translator.t('chart.label.heart_rate_bpm')}: %{{y:.0f}} bpm<extra></extra>",
+        ),
+        row=2,
+        col=1,
       )
 
       # Update layout.
-      fig.update_xaxes(
-        title_text=self.translator.t("chart.label.heart_rate_bpm"), row=1, col=1
-      )
       fig.update_yaxes(
         title_text=self.translator.t("chart.label.frequency"), row=1, col=1
       )
       fig.update_yaxes(
-        title_text=self.translator.t("chart.label.heart_rate_bpm"), row=1, col=2
+        title_text=self.translator.t("chart.label.heart_rate_bpm"), row=2, col=1
       )
 
       fig.update_layout(
@@ -701,6 +931,156 @@ class ChartGenerator:
         self.translator.t(
           "log.chart_no_data",
           chart=self.translator.t("chart.title.heart_rate_zones"),
+        )
+      )
+      return None
+
+  def plot_heart_rate_advanced_metrics(
+    self,
+    report: HeartRateAnalysisReport,
+    output_path: Path | None = None,
+  ) -> go.Figure | None:
+    """Plot advanced heart rate metrics from the report.
+
+    Args:
+        report: Heart rate analysis report.
+        output_path: Output path.
+
+    Returns:
+        Plotly Figure or None.
+    """
+    if not report.advanced_metrics:
+      logger.warning(
+        self.translator.t(
+          "log.chart_no_data",
+          chart=self.translator.t("chart.title.heart_rate_advanced"),
+        )
+      )
+      return None
+
+    logger.info(
+      self.translator.t(
+        "log.chart_generating_generic",
+        chart=self.translator.t("chart.title.heart_rate_advanced"),
+      )
+    )
+
+    metrics = report.advanced_metrics
+    diurnal = metrics.get("diurnal_profile", {})
+    variability = metrics.get("variability", {})
+    trends = metrics.get("recent_trends", {})
+    zones = metrics.get("zones", {})
+
+    try:
+      fig = make_subplots(
+        rows=2,
+        cols=2,
+        subplot_titles=(
+          self.translator.t("chart.label.diurnal_profile"),
+          self.translator.t("report.metric.daily_cv"),
+          self.translator.t("report.metric.hr_mean_7d"),
+          self.translator.t("chart.label.zone_distribution"),
+        ),
+      )
+
+      day_mean = diurnal.get("day_mean")
+      night_mean = diurnal.get("night_mean")
+      if day_mean is not None or night_mean is not None:
+        fig.add_trace(
+          go.Bar(
+            x=[
+              self.translator.t("chart.label.day"),
+              self.translator.t("chart.label.night"),
+            ],
+            y=[day_mean or 0, night_mean or 0],
+            marker_color=[HEALTH_COLORS["primary"], HEALTH_COLORS["info"]],
+            name=self.translator.t("chart.label.diurnal_profile"),
+            hovertemplate=f"<b>%{{x}}</b><br>%{{y:.1f}} bpm<extra></extra>",
+          ),
+          row=1,
+          col=1,
+        )
+
+      daily_cv = variability.get("daily_cv_mean")
+      if daily_cv is not None:
+        fig.add_trace(
+          go.Indicator(
+            mode="number",
+            value=float(daily_cv),
+            title={"text": self.translator.t("report.metric.daily_cv")},
+            number={"valueformat": ".3f"},
+          ),
+          row=1,
+          col=2,
+        )
+
+      hr_mean_7d = trends.get("hr_mean_7d")
+      hr_mean_30d = trends.get("hr_mean_30d")
+      if hr_mean_7d is not None or hr_mean_30d is not None:
+        fig.add_trace(
+          go.Bar(
+            x=["7d", "30d"],
+            y=[hr_mean_7d or 0, hr_mean_30d or 0],
+            marker_color=[HEALTH_COLORS["secondary"], HEALTH_COLORS["neutral"]],
+            name=self.translator.t("report.metric.hr_mean_7d"),
+            hovertemplate=f"<b>%{{x}}</b><br>%{{y:.1f}} bpm<extra></extra>",
+          ),
+          row=2,
+          col=1,
+        )
+
+      if zones and zones.get("zone1"):
+        zone_labels = [
+          self.translator.t("report.metric.hr_zone1"),
+          self.translator.t("report.metric.hr_zone2"),
+          self.translator.t("report.metric.hr_zone3"),
+          self.translator.t("report.metric.hr_zone4"),
+          self.translator.t("report.metric.hr_zone5"),
+        ]
+        zone_values = [
+          zones["zone1"]["percentage"],
+          zones["zone2"]["percentage"],
+          zones["zone3"]["percentage"],
+          zones["zone4"]["percentage"],
+          zones["zone5"]["percentage"],
+        ]
+        fig.add_trace(
+          go.Bar(
+            x=zone_labels,
+            y=zone_values,
+            marker_color=[
+              HEALTH_COLORS["success"],
+              HEALTH_COLORS["primary"],
+              HEALTH_COLORS["info"],
+              HEALTH_COLORS["warning"],
+              HEALTH_COLORS["danger"],
+            ],
+            name=self.translator.t("report.metric.hr_zones"),
+            hovertemplate=f"<b>%{{x}}</b><br>%{{y:.1f}}%<extra></extra>",
+          ),
+          row=2,
+          col=2,
+        )
+
+      fig.update_layout(
+        title=self.translator.t("chart.title.heart_rate_advanced"),
+        width=self.width,
+        height=self.height,
+        template=PLOTLY_TEMPLATE,
+        showlegend=False,
+      )
+
+      if output_path:
+        self._save_plotly_figure(fig, output_path)
+
+      return fig
+
+    except Exception as e:
+      logger.error(
+        self.translator.t(
+          "log.chart_error",
+          chart=self.translator.t("chart.title.heart_rate_advanced"),
+          error=str(e),
         )
       )
       return None
@@ -969,35 +1349,79 @@ class ChartGenerator:
     chart_title = title or self.translator.t("chart.title.sleep_quality_trend")
 
     try:
-      # Create a dual-axis chart.
-      fig = make_subplots(specs=[[{"secondary_y": True}]])
+      # Create a main chart + strip chart.
+      fig = make_subplots(
+        rows=2,
+        cols=1,
+        shared_xaxes=True,
+        row_heights=[0.7, 0.3],
+        vertical_spacing=0.05,
+        subplot_titles=(
+          self.translator.t("chart.label.sleep_duration_hours"),
+          self.translator.t("chart.label.sleep_efficiency_percent"),
+        ),
+      )
 
       # Sleep duration.
+      duration_hours = data["total_duration"] / 60
       fig.add_trace(
         go.Scatter(
           x=data["date"],
-          y=data["total_duration"] / 60,  # Convert to hours.
+          y=duration_hours,  # Convert to hours.
           mode="lines+markers",
           name=self.translator.t("chart.label.sleep_duration_hours"),
           line={"color": HEALTH_COLORS["primary"], "width": 2},
           marker={"size": 6},
+          hovertemplate=f"%{{x}}<br>{self.translator.t('chart.label.sleep_duration_hours')}: %{{y:.1f}}<extra></extra>",
         ),
-        secondary_y=False,
+        row=1,
+        col=1,
       )
 
       # Sleep efficiency.
       if "efficiency" in data.columns:
-        fig.add_trace(
-          go.Scatter(
-            x=data["date"],
-            y=data["efficiency"] * 100,  # Convert to percentage.
-            mode="lines+markers",
-            name=self.translator.t("chart.label.sleep_efficiency_percent"),
-            line={"color": HEALTH_COLORS["secondary"], "width": 2},
-            marker={"size": 6},
-          ),
-          secondary_y=True,
+        efficiency_percent = data["efficiency"] * 100
+        efficiency_colors = efficiency_percent.apply(
+          lambda value: HEALTH_COLORS["danger"]
+          if value < 80
+          else HEALTH_COLORS["warning"]
+          if value < 90
+          else HEALTH_COLORS["success"]
         )
+        fig.add_trace(
+          go.Bar(
+            x=data["date"],
+            y=efficiency_percent,
+            name=self.translator.t("chart.label.sleep_efficiency_percent"),
+            marker_color=efficiency_colors,
+            hovertemplate=f"%{{x}}<br>{self.translator.t('chart.label.sleep_efficiency_percent')}: %{{y:.0f}}%<extra></extra>",
+          ),
+          row=2,
+          col=1,
+        )
+
+        anomaly_mask = (duration_hours < 6) | (data["efficiency"] < 0.8)
+        if anomaly_mask.any():
+          fig.add_trace(
+            go.Scatter(
+              x=data.loc[anomaly_mask, "date"],
+              y=duration_hours[anomaly_mask],
+              mode="markers",
+              name=self.translator.t("chart.label.sleep_anomaly"),
+              marker={
+                "size": 10,
+                "color": HEALTH_COLORS["danger"],
+                "symbol": "x",
+              },
+              hovertemplate=(
+                f"{self.translator.t('chart.label.sleep_duration_hours')}: %{{y:.1f}}<br>"
+                + f"{self.translator.t('chart.label.sleep_efficiency_percent')}: %{{customdata:.0f}}%<extra></extra>"
+              ),
+              customdata=(data.loc[anomaly_mask, "efficiency"] * 100),
+            ),
+            row=1,
+            col=1,
+          )
 
       # Add recommended sleep duration line.
       fig.add_hline(
@@ -1006,18 +1430,28 @@ class ChartGenerator:
         line_color=HEALTH_COLORS["success"],
         annotation_text=self.translator.t("chart.label.recommended_sleep"),
         annotation_position="right",
-        secondary_y=False,
+      )
+
+      # Add recommended sleep duration band (7-9 hours).
+      fig.add_hrect(
+        y0=7,
+        y1=9,
+        fillcolor=HEALTH_COLORS["success"],
+        opacity=0.08,
+        layer="below",
+        line_width=0,
       )
 
       # Update layout.
-      fig.update_xaxes(title_text=self.translator.t("chart.label.date"))
+      fig.update_xaxes(title_text=self.translator.t("chart.label.date"), row=2, col=1)
       fig.update_yaxes(
-        title_text=self.translator.t("chart.label.sleep_duration_hours"),
-        secondary_y=False,
+        title_text=self.translator.t("chart.label.sleep_duration_hours"), row=1, col=1
       )
       fig.update_yaxes(
         title_text=self.translator.t("chart.label.sleep_efficiency_percent"),
-        secondary_y=True,
+        row=2,
+        col=1,
+        range=[0, 100],
       )
 
       fig.update_layout(
@@ -1026,6 +1460,19 @@ class ChartGenerator:
         height=self.height,
         template=PLOTLY_TEMPLATE,
         hovermode="x unified",
+        showlegend=False,
+      )
+
+      fig.update_xaxes(
+        rangeslider_visible=True,
+        rangeselector={
+          "buttons": [
+            {"count": 7, "label": "7d", "step": "day", "stepmode": "backward"},
+            {"count": 1, "label": "1m", "step": "month", "stepmode": "backward"},
+            {"count": 3, "label": "3m", "step": "month", "stepmode": "backward"},
+            {"step": "all", "label": "All"},
+          ]
+        },
       )
 
       if output_path:
@@ -1043,16 +1490,16 @@ class ChartGenerator:
       )
       return None
 
-  def plot_sleep_stages_distribution(
+  def plot_sleep_quality_details(
     self,
     data: pd.DataFrame,
     title: str | None = None,
     output_path: Path | None = None,
   ) -> go.Figure | None:
-    """Plot sleep stage distribution pie chart.
+    """Plot detailed sleep quality metrics in small panels.
 
     Args:
-        data: Sleep stage data (columns: stage, duration).
+        data: Sleep quality data (columns: date, latency, wake_after_onset, awakenings).
         title: Chart title.
         output_path: Output path.
 
@@ -1060,6 +1507,146 @@ class ChartGenerator:
         Plotly Figure or None.
     """
     if data.empty:
+      logger.warning(
+        self.translator.t(
+          "log.chart_no_data",
+          chart=self.translator.t("chart.title.sleep_quality_details"),
+        )
+      )
+      return None
+
+    logger.info(
+      self.translator.t(
+        "log.chart_generating",
+        chart=self.translator.t("chart.title.sleep_quality_details"),
+        count=len(data),
+      )
+    )
+    chart_title = title or self.translator.t("chart.title.sleep_quality_details")
+
+    try:
+      fig = make_subplots(
+        rows=3,
+        cols=1,
+        shared_xaxes=True,
+        subplot_titles=(
+          self.translator.t("report.metric.avg_sleep_latency"),
+          self.translator.t("report.metric.avg_wake_after_onset"),
+          self.translator.t("report.metric.avg_awakenings"),
+        ),
+        vertical_spacing=0.08,
+      )
+
+      if "latency" in data.columns:
+        fig.add_trace(
+          go.Scatter(
+            x=data["date"],
+            y=data["latency"],
+            mode="lines+markers",
+            name=self.translator.t("report.metric.avg_sleep_latency"),
+            line={"color": HEALTH_COLORS["info"], "width": 2},
+            marker={"size": 6},
+            hovertemplate=f"%{{x}}<br>{self.translator.t('report.metric.avg_sleep_latency')}: %{{y:.1f}} {self.translator.t('report.metric.sleep_latency_unit')}<extra></extra>",
+          ),
+          row=1,
+          col=1,
+        )
+
+      if "wake_after_onset" in data.columns:
+        fig.add_trace(
+          go.Scatter(
+            x=data["date"],
+            y=data["wake_after_onset"],
+            mode="lines+markers",
+            name=self.translator.t("report.metric.avg_wake_after_onset"),
+            line={"color": HEALTH_COLORS["warning"], "width": 2},
+            marker={"size": 6},
+            hovertemplate=f"%{{x}}<br>{self.translator.t('report.metric.avg_wake_after_onset')}: %{{y:.1f}} {self.translator.t('report.metric.wake_after_onset_unit')}<extra></extra>",
+          ),
+          row=2,
+          col=1,
+        )
+
+      if "awakenings" in data.columns:
+        fig.add_trace(
+          go.Scatter(
+            x=data["date"],
+            y=data["awakenings"],
+            mode="lines+markers",
+            name=self.translator.t("report.metric.avg_awakenings"),
+            line={"color": HEALTH_COLORS["neutral"], "width": 2},
+            marker={"size": 6},
+            hovertemplate=f"%{{x}}<br>{self.translator.t('report.metric.avg_awakenings')}: %{{y:.1f}} {self.translator.t('report.metric.awakenings_unit')}<extra></extra>",
+          ),
+          row=3,
+          col=1,
+        )
+
+      fig.update_xaxes(title_text=self.translator.t("chart.label.date"), row=3, col=1)
+      fig.update_yaxes(
+        title_text=self.translator.t("report.metric.sleep_latency_unit"), row=1, col=1
+      )
+      fig.update_yaxes(
+        title_text=self.translator.t("report.metric.wake_after_onset_unit"),
+        row=2,
+        col=1,
+      )
+      fig.update_yaxes(
+        title_text=self.translator.t("report.metric.awakenings_unit"), row=3, col=1
+      )
+
+      fig.update_layout(
+        title=chart_title,
+        width=self.width,
+        height=self.height,
+        template=PLOTLY_TEMPLATE,
+        showlegend=False,
+      )
+
+      fig.update_xaxes(
+        rangeslider_visible=True,
+        rangeselector={
+          "buttons": [
+            {"count": 7, "label": "7d", "step": "day", "stepmode": "backward"},
+            {"count": 1, "label": "1m", "step": "month", "stepmode": "backward"},
+            {"count": 3, "label": "3m", "step": "month", "stepmode": "backward"},
+            {"step": "all", "label": "All"},
+          ]
+        },
+      )
+
+      if output_path:
+        self._save_plotly_figure(fig, output_path)
+
+      return fig
+
+    except Exception as e:
+      logger.error(
+        self.translator.t(
+          "log.chart_error",
+          chart=self.translator.t("chart.title.sleep_quality_details"),
+          error=str(e),
+        )
+      )
+      return None
+
+  def plot_sleep_stages_distribution(
+    self,
+    data: pd.DataFrame,
+    title: str | None = None,
+    output_path: Path | None = None,
+  ) -> go.Figure | None:
+    """Plot sleep stage distribution stacked by day.
+
+    Args:
+        data: Sleep stage data (columns: date, stage, duration).
+        title: Chart title.
+        output_path: Output path.
+
+    Returns:
+        Plotly Figure or None.
+    """
+    if data.empty or not {"date", "stage", "duration"}.issubset(data.columns):
       logger.warning(
         self.translator.t(
           "log.chart_no_data",
@@ -1077,40 +1664,48 @@ class ChartGenerator:
     chart_title = title or self.translator.t("chart.title.sleep_stages_distribution")
 
     try:
-      # Aggregate duration per stage.
-      stage_durations = data.groupby("stage")["duration"].sum()
-
       # Sleep stage colors.
       colors = {
         "Asleep": HEALTH_COLORS["primary"],
         "Core": HEALTH_COLORS["info"],
         "Deep": HEALTH_COLORS["dark"],
         "REM": HEALTH_COLORS["secondary"],
+        "Light": HEALTH_COLORS["light"],
         "Awake": HEALTH_COLORS["warning"],
-        "InBed": HEALTH_COLORS["light"],
       }
 
-      fig = go.Figure(
-        data=[
-          go.Pie(
-            labels=stage_durations.index,
-            values=stage_durations.values,
-            marker={
-              "colors": [
-                colors.get(stage, HEALTH_COLORS["neutral"])
-                for stage in stage_durations.index
-              ]
-            },
-            hovertemplate=f"<b>%{{label}}</b><br>"
-            + f"{self.translator.t('chart.label.sleep_duration_hours')}: %{{value:.1f}}<br>"
-            + f"{self.translator.t('chart.label.percent')}: %{{percent}}<br>"
-            + "<extra></extra>",
+      data_copy = data.copy()
+      data_copy = data_copy.dropna(subset=["date", "stage", "duration"])
+      if data_copy.empty:
+        logger.warning(
+          self.translator.t(
+            "log.chart_no_data",
+            chart=self.translator.t("chart.title.sleep_stages_distribution"),
           )
-        ]
-      )
+        )
+        return None
+      data_copy["date"] = pd.to_datetime(data_copy["date"]).dt.date
+      pivot = data_copy.pivot_table(
+        index="date", columns="stage", values="duration", aggfunc="sum"
+      ).fillna(0)
+
+      fig = go.Figure()
+      for stage in pivot.columns:
+        fig.add_trace(
+          go.Bar(
+            x=pivot.index.astype(str),
+            y=pivot[stage],
+            name=stage,
+            marker_color=colors.get(stage, HEALTH_COLORS["neutral"]),
+            hovertemplate=f"%{{x}}<br>{stage}: %{{y:.1f}} h<extra></extra>",
+          )
+        )
 
       fig.update_layout(
+        barmode="stack",
         title=chart_title,
+        xaxis_title=self.translator.t("chart.label.date"),
+        yaxis_title=self.translator.t("chart.label.sleep_duration_hours"),
         width=self.width,
         height=self.height,
         template=PLOTLY_TEMPLATE,
@@ -1383,6 +1978,13 @@ class ChartGenerator:
         if fig:
           charts["heart_rate_zones"] = zones_path
 
+      # Advanced heart rate metrics.
+      if report.advanced_metrics:
+        advanced_path = output_dir / "heart_rate_advanced.html"
+        fig = self.plot_heart_rate_advanced_metrics(report, output_path=advanced_path)
+        if fig:
+          charts["heart_rate_advanced"] = advanced_path
+
       logger.info(
         self.translator.t(
           "log.charts.generated_heart_rate",
@@ -1448,21 +2050,106 @@ class ChartGenerator:
         if fig:
           charts["sleep_quality_trend"] = quality_trend_path
 
+        details_path = output_dir / "sleep_quality_details.html"
+        fig = self.plot_sleep_quality_details(
+          report.daily_summary, output_path=details_path
+        )
+        if fig:
+          charts["sleep_quality_details"] = details_path
+
       # Sleep stage distribution.
       if report.daily_summary is not None and not report.daily_summary.empty:
         stages_path = output_dir / "sleep_stages_distribution.html"
         # Prepare stage data.
         stages_data = []
+        if "date" not in report.daily_summary.columns:
+          logger.warning("sleep stages: daily_summary missing date column")
+        else:
+          logger.info(
+            "sleep stages: rows=%s cols=%s",
+            len(report.daily_summary),
+            list(report.daily_summary.columns),
+          )
+          logger.info(
+            "sleep stages: non-null counts deep=%s rem=%s light=%s sleep=%s total=%s",
+            report.daily_summary.get("deep_sleep", pd.Series(dtype=float))
+            .notna()
+            .sum(),
+            report.daily_summary.get("rem_sleep", pd.Series(dtype=float)).notna().sum(),
+            report.daily_summary.get("light_sleep", pd.Series(dtype=float))
+            .notna()
+            .sum(),
+            report.daily_summary.get("sleep_duration", pd.Series(dtype=float))
+            .notna()
+            .sum(),
+            report.daily_summary.get("total_duration", pd.Series(dtype=float))
+            .notna()
+            .sum(),
+          )
         for _, row in report.daily_summary.iterrows():
-          if row.get("deep_sleep", 0) > 0:
-            stages_data.append({"stage": "Deep", "duration": row["deep_sleep"]})
-          if row.get("rem_sleep", 0) > 0:
-            stages_data.append({"stage": "REM", "duration": row["rem_sleep"]})
+          date_val = row.get("date")
+          if pd.isna(date_val):
+            continue
+          deep_val = float(row.get("deep_sleep", 0) or 0)
+          rem_val = float(row.get("rem_sleep", 0) or 0)
+          total_sleep = float(row.get("sleep_duration", 0) or 0)
+          if total_sleep <= 0:
+            total_sleep = float(row.get("total_duration", 0) or 0)
+          light_val = float(row.get("light_sleep", 0) or 0)
+          if light_val <= 0:
+            light_val = max(0.0, total_sleep - deep_val - rem_val)
+          row_added = False
+          if deep_val > 0:
+            stages_data.append(
+              {"date": date_val, "stage": "Deep", "duration": deep_val / 60}
+            )
+            row_added = True
+          if rem_val > 0:
+            stages_data.append(
+              {"date": date_val, "stage": "REM", "duration": rem_val / 60}
+            )
+            row_added = True
+          if light_val > 0:
+            stages_data.append(
+              {"date": date_val, "stage": "Light", "duration": light_val / 60}
+            )
+            row_added = True
+          if not row_added and total_sleep > 0:
+            stages_data.append(
+              {"date": date_val, "stage": "Light", "duration": total_sleep / 60}
+            )
         if stages_data:
           stages_df = pd.DataFrame(stages_data)
           fig = self.plot_sleep_stages_distribution(stages_df, output_path=stages_path)
           if fig:
             charts["sleep_stages_distribution"] = stages_path
+
+          max_date = pd.to_datetime(stages_df["date"]).max()
+          if pd.notna(max_date):
+            last_7_start = max_date - pd.Timedelta(days=6)
+            last_7_df = stages_df[pd.to_datetime(stages_df["date"]) >= last_7_start]
+            if not last_7_df.empty:
+              stages_7d_path = output_dir / "sleep_stages_distribution_7d.html"
+              fig = self.plot_sleep_stages_distribution(
+                last_7_df,
+                title=self.translator.t("chart.title.sleep_stages_distribution_7d"),
+                output_path=stages_7d_path,
+              )
+              if fig:
+                charts["sleep_stages_distribution_7d"] = stages_7d_path
+
+            weekly_df = stages_df.copy()
+            weekly_df["date"] = (
+              pd.to_datetime(weekly_df["date"]).dt.to_period("W").dt.start_time
+            )
+            stages_weekly_path = output_dir / "sleep_stages_distribution_weekly.html"
+            fig = self.plot_sleep_stages_distribution(
+              weekly_df,
+              title=self.translator.t("chart.title.sleep_stages_distribution_weekly"),
+              output_path=stages_weekly_path,
+            )
+            if fig:
+              charts["sleep_stages_distribution_weekly"] = stages_weekly_path
 
       # Sleep consistency analysis.
       if report.daily_summary is not None and not report.daily_summary.empty:

@@ -1027,6 +1027,45 @@ class ReportGenerator:
             color: var(--primary-color);
         }}
 
+        .zone-table {{
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9em;
+        }}
+
+        .zone-table th,
+        .zone-table td {{
+            padding: 8px 10px;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+            text-align: left;
+        }}
+
+        .zone-bar {{
+            height: 8px;
+            background: rgba(0, 0, 0, 0.06);
+            border-radius: 4px;
+            overflow: hidden;
+        }}
+
+        .zone-bar-fill {{
+            height: 100%;
+        }}
+
+        .zone-scale {{
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 6px;
+            margin-top: 10px;
+        }}
+
+        .zone-chip {{
+            border-radius: 999px;
+            padding: 6px 10px;
+            font-size: 0.8em;
+            text-align: center;
+            color: #fff;
+        }}
+
         .insight-list {{
             list-style: none;
         }}
@@ -1245,6 +1284,160 @@ class ReportGenerator:
 
       content += "</div>\n"
 
+    # Advanced heart rate metrics.
+    if report.advanced_metrics:
+      metrics = report.advanced_metrics
+      diurnal = metrics.get("diurnal_profile", {})
+      variability = metrics.get("variability", {})
+      trends = metrics.get("recent_trends", {})
+      zones = metrics.get("zones", {})
+
+      content += f"<h3>{translator.t('report.section.heart_rate_advanced')}</h3>\n"
+      content += '<div class="metric-grid">\n'
+
+      day_mean = diurnal.get("day_mean")
+      night_mean = diurnal.get("night_mean")
+      if day_mean is not None:
+        content += '<div class="metric-card">\n'
+        content += (
+          f'<div class="metric-label">'
+          f"{translator.t('report.metric.day_mean_hr')}</div>\n"
+        )
+        content += f'<div class="metric-value">{day_mean:.1f} bpm</div>\n'
+        content += "</div>\n"
+
+      if night_mean is not None:
+        content += '<div class="metric-card">\n'
+        content += (
+          f'<div class="metric-label">'
+          f"{translator.t('report.metric.night_mean_hr')}</div>\n"
+        )
+        content += f'<div class="metric-value">{night_mean:.1f} bpm</div>\n'
+        content += "</div>\n"
+
+      day_night_delta = diurnal.get("day_night_delta")
+      if day_night_delta is not None:
+        content += '<div class="metric-card">\n'
+        content += (
+          f'<div class="metric-label">'
+          f"{translator.t('report.metric.day_night_delta')}</div>\n"
+        )
+        content += f'<div class="metric-value">{day_night_delta:+.1f} bpm</div>\n'
+        content += "</div>\n"
+
+      daily_cv = variability.get("daily_cv_mean")
+      if daily_cv is not None:
+        content += '<div class="metric-card">\n'
+        content += (
+          f'<div class="metric-label">{translator.t("report.metric.daily_cv")}</div>\n'
+        )
+        content += f'<div class="metric-value">{daily_cv:.3f}</div>\n'
+        content += "</div>\n"
+
+      daily_std = variability.get("daily_std_mean")
+      if daily_std is not None:
+        content += '<div class="metric-card">\n'
+        content += (
+          f'<div class="metric-label">{translator.t("report.metric.daily_std")}</div>\n'
+        )
+        content += f'<div class="metric-value">{daily_std:.2f} bpm</div>\n'
+        content += "</div>\n"
+
+      hr_mean_7d = trends.get("hr_mean_7d")
+      if hr_mean_7d is not None:
+        content += '<div class="metric-card">\n'
+        content += (
+          f'<div class="metric-label">'
+          f"{translator.t('report.metric.hr_mean_7d')}</div>\n"
+        )
+        content += f'<div class="metric-value">{hr_mean_7d:.1f} bpm</div>\n'
+        content += "</div>\n"
+
+      hr_mean_30d = trends.get("hr_mean_30d")
+      if hr_mean_30d is not None:
+        content += '<div class="metric-card">\n'
+        content += (
+          f'<div class="metric-label">'
+          f"{translator.t('report.metric.hr_mean_30d')}</div>\n"
+        )
+        content += f'<div class="metric-value">{hr_mean_30d:.1f} bpm</div>\n'
+        content += "</div>\n"
+
+      hr_change = trends.get("hr_change_7d_vs_30d")
+      if hr_change is not None:
+        content += '<div class="metric-card">\n'
+        content += (
+          f'<div class="metric-label">'
+          f"{translator.t('report.metric.hr_change_7d_vs_30d')}</div>\n"
+        )
+        content += f'<div class="metric-value">{hr_change:+.1f} bpm</div>\n'
+        content += "</div>\n"
+
+      if zones and zones.get("zone1"):
+        content += '<div class="metric-card">\n'
+        content += (
+          f'<div class="metric-label">{translator.t("report.metric.hr_zones")}</div>\n'
+        )
+        max_hr = zones.get("max_hr", 200)
+        zone_ranges = [
+          (0.0, 0.6),
+          (0.6, 0.7),
+          (0.7, 0.8),
+          (0.8, 0.9),
+          (0.9, 1.0),
+        ]
+        zone_labels = [
+          translator.t("report.metric.hr_zone1"),
+          translator.t("report.metric.hr_zone2"),
+          translator.t("report.metric.hr_zone3"),
+          translator.t("report.metric.hr_zone4"),
+          translator.t("report.metric.hr_zone5"),
+        ]
+        zone_values = [
+          zones["zone1"]["percentage"],
+          zones["zone2"]["percentage"],
+          zones["zone3"]["percentage"],
+          zones["zone4"]["percentage"],
+          zones["zone5"]["percentage"],
+        ]
+        zone_colors = [
+          "#34C759",
+          "#0A84FF",
+          "#5AC8FA",
+          "#FF9F0A",
+          "#FF453A",
+        ]
+        content += '<table class="zone-table">\n'
+        content += (
+          f"<tr><th>{translator.t('report.metric.hr_zones')}</th>"
+          f"<th>Range</th><th>%</th></tr>\n"
+        )
+        for label, (low_ratio, high_ratio), percent, color in zip(
+          zone_labels, zone_ranges, zone_values, zone_colors
+        ):
+          low_bpm = int(round(low_ratio * max_hr))
+          high_bpm = int(round(high_ratio * max_hr))
+          range_text = f"{int(low_ratio * 100)}-{int(high_ratio * 100)}% / {low_bpm}-{high_bpm} bpm"
+          content += "<tr>\n"
+          content += f"<td>{label}</td>\n"
+          content += f"<td>{range_text}</td>\n"
+          content += "<td>\n"
+          content += f'<div class="zone-bar"><div class="zone-bar-fill" style="width: {percent:.1f}%; background: {color};"></div></div>'
+          content += f" <span>{percent:.1f}%</span>\n"
+          content += "</td>\n"
+          content += "</tr>\n"
+        content += "</table>\n"
+        content += '<div class="zone-scale">\n'
+        for label, (low_ratio, high_ratio), color in zip(
+          zone_labels, zone_ranges, zone_colors
+        ):
+          range_text = f"{int(low_ratio * 100)}-{int(high_ratio * 100)}%"
+          content += f'<div class="zone-chip" style="background: {color};">{label} {range_text}</div>\n'
+        content += "</div>\n"
+        content += "</div>\n"
+
+      content += "</div>\n"
+
     content += "</div>\n"
     return content
 
@@ -1308,6 +1501,42 @@ class ReportGenerator:
       )
       content += f'<div class="metric-value">{quality.consistency_score:.0%}</div>\n'
       content += "</div>\n"
+
+      if quality.average_latency > 0:
+        content += '<div class="metric-card">\n'
+        content += (
+          f'<div class="metric-label">'
+          f"{translator.t('report.metric.avg_sleep_latency')}</div>\n"
+        )
+        content += (
+          f'<div class="metric-value">{quality.average_latency:.1f} '
+          f"{translator.t('report.metric.sleep_latency_unit')}</div>\n"
+        )
+        content += "</div>\n"
+
+      if quality.average_wake_after_onset > 0:
+        content += '<div class="metric-card">\n'
+        content += (
+          f'<div class="metric-label">'
+          f"{translator.t('report.metric.avg_wake_after_onset')}</div>\n"
+        )
+        content += (
+          f'<div class="metric-value">{quality.average_wake_after_onset:.1f} '
+          f"{translator.t('report.metric.wake_after_onset_unit')}</div>\n"
+        )
+        content += "</div>\n"
+
+      if quality.average_awakenings > 0:
+        content += '<div class="metric-card">\n'
+        content += (
+          f'<div class="metric-label">'
+          f"{translator.t('report.metric.avg_awakenings')}</div>\n"
+        )
+        content += (
+          f'<div class="metric-value">{quality.average_awakenings:.1f} '
+          f"{translator.t('report.metric.awakenings_unit')}</div>\n"
+        )
+        content += "</div>\n"
 
       content += "</div>\n"
 
@@ -1406,10 +1635,10 @@ class ReportGenerator:
 
   def _close_html_structure(self, translator: Translator) -> str:
     """Close HTML structure."""
-    return """
+    footer_text = translator.t("report.footer.autogen_with_source")
+    return f"""
         <footer>
-            <p>{translator.t("report.footer.generated_by")}</p>
-            <p>{translator.t("report.footer.data_source")}</p>
+            <p>{footer_text}</p>
         </footer>
     </div>
 </body>

@@ -72,6 +72,8 @@ class SleepQualityMetrics:
   deep_sleep_percentage: float = 0
   rem_sleep_percentage: float = 0
   light_sleep_percentage: float = 0
+  average_wake_after_onset: float = 0
+  average_awakenings: float = 0
 
 
 @dataclass
@@ -405,16 +407,27 @@ class SleepAnalyzer:
       self.translator.t(
         "log.sleep_analyzer.debug_records",
         date=date,
-        count=len(sleep_records),
+        count=len(session_records),
       )
     )
-    for i, record in enumerate(sleep_records[:3]):  # Show only the first 3.
+    for i, record in enumerate(session_records[:3]):  # Show only the first 3.
       logger.debug(
         f"  Record {i}: type={record.type}, value={getattr(record, 'value', 'N/A')}, "
         f"start={record.start_date}, end={record.end_date}"
       )
 
-    for record in sleep_records:
+    has_specific_stages = any(
+      isinstance(r, CategoryRecord)
+      and isinstance(r.value, str)
+      and (
+        r.value == "HKCategoryValueSleepAnalysisAsleepCore"
+        or r.value == "HKCategoryValueSleepAnalysisAsleepDeep"
+        or r.value == "HKCategoryValueSleepAnalysisAsleepREM"
+      )
+      for r in session_records
+    )
+
+    for record in session_records:
       if hasattr(record, "value") and isinstance(record, CategoryRecord):
         stage_type = record.value
         duration = (record.end_date - record.start_date).total_seconds() / 60
@@ -493,9 +506,9 @@ class SleepAnalyzer:
             rem_sleep += duration
         elif stage_type == "Asleep":
           # Use "Asleep" for light sleep only when no specific stages exist.
-          # Simplified: count as light sleep if not overlapping.
-          light_sleep += duration
-          sleep_duration += duration
+          if not has_specific_stages:
+            light_sleep += duration
+            sleep_duration += duration
         elif stage_type == "Awake":
           awake_duration += duration
         elif stage_type == "InBed":
@@ -577,15 +590,20 @@ class SleepAnalyzer:
     durations = [s.total_duration for s in sleep_sessions]
     efficiencies = [s.efficiency for s in sleep_sessions]
     latencies = [s.sleep_latency for s in sleep_sessions]
+    wake_after_onset = [s.wake_after_onset for s in sleep_sessions]
+    awakenings = [s.awakenings_count for s in sleep_sessions]
 
     average_duration = sum(durations) / len(durations) / 60  # Convert to hours.
     average_efficiency = sum(efficiencies) / len(efficiencies)
     average_latency = sum(latencies) / len(latencies)
+    average_wake_after_onset = sum(wake_after_onset) / len(wake_after_onset)
+    average_awakenings = sum(awakenings) / len(awakenings)
 
     # Consistency scores (coefficient of variation: std/mean).
     duration_series = pd.Series(durations)
     efficiency_series = pd.Series(efficiencies)
     latency_series = pd.Series(latencies)
+    wake_after_onset_series = pd.Series(wake_after_onset)
 
     duration_cv = (
       duration_series.std() / duration_series.mean()
@@ -602,15 +620,24 @@ class SleepAnalyzer:
       if latency_series.mean() > 0
       else float("inf")
     )
+    wake_after_onset_cv = (
+      wake_after_onset_series.std() / wake_after_onset_series.mean()
+      if wake_after_onset_series.mean() > 0
+      else float("inf")
+    )
 
     # CV in 0-1 is acceptable; >1 indicates high variability.
     duration_consistency = max(0, min(1, 1 - duration_cv))
     efficiency_consistency = max(0, min(1, 1 - efficiency_cv))
     latency_consistency = max(0, min(1, 1 - latency_cv))
+    wao_consistency = max(0, min(1, 1 - wake_after_onset_cv))
 
     consistency_score = (
-      duration_consistency + efficiency_consistency + latency_consistency
-    ) / 3
+      duration_consistency
+      + efficiency_consistency
+      + latency_consistency
+      + wao_consistency
+    ) / 4
 
     # Stage percentages (sessions with stage data only).
     sessions_with_stages = [
@@ -673,6 +700,8 @@ class SleepAnalyzer:
       average_duration=round(average_duration, 1),
       average_efficiency=round(average_efficiency, 3),
       average_latency=round(average_latency, 1),
+      average_wake_after_onset=round(average_wake_after_onset, 1),
+      average_awakenings=round(average_awakenings, 1),
       consistency_score=round(consistency_score, 3),
       core_sleep_percentage=round(core_sleep_percentage, 3),
       deep_sleep_percentage=round(deep_sleep_percentage, 3),
@@ -959,9 +988,11 @@ class SleepAnalyzer:
           "sleep_duration": main_session.sleep_duration,
           "efficiency": main_session.efficiency,
           "latency": main_session.sleep_latency,
+          "wake_after_onset": main_session.wake_after_onset,
           "awakenings": main_session.awakenings_count,
           "deep_sleep": main_session.deep_sleep,
           "rem_sleep": main_session.rem_sleep,
+          "light_sleep": main_session.light_sleep,
         }
       )
 

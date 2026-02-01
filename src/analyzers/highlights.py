@@ -301,6 +301,63 @@ class HighlightsGenerator:
           )
         )
 
+    # Advanced metrics insights.
+    if report.advanced_metrics:
+      metrics = report.advanced_metrics
+      diurnal = metrics.get("diurnal_profile", {})
+      variability = metrics.get("variability", {})
+      trends = metrics.get("recent_trends", {})
+
+      day_night_delta = diurnal.get("day_night_delta")
+      if day_night_delta is not None and abs(day_night_delta) < 5:
+        insights.append(
+          HealthInsight(
+            category="heart_rate",
+            priority="medium",
+            title=self.translator.t("highlights.heart_rate.diurnal_low.title"),
+            message=self.translator.t(
+              "highlights.heart_rate.diurnal_low.message",
+              delta=abs(day_night_delta),
+            ),
+            details={"day_night_delta": day_night_delta},
+            confidence=0.75,
+          )
+        )
+
+      daily_cv = variability.get("daily_cv_mean")
+      if daily_cv is not None and daily_cv > 0.2:
+        insights.append(
+          HealthInsight(
+            category="heart_rate",
+            priority="medium",
+            title=self.translator.t("highlights.heart_rate.variability_high.title"),
+            message=self.translator.t(
+              "highlights.heart_rate.variability_high.message",
+              cv=daily_cv,
+            ),
+            details={"daily_cv_mean": daily_cv},
+            confidence=0.7,
+          )
+        )
+
+      hr_change = trends.get("hr_change_7d_vs_30d")
+      if hr_change is not None and abs(hr_change) >= 3:
+        trend_key = (
+          "highlights.heart_rate.recent_trend_up"
+          if hr_change > 0
+          else "highlights.heart_rate.recent_trend_down"
+        )
+        insights.append(
+          HealthInsight(
+            category="heart_rate",
+            priority="medium",
+            title=self.translator.t(f"{trend_key}.title"),
+            message=self.translator.t(f"{trend_key}.message", change=hr_change),
+            details={"hr_change_7d_vs_30d": hr_change},
+            confidence=0.75,
+          )
+        )
+
     return insights
 
   def _generate_sleep_insights(

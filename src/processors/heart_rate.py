@@ -90,6 +90,9 @@ class HeartRateAnalysisReport:
   # Trend analysis
   trends: dict[str, Any] | None = None
 
+  # Advanced metrics
+  advanced_metrics: dict[str, Any] | None = None
+
   # Highlights and recommendations
   highlights: list[str] | None = None
   recommendations: list[str] | None = None
@@ -195,11 +198,10 @@ class HeartRateAnalyzer:
       cardio_fitness = self.analyze_cardio_fitness(quantity_records)
 
     # Statistical analysis (based on base heart rate data).
-    daily_stats = self.stat_analyzer.aggregate_by_interval(heart_rate_records, "day")
-    weekly_stats = self.stat_analyzer.aggregate_by_interval(heart_rate_records, "week")
-    monthly_stats = self.stat_analyzer.aggregate_by_interval(
-      heart_rate_records, "month"
-    )
+    hr_df = self._records_to_dataframe(heart_rate_records)
+    daily_stats = self._aggregate_stats_from_df(hr_df, "day")
+    weekly_stats = self._aggregate_stats_from_df(hr_df, "week")
+    monthly_stats = self._aggregate_stats_from_df(hr_df, "month")
 
     # Anomaly detection.
     anomalies = self.anomaly_detector.detect_anomalies(
@@ -226,8 +228,11 @@ class HeartRateAnalyzer:
       resting_hr_analysis, hrv_analysis, cardio_fitness, anomalies
     )
 
+    # Advanced metrics.
+    advanced_metrics = self._calculate_advanced_metrics(hr_df)
+
     # Data quality assessment.
-    data_quality = self._assess_data_quality(heart_rate_records)
+    data_quality = self._assess_data_quality_df(hr_df)
 
     report = HeartRateAnalysisReport(
       analysis_date=analysis_date,
@@ -241,6 +246,7 @@ class HeartRateAnalyzer:
       anomalies=anomalies,
       anomaly_report=anomaly_report,
       trends=trends,
+      advanced_metrics=advanced_metrics,
       highlights=highlights,
       recommendations=recommendations,
       data_quality_score=data_quality,
@@ -486,6 +492,158 @@ class HeartRateAnalyzer:
       )
 
     return pd.DataFrame(data)
+
+  def _aggregate_stats_from_df(
+    self,
+    df: pd.DataFrame,
+    interval: Literal["hour", "day", "week", "month"],
+  ) -> pd.DataFrame:
+    """Aggregate stats from a pre-built DataFrame."""
+    if df.empty or "start_date" not in df.columns:
+      return pd.DataFrame()
+
+    df_copy = df.copy()
+    df_copy["start_date"] = pd.to_datetime(df_copy["start_date"])
+
+    freq_map = {
+      "hour": "h",
+      "day": "D",
+      "week": "W",
+      "month": "ME",
+    }
+    freq = freq_map.get(interval, "D")
+
+    grouped = df_copy.groupby(pd.Grouper(key="start_date", freq=freq))
+    aggregated = (
+      grouped["value"].agg(["count", "min", "max", "mean", "median", "std"]).round(4)
+    )
+    if aggregated.empty:
+      return aggregated
+
+    aggregated.columns = [
+      "record_count",
+      "min_value",
+      "max_value",
+      "mean_value",
+      "median_value",
+      "std_deviation",
+    ]
+    aggregated["interval_start"] = aggregated.index
+
+    try:
+      if freq == "ME":
+        aggregated["interval_end"] = aggregated.index + pd.offsets.MonthEnd(1)
+        aggregated["interval_end"] = aggregated["interval_end"] - pd.Timedelta(
+          seconds=1
+        )
+      elif freq == "W":
+        aggregated["interval_end"] = (
+          aggregated.index + pd.Timedelta(weeks=1) - pd.Timedelta(seconds=1)
+        )
+      elif freq == "D":
+        aggregated["interval_end"] = (
+          aggregated.index + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+        )
+      else:
+        aggregated["interval_end"] = (
+          aggregated.index + pd.Timedelta(hours=1) - pd.Timedelta(seconds=1)
+        )
+    except Exception:
+      aggregated["interval_end"] = aggregated.index
+
+    cols = [
+      "interval_start",
+      "interval_end",
+      "record_count",
+      "min_value",
+      "max_value",
+      "mean_value",
+      "median_value",
+      "std_deviation",
+    ]
+    return aggregated[cols]
+
+  def _calculate_advanced_metrics(self, df: pd.DataFrame) -> dict[str, Any]:
+    """Calculate advanced heart rate metrics."""
+    metrics: dict[str, Any] = {}
+    if df.empty or "start_date" not in df.columns or "value" not in df.columns:
+      return metrics
+
+    df_copy = df.copy()
+    df_copy["start_date"] = pd.to_datetime(df_copy["start_date"])
+    df_copy["hour"] = df_copy["start_date"].dt.hour
+    df_copy["date"] = df_copy["start_date"].dt.date
+
+    day_data = df_copy[(df_copy["hour"] >= 6) & (df_copy["hour"] < 22)]
+    night_data = df_copy[(df_copy["hour"] < 6) | (df_copy["hour"] >= 22)]
+    if not day_data.empty or not night_data.empty:
+      day_mean = float(day_data["value"].mean()) if not day_data.empty else None
+      night_mean = float(night_data["value"].mean()) if not night_data.empty else None
+      day_night_delta = (
+        float(day_mean - night_mean)
+        if day_mean is not None and night_mean is not None
+        else None
+      )
+      metrics["diurnal_profile"] = {
+        "day_mean": round(day_mean, 1) if day_mean is not None else None,
+        "night_mean": round(night_mean, 1) if night_mean is not None else None,
+        "day_night_delta": round(day_night_delta, 1)
+        if day_night_delta is not None
+        else None,
+      }
+
+    daily_stats = (
+      df_copy.groupby("date")["value"].agg(["mean", "std"]).dropna().reset_index()
+    )
+    if not daily_stats.empty:
+      daily_stats["cv"] = daily_stats["std"] / daily_stats["mean"]
+      metrics["variability"] = {
+        "daily_cv_mean": round(float(daily_stats["cv"].mean()), 3),
+        "daily_std_mean": round(float(daily_stats["std"].mean()), 2),
+      }
+
+    metrics["zones"] = self._calculate_hr_zones(df_copy)
+
+    recent_cutoff = df_copy["start_date"].max() - pd.Timedelta(days=7)
+    baseline_cutoff = df_copy["start_date"].max() - pd.Timedelta(days=30)
+    recent_mean = float(df_copy[df_copy["start_date"] >= recent_cutoff]["value"].mean())
+    baseline_mean = float(
+      df_copy[df_copy["start_date"] >= baseline_cutoff]["value"].mean()
+    )
+    metrics["recent_trends"] = {
+      "hr_mean_7d": round(recent_mean, 1) if pd.notna(recent_mean) else None,
+      "hr_mean_30d": round(baseline_mean, 1) if pd.notna(baseline_mean) else None,
+      "hr_change_7d_vs_30d": round(recent_mean - baseline_mean, 1)
+      if pd.notna(recent_mean) and pd.notna(baseline_mean)
+      else None,
+    }
+
+    return metrics
+
+  def _calculate_hr_zones(self, df: pd.DataFrame) -> dict[str, Any]:
+    """Calculate heart rate zone distribution."""
+    if df.empty:
+      return {}
+
+    max_hr = 220 - self.age if self.age else 200
+    zones = {
+      "zone1": (0, max_hr * 0.6),
+      "zone2": (max_hr * 0.6, max_hr * 0.7),
+      "zone3": (max_hr * 0.7, max_hr * 0.8),
+      "zone4": (max_hr * 0.8, max_hr * 0.9),
+      "zone5": (max_hr * 0.9, max_hr * 1.0),
+    }
+
+    total_count = len(df)
+    zone_stats: dict[str, Any] = {"max_hr": max_hr}
+    for zone_name, (min_hr, max_hr_zone) in zones.items():
+      count = int(len(df[(df["value"] >= min_hr) & (df["value"] < max_hr_zone)]))
+      zone_stats[zone_name] = {
+        "count": count,
+        "percentage": round((count / total_count * 100) if total_count > 0 else 0, 1),
+      }
+
+    return zone_stats
 
   def _calculate_age_adjusted_percentile(self, resting_hr: float, age: int) -> float:
     """Calculate age-adjusted resting heart rate percentile."""
@@ -797,17 +955,14 @@ class HeartRateAnalyzer:
     # Simplified quality assessment.
     # Can be extended with more advanced logic.
     df = self._records_to_dataframe(records)
+    return self._assess_data_quality_df(df)
 
-    if df.empty:
+  def _assess_data_quality_df(self, df: pd.DataFrame) -> float:
+    """Assess data quality from a DataFrame."""
+    if df.empty or "value" not in df.columns:
       return 0.0
 
-    # Check data completeness.
     completeness = safe_float(df["value"].notna().mean())
-
-    # Check value sanity (heart rate range).
     reasonable = safe_float(((df["value"] >= 40) & (df["value"] <= 200)).mean())
-
-    # Combined score.
     quality_score = (completeness + reasonable) / 2
-
     return round(float(quality_score), 3)

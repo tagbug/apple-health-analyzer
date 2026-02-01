@@ -5,6 +5,7 @@ from datetime import datetime
 from pathlib import Path
 
 import click
+import pandas as pd
 from typing import Literal, cast
 from rich.console import Console
 
@@ -446,38 +447,40 @@ def visualize(
         if chart_type == "heart_rate_timeseries":
           if "heart_rate" in hr_data and hr_data["heart_rate"]:
             df = DataConverter.heart_rate_to_df(hr_data["heart_rate"])
+            sleep_sessions = sleep_data.get("sleep_sessions", []) if sleep_data else []
             if not df.empty:
               df = DataConverter.sample_data_for_performance(
                 df, 50000
               )  # Downsample to improve performance.
               fig = chart_generator.plot_heart_rate_timeseries(
                 df,
+                sleep_sessions=sleep_sessions,
                 output_path=output_dir / f"{chart_type}.html"
                 if interactive
                 else output_dir / f"{chart_type}.png",
               )
 
-              if fig:  # Interactive mode returns a figure without saving.
-                if interactive:
-                  file_path = output_dir / f"{chart_type}.html"
-                  fig.write_html(file_path)
-                  generated_files.append(file_path)
-                else:
-                  file_path = output_dir / f"{chart_type}.png"
-                  fig.write_image(file_path, width=1200, height=600)
-                  generated_files.append(file_path)
-              else:  # Static mode already saved.
+            if fig:  # Interactive mode returns a figure without saving.
+              if interactive:
+                file_path = output_dir / f"{chart_type}.html"
+                fig.write_html(file_path)
+                generated_files.append(file_path)
+              else:
                 file_path = output_dir / f"{chart_type}.png"
-                if file_path.exists():
-                  generated_files.append(file_path)
-                else:
-                  console.print(
-                    f"[yellow]⚠ {translator.t('cli.visualize.static_not_found', path=file_path)}[/yellow]"
-                  )
+                fig.write_image(file_path, width=1200, height=600)
+                generated_files.append(file_path)
+            else:  # Static mode already saved.
+              file_path = output_dir / f"{chart_type}.png"
+              if file_path.exists():
+                generated_files.append(file_path)
+              else:
+                console.print(
+                  f"[yellow]⚠ {translator.t('cli.visualize.static_not_found', path=file_path)}[/yellow]"
+                )
 
-              console.print(
-                f"[green]✓ {translator.t('cli.visualize.generated', chart=chart_type)}[/green]"
-              )
+            console.print(
+              f"[green]✓ {translator.t('cli.visualize.generated', chart=chart_type)}[/green]"
+            )
 
         elif chart_type == "resting_hr_trend":
           if "resting_hr" in hr_data and hr_data["resting_hr"]:
@@ -723,8 +726,44 @@ def visualize(
           if "sleep_sessions" in sleep_data and sleep_data["sleep_sessions"]:
             df = DataConverter.sleep_sessions_to_df(sleep_data["sleep_sessions"])
             if not df.empty:
-              stages_df = DataConverter.prepare_sleep_stages_distribution(df)
-              if not stages_df.empty:
+              stages_data = []
+              for _, row in df.iterrows():
+                date_val = row.get("date")
+                if pd.isna(date_val):
+                  continue
+                deep_val = float(row.get("deep_sleep", 0) or 0)
+                rem_val = float(row.get("rem_sleep", 0) or 0)
+                light_val = float(row.get("light_sleep", 0) or 0)
+                total_sleep = float(row.get("sleep_duration", 0) or 0)
+                if light_val <= 0:
+                  light_val = max(0.0, total_sleep - deep_val - rem_val)
+                row_added = False
+                if deep_val > 0:
+                  stages_data.append(
+                    {"date": date_val, "stage": "Deep", "duration": deep_val / 60}
+                  )
+                  row_added = True
+                if rem_val > 0:
+                  stages_data.append(
+                    {"date": date_val, "stage": "REM", "duration": rem_val / 60}
+                  )
+                  row_added = True
+                if light_val > 0:
+                  stages_data.append(
+                    {"date": date_val, "stage": "Light", "duration": light_val / 60}
+                  )
+                  row_added = True
+                if not row_added and total_sleep > 0:
+                  stages_data.append(
+                    {
+                      "date": date_val,
+                      "stage": "Light",
+                      "duration": total_sleep / 60,
+                    }
+                  )
+
+              if stages_data:
+                stages_df = pd.DataFrame(stages_data)
                 fig = chart_generator.plot_sleep_stages_distribution(
                   stages_df,
                   output_path=output_dir / f"{chart_type}.html"
