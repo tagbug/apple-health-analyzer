@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<HealthData locale="en_US">
+  <ExportDate value="2024-01-01 00:00:00 +0000" />
+  <Me>
+    <HKCharacteristicTypeIdentifierDateOfBirth>1980-01-01</HKCharacteristicTypeIdentifierDateOfBirth>
+    <HKCharacteristicTypeIdentifierBiologicalSex>HKBiologicalSexMale</HKCharacteristicTypeIdentifierBiologicalSex>
+  </Me>
+  <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Test" unit="count/min" value="70" creationDate="2024-01-01 08:00:00 +0000" startDate="2024-01-01 08:00:00 +0000" endDate="2024-01-01 08:00:00 +0000" />
+  <Record type="HKQuantityTypeIdentifierRestingHeartRate" sourceName="Test" unit="count/min" value="60" creationDate="2024-01-01 06:00:00 +0000" startDate="2024-01-01 06:00:00 +0000" endDate="2024-01-01 06:00:00 +0000" />
+  <Record type="HKQuantityTypeIdentifierHeartRateVariabilitySDNN" sourceName="Test" unit="ms" value="45" creationDate="2024-01-01 06:05:00 +0000" startDate="2024-01-01 06:05:00 +0000" endDate="2024-01-01 06:05:00 +0000" />
+  <Record type="HKQuantityTypeIdentifierVO2Max" sourceName="Test" unit="ml/kg/min" value="42" creationDate="2024-01-01 06:10:00 +0000" startDate="2024-01-01 06:10:00 +0000" endDate="2024-01-01 06:10:00 +0000" />
+  <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Test" value="HKCategoryValueSleepAnalysisAsleepCore" creationDate="2024-01-01 23:00:00 +0000" startDate="2024-01-01 23:00:00 +0000" endDate="2024-01-02 06:30:00 +0000" />
+</HealthData>

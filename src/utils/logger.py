@@ -4,6 +4,7 @@ Provides structured logging with performance monitoring and environment-aware co
 """
 
 import functools
+import os
 import sys
 import time
 from collections.abc import Callable
@@ -536,4 +537,5 @@ class UnifiedProgress:
 
 
 # Initialize logging on import
-setup_logging()
+if not os.getenv("PYTEST_CURRENT_TEST"):
+  setup_logging()
