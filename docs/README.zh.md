@@ -83,7 +83,34 @@ Commands:
 ```
 
 ## 常用任务
+### 信息
+查看 Apple Health 导出文件的元数据：
+```bash
+uv run python main.py info export_data/export.xml
+```
+
+**输出示例：**
+```
+                文件信息                 
+┏━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ 属性         ┃ 值                     ┃
+┡━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ 文件路径     │ export_data/export.xml │
+│ 文件大小     │ 0.00 MB                │
+│ 预估记录数   │ 13                     │
+│ 最后修改时间 │ 1769916700.7400904     │
+└──────────────┴────────────────────────┘
+
+数据日期范围 (样本): 2024-01-01 至 2024-01-02
+
+样本中的记录类型:
+  HKCategoryTypeIdentifierSleepAnalysis: 5
+  HKQuantityTypeIdentifierHeartRate: 4
+  HKQuantityTypeIdentifierStepCount: 2
+```
+
 ### 解析
+解析并验证 Apple Health 导出数据：
 ```bash
 uv run python main.py parse export_data/export.xml
 uv run python main.py parse export_data/export.xml --types HKQuantityTypeIdentifierHeartRate
@@ -91,20 +118,92 @@ uv run python main.py parse export_data/export.xml --preview
 uv run python main.py parse export_data/export.xml --output ./my_output
 ```
 
+**输出示例（--preview）：**
+```
+              解析结果               
+┏━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ 指标          ┃                      数值 ┃
+┡━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ 总记录数      │                        13 │
+│ 已处理        │                        13 │
+│ 已跳过        │                         0 │
+│ 无效          │                         0 │
+│ 成功率        │                    100.0% │
+│ 日期范围      │ 2024-01-01 至 2024-01-02 │
+└───────────────┴──────────────────────────┘
+
+记录类型排名：
+   1. HKCategoryTypeIdentifierSleepAnalysis: 5
+   2. HKQuantityTypeIdentifierHeartRate: 4
+   3. HKQuantityTypeIdentifierStepCount: 2
+
+✓ 解析成功完成！
+```
+
 ### 导出
+将解析的数据导出为 CSV 或 JSON 格式：
 ```bash
 uv run python main.py export export_data/export.xml --format csv
 uv run python main.py export export_data/export.xml --format json
 uv run python main.py export export_data/export.xml --format both
 ```
 
+**生成的文件（CSV 格式）：**
+```
+output/
+├── HeartRate.csv
+├── SleepAnalysis.csv
+├── StepCount.csv
+├── HeartRateVariabilitySDNN.csv
+├── RestingHeartRate.csv
+└── manifest.json
+```
+
 ### 分析
+全面分析心率和睡眠数据：
 ```bash
-uv run python main.py analyze export_data/export.xml
+uv run python main.py analyze export_data/export.xml --age 30 --gender male
 uv run python main.py analyze export_data/export.xml --output ./analysis_results
 ```
 
+**输出示例：**
+```
+🎯 分析结果
+
+❤️ 心率分析
+  静息心率: 62.0 bpm
+  趋势: 稳定
+  健康评级: 优秀
+  HRV (SDNN): 45.0 ms
+  压力水平: 适中
+  恢复状态: 良好
+  数据质量: 100.0%
+  总记录数: 4
+
+😴 睡眠分析
+  平均时长: 7.5 小时
+  平均效率: 85.4%
+  一致性评分: 78.2%
+  数据质量: 92.9%
+  总记录数: 15
+
+💡 健康洞察
+
+关键洞察：
+  1. 心率健康状况优秀
+     静息心率为 62 bpm，处于优秀水平
+  2. 睡眠一致性良好
+     睡眠时间相对规律
+
+建议：
+  1. 保持规律的睡眠时间，包括周末
+  2. 继续当前的锻炼计划以维持心脏健康
+
+✓ 结果已保存至: output/analysis_results.json
+```
+
 ### 报告
+生成 HTML 或 Markdown 格式的综合健康报告：
 ```bash
 uv run python main.py report export_data/export.xml --age 30 --gender male
 uv run python main.py report export_data/export.xml --format markdown --age 30 --gender male
@@ -112,18 +211,66 @@ uv run python main.py report export_data/export.xml --format both --age 30 --gen
 uv run python main.py report export_data/export.xml --format html --age 30 --gender male --locale zh
 ```
 
+**输出示例：**
+```
+✅ 报告生成成功！
+
+生成的文件：
+  • health_report_20260201_033329.html (0.01 MB)
+
+报告内容包括：
+  - 关键指标的执行摘要
+  - 心率趋势分析
+  - 睡眠质量评估
+  - 健康洞察和建议
+  - 数据质量指标
+```
+
 ### 图表
+生成交互式或静态图表：
 ```bash
 uv run python main.py visualize export_data/export.xml -c all --interactive
 uv run python main.py visualize export_data/export.xml -c heart_rate_timeseries -c sleep_quality_trend --interactive
 uv run python main.py visualize export_data/export.xml --static
 ```
 
+**输出示例：**
+```
+✅ 图表生成完成！
+生成文件数: 1
+输出目录: output/charts
+
+生成的文件：
+  • heart_rate_timeseries.png (0.05 MB)
+  • sleep_quality_trend.png (0.04 MB)
+  • hrv_analysis.html (交互式)
+
+图表索引: output/charts/index.md
+```
+
 ### 性能基准测试
+对数据运行性能基准测试：
 ```bash
 uv run python main.py benchmark export_data/export.xml
 uv run python main.py benchmark export_data/export.xml --output ./benchmark_results
 uv run python main.py benchmark export_data/export.xml --timeout 60
+```
+
+**输出示例：**
+```
+                                         🔍 模块性能                                          
+┏━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━┓
+┃ 模块                 ┃ 状态   ┃   耗时 (s) ┃    吞吐量 (记录数/秒)  ┃ 内存增量 (MB)     ┃
+┡━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━┩
+│ XML 解析             │   ✅   │       0.00 │                  4,520 │             +0.00 │
+│ 数据清洗             │   ✅   │       0.02 │                    770 │             +2.82 │
+│ 统计分析             │   ✅   │       0.02 │                    549 │             +1.12 │
+│ 报告生成             │   ✅   │       0.00 │                 13,000 │             +0.00 │
+│ 数据导出             │   ✅   │       0.01 │                  2,635 │             +0.55 │
+└──────────────────────┴────────┴────────────┴────────────────────────┴───────────────────┘
+
+💡 瓶颈分析：
+  ⚠️  统计分析最慢 (0.02s)
 ```
 
 ## 语言与 i18n
